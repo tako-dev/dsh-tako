@@ -24,15 +24,23 @@ npm i -g @deepseek-ai/dsh
 dsh plugin --profile web add dsh-tako
 ```
 
-> 本包尚未发布到 npm。发布前可以从源码打包后按文件安装：
->
-> ```sh
-> git clone https://github.com/tako-dev/dsh-tako && cd dsh-tako
-> pnpm install && pnpm build && npm pack
-> dsh plugin --profile web add ./dsh-tako-0.1.0.tgz
-> ```
->
-> 不要用 `dsh plugin add github:tako-dev/dsh-tako`：git 安装拿到的是源码，没有构建好的 `lib/`。
+`dsh plugin` 会调用 pnpm，需要 pnpm 在 `PATH` 上。
+
+npm 发布之后，上面的 `dsh plugin --profile web add dsh-tako` 就是安装命令；要锁定版本写成 `dsh-tako@0.1.0`。每个版本的 GitHub Release 也附带打包好的 `.tgz`，可以直接按 URL 安装（端到端测试验证过 http URL 安装方式）：
+
+```sh
+dsh plugin --profile web add https://github.com/tako-dev/dsh-tako/releases/download/v0.1.0/dsh-tako-0.1.0.tgz
+```
+
+从源码安装：
+
+```sh
+git clone https://github.com/tako-dev/dsh-tako && cd dsh-tako
+npm ci && npm run build && npm pack
+dsh plugin --profile web add ./dsh-tako-0.1.0.tgz
+```
+
+不要用 `dsh plugin add github:tako-dev/dsh-tako`：git 安装拿到的是源码，没有构建好的 `lib/`。
 
 安装时 pnpm 可能提示 `missing peer @deepseek-ai/schemastery`，这是预期的：运行时这个 peer 由 dsh 安装本身提供。
 
@@ -115,7 +123,7 @@ dsh web
    dsh plugin --profile web remove dsh-tako
    ```
 
-2. 删除插件写入的 provider：打开 profile 的 `cordis.patch.yml`，删掉 `llm-pi-ai` 行下的 `providers.tako`（如果 `providers` 下没有其他内容，可以把整个 `id: llm-pi-ai` 条目删掉）。插件移除后，也可以在「设置 → 模型」里删除 Tako。
+2. 删除插件写入的 provider：打开 profile 的 `cordis.patch.yml`，删掉 `llm-pi-ai` 行下的 `providers.tako`（如果 `providers` 下没有其他内容，可以把整个 `id: llm-pi-ai` 条目删掉）。如果写过插件配置，`id: tako` 那一条也一并删掉（不删也不影响启动，只是不再起作用）。插件移除后，也可以在「设置 → 模型」里删除 Tako。
 3. 如果在界面里保存过 key，可以在「设置 → 模型」里清空，或从 `$DSH_HOME/.credentials.yaml` 删掉 `TAKO_API_KEY`。
 
 只做第 1 步的话，Tako 会作为一个普通的自定义 provider 留在 profile 里，但模型列表不再更新。
@@ -126,7 +134,27 @@ dsh web
 - 所有模型都走 OpenAI 兼容的 `openai-completions` 协议。
 - 默认排除 Tako 限定 Claude Code 客户端的模型，因为 Tako 会拒绝来自 dsh 的调用。
 - 依赖 dsh 官方 `@deepseek-ai/dsh-llm-pi-ai` 的设置结构，在 dsh `0.2.1-rc.2` 上验证过；dsh 改动该结构时可能需要更新本插件。
-- 尚未发布到 npm，见「安装」。
+
+### 开发与测试
+
+```sh
+npm ci
+npm run typecheck
+npm test        # 单元测试（离线）
+npm run e2e     # 端到端：装干净的官方 dsh，起 mock Tako，真机安装并启动 web / acp profile
+```
+
+`npm run e2e`（`scripts/e2e/run.mjs`）在临时目录里装 `@deepseek-ai/dsh`（版本用 `DSH_VERSION` 指定，默认 `0.2.1-rc.2`），每个场景用全新的 `DSH_HOME` 和 `HOME`，不碰 `~/.dsh`，也不需要真实 key。它用 `npm pack` 出的 tgz 执行 `dsh plugin --profile web add`，覆盖：路由写入与模型列表、重启不重写、带假 key 时 dsh 列出 Tako 模型、经 `dsh acp` 走官方链路完成一次真实对话（断言 mock 收到 `Authorization: Bearer test-key` 和正确的 model）、目录不可达时的兜底、`exclude` / `pinned`、删除路由后重启、`dsh plugin remove`、按 http URL 安装。需要 pnpm 在 `PATH` 上。其他环境变量：`E2E_TGZ`（用现成的 tgz）、`E2E_DSH_DIR`（复用已装好的 dsh）、`E2E_ONLY=a,d`（只跑部分用例）、`E2E_KEEP=1`（保留 dsh 安装目录）。结束时打印临时目录和 `e2e-report.json` 路径。
+
+CI（`.github/workflows/ci.yml`）在 push 到 `main` 和 PR 时用 Node 22 / 24 跑 `npm ci → typecheck → test → build → npm pack → e2e`。
+
+### 发布流程（维护者）
+
+1. 改版本：`npm version 0.1.1 --no-git-tag-version`（或手改 `package.json` 的 `version`，同步 `package-lock.json`），提交并推到 `main`，等 CI 变绿。
+2. 打 tag 并推送：`git tag v0.1.1 && git push origin v0.1.1`。
+3. `.github/workflows/release.yml` 自动执行：校验 tag 与 `package.json` 版本一致 → 用 `npm view` 确认该版本尚未发布（已发布则失败）→ typecheck / test / build / pack / e2e → `npm publish --provenance --access public`（发布的就是 e2e 测过的那个 tgz；带 `-` 的预发布版本发到 `next` dist-tag）→ `gh release create` 建 GitHub Release 并附上 tgz。
+
+仓库需要配置一个 Actions secret：**`NPM_TOKEN`**，npm 上有本包发布权限的 Automation（或 Granular、允许绕过 2FA 的发布）token。GitHub Release 用工作流自带的 `GITHUB_TOKEN`，不需要额外配置。
 
 ## English
 
@@ -136,7 +164,7 @@ It reads Tako's public model directory (`GET /api/pricing`, no key needed), keep
 
 ```sh
 npm i -g @deepseek-ai/dsh
-dsh plugin --profile web add dsh-tako   # not on npm yet: build with `npm pack` and add the .tgz
+dsh plugin --profile web add dsh-tako   # or the .tgz URL attached to a GitHub Release
 dsh web
 ```
 
@@ -146,7 +174,9 @@ The plugin owns `providers.tako`: edits made to it in the Models page or by hand
 
 To uninstall, run `dsh plugin --profile web remove dsh-tako` and then delete `providers.tako` under the `llm-pi-ai` entry in the profile's `cordis.patch.yml`.
 
-Tested against `@deepseek-ai/dsh` `0.2.1-rc.2`.
+Tested against `@deepseek-ai/dsh` `0.2.1-rc.2`. `dsh plugin` needs pnpm on `PATH`.
+
+Development: `npm ci`, `npm run typecheck`, `npm test`, and `npm run e2e` (installs a clean official dsh into a temp dir with a fresh `DSH_HOME`, starts a mock Tako, installs the packed tarball, and drives real `web` and `acp` profiles, including one chat turn). Releasing: bump `version`, push to `main`, then push a `vX.Y.Z` tag; the Release workflow checks the tag, refuses an already-published version, runs everything including e2e, publishes with provenance, and creates a GitHub Release with the tarball. The repository needs the `NPM_TOKEN` Actions secret.
 
 ## License
 
