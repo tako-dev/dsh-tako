@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # gh release create
+  id-token: write # npm provenance
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DSH_VERSION: '0.2.1-rc.2'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Tag must match package.json version
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          name=$(node -p 'require("./package.json").name')
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match package.json version $version (expected v$version)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Version must not be published yet
+        env:
+          SPEC: ${{ steps.version.outputs.name }}@${{ steps.version.outputs.version }}
+        run: |
+          if out=$(npm view "$SPEC" version 2>&1); then
+            echo "::error::$SPEC is already on npm ($out); bump the version and tag again"
+            exit 1
+          fi
+          if ! printf '%s' "$out" | grep -q E404; then
+            echo "::error::could not check $SPEC on npm: $out"
+            exit 1
+          fi
+          echo "$SPEC is not published yet"
+
+      - name: Install pnpm (used by dsh plugin)
+        run: npm install -g pnpm@11
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - name: Pack
+        id: pack
+        run: |
+          file=$(npm pack --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s)[0].filename))')
+          echo "tgz=$file" >> "$GITHUB_OUTPUT"
+          tar -tzf "$file"
+
+      - name: End-to-end test against @deepseek-ai/dsh@${{ env.DSH_VERSION }}
+        run: npm run e2e
+        env:
+          E2E_TGZ: ${{ steps.pack.outputs.tgz }}
+
+      # Publish the exact tarball the e2e test installed. prepublishOnly does
+      # not run for a tarball, and everything it checks already ran above.
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TGZ: ${{ steps.pack.outputs.tgz }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # A prerelease (x.y.z-rc.n) goes to the "next" dist-tag, never "latest".
+          tag=latest
+          case "$VERSION" in *-*) tag=next ;; esac
+          npm publish "$TGZ" --provenance --access public --tag "$tag"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          TGZ: ${{ steps.pack.outputs.tgz }}
+        run: |
+          prerelease=()
+          case "$TAG" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$TAG" "$TGZ" \
+            --title "$TAG" \
+            --generate-notes \
+            --verify-tag \
+            "${prerelease[@]}"

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      dsh-version:
+        description: '@deepseek-ai/dsh version the e2e test installs'
+        required: false
+        default: '0.2.1-rc.2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    env:
+      DSH_VERSION: ${{ inputs.dsh-version || '0.2.1-rc.2' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # `dsh plugin` shells out to pnpm; the e2e test installs through it.
+      - name: Install pnpm (used by dsh plugin)
+        run: npm install -g pnpm@11
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      - name: Pack
+        id: pack
+        run: |
+          file=$(npm pack --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s)[0].filename))')
+          echo "tgz=$file" >> "$GITHUB_OUTPUT"
+          tar -tzf "$file"
+
+      - name: End-to-end test against @deepseek-ai/dsh@${{ env.DSH_VERSION }}
+        run: npm run e2e
+        env:
+          E2E_TGZ: ${{ steps.pack.outputs.tgz }}
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.node == 22
+        with:
+          name: dsh-tako-tgz
+          path: ${{ steps.pack.outputs.tgz }}
+          if-no-files-found: error
