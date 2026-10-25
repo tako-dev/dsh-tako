@@ -5,8 +5,8 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write # gh release create
-  id-token: write # npm provenance
+  contents: write # gh release create / upload
+  id-token: write # npm trusted publishing (OIDC) and provenance
 
 concurrency:
   group: release-${{ github.ref }}
@@ -18,14 +18,29 @@ jobs:
     timeout-minutes: 30
     env:
       DSH_VERSION: '0.2.1-rc.2'
+      # No registry-url on setup-node: trusted publishing needs no .npmrc or
+      # token, and every npm command below talks to the public registry.
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      # No dependency cache in the release job (npm's trusted publishing guide).
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships npm 10.
+      - name: Upgrade npm for trusted publishing
+        run: |
+          npm install -g npm@^11.5.1
+          npm --version
+          node -e '
+            const [a, b, c] = process.argv[1].split(".").map(Number)
+            if (a < 11 || (a === 11 && (b < 5 || (b === 5 && c < 1)))) {
+              console.error(`::error::npm ${process.argv[1]} is older than 11.5.1`)
+              process.exit(1)
+            }' "$(npm --version)"
 
       - name: Tag must match package.json version
         id: version
@@ -41,19 +56,28 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
-      - name: Version must not be published yet
+      - name: Look up this version on npm
+        id: registry
         env:
           SPEC: ${{ steps.version.outputs.name }}@${{ steps.version.outputs.version }}
         run: |
-          if out=$(npm view "$SPEC" version 2>&1); then
-            echo "::error::$SPEC is already on npm ($out); bump the version and tag again"
+          # stdout is the bare value; npm warnings and errors go to stderr.
+          if out=$(npm view "$SPEC" dist.integrity 2>npm-view.err); then
+            if [ -z "$out" ]; then
+              echo "::error::$SPEC is on npm but has no dist.integrity"
+              exit 1
+            fi
+            echo "$SPEC is already on npm with integrity $out"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "integrity=$out" >> "$GITHUB_OUTPUT"
+          elif grep -q E404 npm-view.err; then
+            echo "$SPEC is not published yet"
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::could not check $SPEC on npm: $(cat npm-view.err)"
             exit 1
           fi
-          if ! printf '%s' "$out" | grep -q E404; then
-            echo "::error::could not check $SPEC on npm: $out"
-            exit 1
-          fi
-          echo "$SPEC is not published yet"
+          rm -f npm-view.err
 
       - name: Install pnpm (used by dsh plugin)
         run: npm install -g pnpm@11
@@ -67,7 +91,10 @@ jobs:
         id: pack
         run: |
           file=$(npm pack --json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s)[0].filename))')
+          integrity=$(node -e 'const fs=require("fs"),c=require("crypto");console.log("sha512-"+c.createHash("sha512").update(fs.readFileSync(process.argv[1])).digest("base64"))' "$file")
           echo "tgz=$file" >> "$GITHUB_OUTPUT"
+          echo "integrity=$integrity" >> "$GITHUB_OUTPUT"
+          echo "$file $integrity"
           tar -tzf "$file"
 
       - name: End-to-end test against @deepseek-ai/dsh@${{ env.DSH_VERSION }}
@@ -75,29 +102,55 @@ jobs:
         env:
           E2E_TGZ: ${{ steps.pack.outputs.tgz }}
 
+      # A re-run for a version that is already on npm is fine as long as the
+      # tarball is byte-identical (npm pack is reproducible for one commit);
+      # anything else means the tag no longer matches what was published.
+      - name: Published tarball must match this build
+        if: steps.registry.outputs.published == 'true'
+        env:
+          REMOTE: ${{ steps.registry.outputs.integrity }}
+          LOCAL: ${{ steps.pack.outputs.integrity }}
+        run: |
+          echo "npm:   $REMOTE"
+          echo "local: $LOCAL"
+          if [ "$REMOTE" != "$LOCAL" ]; then
+            echo "::error::the published tarball differs from this build; bump the version and tag again"
+            exit 1
+          fi
+          echo "identical: skipping npm publish"
+
       # Publish the exact tarball the e2e test installed. prepublishOnly does
       # not run for a tarball, and everything it checks already ran above.
+      # Authentication is OIDC (trusted publisher: tako-dev/dsh-tako,
+      # release.yml); there is no npm token.
       - name: Publish to npm
+        if: steps.registry.outputs.published == 'false'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           TGZ: ${{ steps.pack.outputs.tgz }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           # A prerelease (x.y.z-rc.n) goes to the "next" dist-tag, never "latest".
           tag=latest
           case "$VERSION" in *-*) tag=next ;; esac
+          # Trusted publishing adds provenance by itself; the flag makes a
+          # missing attestation fail the publish instead of passing silently.
           npm publish "$TGZ" --provenance --access public --tag "$tag"
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
           TGZ: ${{ steps.pack.outputs.tgz }}
         run: |
-          prerelease=()
-          case "$TAG" in *-*) prerelease=(--prerelease) ;; esac
-          gh release create "$TAG" "$TGZ" \
-            --title "$TAG" \
-            --generate-notes \
-            --verify-tag \
-            "${prerelease[@]}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG exists; replacing its tarball"
+            gh release upload "$TAG" "$TGZ" --clobber
+          else
+            prerelease=()
+            case "$TAG" in *-*) prerelease=(--prerelease) ;; esac
+            gh release create "$TAG" "$TGZ" \
+              --title "$TAG" \
+              --generate-notes \
+              --verify-tag \
+              "${prerelease[@]}"
+          fi

@@ -26,7 +26,7 @@ dsh plugin --profile web add dsh-tako
 
 `dsh plugin` 会调用 pnpm，需要 pnpm 在 `PATH` 上。
 
-npm 发布之后，上面的 `dsh plugin --profile web add dsh-tako` 就是安装命令；要锁定版本写成 `dsh-tako@0.1.0`。每个版本的 GitHub Release 也附带打包好的 `.tgz`，可以直接按 URL 安装（端到端测试验证过 http URL 安装方式）：
+上面的 `dsh plugin --profile web add dsh-tako` 从 npm 安装；要锁定版本写成 `dsh-tako@0.1.0`。每个版本的 GitHub Release 也附带打包好的 `.tgz`，可以直接按 URL 安装（端到端测试验证过 http URL 安装方式）：
 
 ```sh
 dsh plugin --profile web add https://github.com/tako-dev/dsh-tako/releases/download/v0.1.0/dsh-tako-0.1.0.tgz
@@ -150,11 +150,15 @@ CI（`.github/workflows/ci.yml`）在 push 到 `main` 和 PR 时用 Node 22 / 24
 
 ### 发布流程（维护者）
 
-1. 改版本：`npm version 0.1.1 --no-git-tag-version`（或手改 `package.json` 的 `version`，同步 `package-lock.json`），提交并推到 `main`，等 CI 变绿。
-2. 打 tag 并推送：`git tag v0.1.1 && git push origin v0.1.1`。
-3. `.github/workflows/release.yml` 自动执行：校验 tag 与 `package.json` 版本一致 → 用 `npm view` 确认该版本尚未发布（已发布则失败）→ typecheck / test / build / pack / e2e → `npm publish --provenance --access public`（发布的就是 e2e 测过的那个 tgz；带 `-` 的预发布版本发到 `next` dist-tag）→ `gh release create` 建 GitHub Release 并附上 tgz。
+1. 改版本：`npm version 0.1.1 --no-git-tag-version`（或手改 `package.json` 的 `version`，同步 `package-lock.json`）。
+2. 提交并推到 `main`：`git commit -am "chore: release 0.1.1" && git push origin main`，等 CI 变绿。
+3. 打 tag 并推送：`git tag v0.1.1 && git push origin v0.1.1`。
+4. `.github/workflows/release.yml` 自动执行：校验 tag 与 `package.json` 版本一致 → 用 `npm view` 查该版本是否已在 npm → typecheck / test / build / pack / e2e → 发布 → 建 GitHub Release 并附上 tgz。
+   - 未发布：`npm publish --provenance --access public`，发布的就是 e2e 测过的那个 tgz；带 `-` 的预发布版本发到 `next` dist-tag。
+   - 已发布（例如重跑工作流）：比较 npm 上的 `dist.integrity` 与本次 `npm pack` 出的 tgz 的 sha512。一致就跳过 publish，继续建 Release；不一致就失败，这时要升版本重新打 tag。同一提交的 `npm pack` 是可复现的（`0.1.0` 本地重新打包与 npm 上的 integrity 一致）。
+   - GitHub Release 已存在时用 `gh release upload --clobber` 覆盖附件，不会失败。
 
-仓库需要配置一个 Actions secret：**`NPM_TOKEN`**，npm 上有本包发布权限的 Automation（或 Granular、允许绕过 2FA 的发布）token。GitHub Release 用工作流自带的 `GITHUB_TOKEN`，不需要额外配置。
+发布用 npm 的 [Trusted Publishing](https://docs.npmjs.com/trusted-publishers)（GitHub Actions OIDC），**不需要 `NPM_TOKEN`，也不要配置任何 npm token secret**。npm 包设置里的 Trusted Publisher 是：GitHub Actions，org `tako-dev`，repo `dsh-tako`，workflow `release.yml`，environment 留空；改工作流文件名或加 environment 时要同步改那里。工作流在发布前把 npm 升级到 11.5.1 以上（Node 22 自带的 npm 10 不支持 Trusted Publishing），provenance 由 OIDC 发布自动生成。GitHub Release 用工作流自带的 `GITHUB_TOKEN`。
 
 ## English
 
@@ -176,7 +180,7 @@ To uninstall, run `dsh plugin --profile web remove dsh-tako` and then delete `pr
 
 Tested against `@deepseek-ai/dsh` `0.2.1-rc.2`. `dsh plugin` needs pnpm on `PATH`.
 
-Development: `npm ci`, `npm run typecheck`, `npm test`, and `npm run e2e` (installs a clean official dsh into a temp dir with a fresh `DSH_HOME`, starts a mock Tako, installs the packed tarball, and drives real `web` and `acp` profiles, including one chat turn). Releasing: bump `version`, push to `main`, then push a `vX.Y.Z` tag; the Release workflow checks the tag, refuses an already-published version, runs everything including e2e, publishes with provenance, and creates a GitHub Release with the tarball. The repository needs the `NPM_TOKEN` Actions secret.
+Development: `npm ci`, `npm run typecheck`, `npm test`, and `npm run e2e` (installs a clean official dsh into a temp dir with a fresh `DSH_HOME`, starts a mock Tako, installs the packed tarball, and drives real `web` and `acp` profiles, including one chat turn). Releasing: bump `version`, commit and push to `main`, then push a `vX.Y.Z` tag; the Release workflow checks the tag, runs everything including e2e, publishes with npm Trusted Publishing (GitHub Actions OIDC, provenance included; no `NPM_TOKEN` secret), and creates or updates a GitHub Release with the tarball. Re-running it is safe: an already-published version is skipped when its `dist.integrity` equals the freshly packed tarball, and fails otherwise.
 
 ## License
 
