@@ -1,0 +1,5 @@
+# One plugin row. It keeps `providers.tako` in the official llm-pi-ai settings
+# section and refreshes its model list from Tako's public pricing directory.
+- insert:
+    - id: tako
+      name: dsh-tako
