@@ -26,10 +26,10 @@ dsh plugin --profile web add dsh-tako
 
 `dsh plugin` 会调用 pnpm，需要 pnpm 在 `PATH` 上。
 
-上面的 `dsh plugin --profile web add dsh-tako` 从 npm 安装；要锁定版本写成 `dsh-tako@0.1.0`。每个版本的 GitHub Release 也附带打包好的 `.tgz`，可以直接按 URL 安装（端到端测试验证过 http URL 安装方式）：
+上面的 `dsh plugin --profile web add dsh-tako` 从 npm 安装；要锁定版本写成 `dsh-tako@0.2.0`。每个版本的 GitHub Release 也附带打包好的 `.tgz`，可以直接按 URL 安装（端到端测试验证过 http URL 安装方式）：
 
 ```sh
-dsh plugin --profile web add https://github.com/tako-dev/dsh-tako/releases/download/v0.1.0/dsh-tako-0.1.0.tgz
+dsh plugin --profile web add https://github.com/tako-dev/dsh-tako/releases/download/v0.2.0/dsh-tako-0.2.0.tgz
 ```
 
 从源码安装：
@@ -37,7 +37,7 @@ dsh plugin --profile web add https://github.com/tako-dev/dsh-tako/releases/downl
 ```sh
 git clone https://github.com/tako-dev/dsh-tako && cd dsh-tako
 npm ci && npm run build && npm pack
-dsh plugin --profile web add ./dsh-tako-0.1.0.tgz
+dsh plugin --profile web add ./dsh-tako-0.2.0.tgz
 ```
 
 不要用 `dsh plugin add github:tako-dev/dsh-tako`：git 安装拿到的是源码，没有构建好的 `lib/`。
