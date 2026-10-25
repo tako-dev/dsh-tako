@@ -1,22 +1,32 @@
 /**
- * Host half of the Models-page "Sign in to Tako" button.
+ * Host half of the Web UI: the Models-page "Sign in to Tako" button and the
+ * Tako console panel's three routes.
  *
- * Registers one exact Fetch route on the Web connection (`/api/tako.login`,
- * behind the browser authentication fence; only the owner reaches it). A POST
- * starts the loopback sign-in on the dsh host and returns the authorization
- * URL; a GET reports its progress. The issued key is stored through the
- * installation's own `ctx.credentials.set`, which also tells the Models page
- * to refresh.
+ * All routes are exact Fetch routes on the Web connection, behind the browser
+ * authentication fence; only the owner reaches them. `/api/tako.login` runs
+ * the loopback sign-in on the dsh host; the console routes report the stored
+ * key (masked), revoke it on logout, and expose the synced model catalog.
+ * Issued and stored keys go through the installation's own
+ * `ctx.credentials`, which also tells the Models page to refresh. A resolved
+ * key value never leaves the host: status answers carry `maskKey()` output
+ * only.
  * @module dsh-tako/web
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { BrowserLoginHandle, BrowserLoginOptions } from './login.ts'
-import { defaultDeviceName, maskKey, startBrowserLogin, TakoLoginError } from './login.ts'
+import type { TakoModel } from './catalog.ts'
+import type { BrowserLoginHandle, BrowserLoginOptions, TakoIdentity } from './login.ts'
+import { defaultDeviceName, fetchMe, maskKey, revokeKey, startBrowserLogin, TakoLoginError } from './login.ts'
 import { normalizeOrigin } from './shared.ts'
 
 /** Route path below `/api`; the browser calls the relative `api/tako.login`. */
 export const LOGIN_ROUTE = '/api/tako.login'
+/** Console route: whether a key is stored (masked) plus the account behind it. */
+export const STATUS_ROUTE = '/api/tako.status'
+/** Console route: revoke the stored key on Tako and remove it from dsh credentials. */
+export const LOGOUT_ROUTE = '/api/tako.logout'
+/** Console route: the model catalog the plugin last synced, and when it refreshes. */
+export const CATALOG_ROUTE = '/api/tako.catalog'
 
 /** Same grammar the settings controller enforces for credential references. */
 const CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/u
@@ -31,9 +41,14 @@ interface FetchRoute {
 export interface ConnectionLike {
   fetch: { register: (route: FetchRoute) => () => Promise<void> }
 }
-/** The slice of `ctx.credentials` this module uses. */
+/** The slice of `ctx.credentials` the sign-in button uses. */
 export interface CredentialSetter {
   set: (ref: never, value: string) => Promise<void>
+}
+/** The extra slice of `ctx.credentials` the console routes use. */
+export interface CredentialStore {
+  resolve: (ref: string) => Promise<{ value: string, source: string } | undefined>
+  unset: (ref: string) => Promise<void>
 }
 
 /** What a GET returns. */
@@ -131,8 +146,8 @@ export function createLoginService(options: LoginServiceOptions): { handle: (req
   return { handle, dispose: () => { current?.handle.cancel(); current = undefined } }
 }
 
-/** Mount the route while the Web connection and the credential service are both up. */
-export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: string }): void {
+/** Mount the routes while the Web connection and the credential service are both up. */
+export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: string }, web: { catalog: () => CatalogState } = { catalog: () => emptyCatalogState() }): void {
   ctx.inject(['connection', 'credentials'], inner => {
     const connection = (inner as unknown as { connection: ConnectionLike }).connection
     const service = createLoginService({
@@ -141,17 +156,173 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
       credentials: () => (inner as unknown as { credentials?: CredentialSetter }).credentials,
       logger: inner.logger,
     })
+    const consoleService = createConsoleService({
+      baseURL: config.baseURL,
+      apiKeyEnv: config.apiKeyEnv,
+      credentials: () => (inner as unknown as { credentials?: CredentialSetter & CredentialStore }).credentials,
+      catalog: web.catalog,
+      logger: inner.logger,
+    })
     inner.effect(() => {
-      const unregister = connection.fetch.register({
-        path: LOGIN_ROUTE,
-        methods: ['GET', 'POST'],
-        requestBody: 'buffered',
-        fetch: request => service.handle(request),
-      })
+      const unregisters = [
+        connection.fetch.register({
+          path: LOGIN_ROUTE,
+          methods: ['GET', 'POST'],
+          requestBody: 'buffered',
+          fetch: request => service.handle(request),
+        }),
+        connection.fetch.register({
+          path: STATUS_ROUTE,
+          methods: ['GET'],
+          requestBody: 'buffered',
+          fetch: () => consoleService.handleStatus(),
+        }),
+        connection.fetch.register({
+          path: LOGOUT_ROUTE,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: () => consoleService.handleLogout(),
+        }),
+        connection.fetch.register({
+          path: CATALOG_ROUTE,
+          methods: ['GET'],
+          requestBody: 'buffered',
+          fetch: () => consoleService.handleCatalog(),
+        }),
+      ]
       return async () => {
         service.dispose()
-        await unregister()
+        for (const unregister of unregisters) await unregister()
       }
     })
   })
+}
+
+// ---------------------------------------------------------------- console routes
+
+/**
+ * What the sync loop (`start()` in `index.ts`) keeps in memory after each
+ * successful sync, including the fallback seed. Read by {@link CATALOG_ROUTE}.
+ */
+export interface CatalogState {
+  /** The filtered catalog of the last successful sync; empty before the first. */
+  models: readonly TakoModel[]
+  /** When that sync finished, in epoch ms; `null` before the first. */
+  lastSyncAt: number | null
+  /** `lastSyncAt + refreshIntervalMs`; `null` when refreshing only at startup. */
+  nextSyncAt: number | null
+}
+
+/** A catalog state that has never seen a sync. */
+export function emptyCatalogState(): CatalogState {
+  return { models: [], lastSyncAt: null, nextSyncAt: null }
+}
+
+/** The account fields the console page shows (`/api/desktop/me` view). */
+export type ConsoleIdentity = Pick<TakoIdentity, 'userName' | 'planName' | 'quotaRemain' | 'quotaUsed'>
+
+/** How long a `whoami` answer stays fresh, so opening the panel does not hit Tako each time. */
+export const STATUS_CACHE_MS = 45_000
+
+export interface ConsoleServiceOptions {
+  baseURL: string
+  apiKeyEnv: string
+  credentials: () => (CredentialSetter & CredentialStore) | undefined
+  catalog: () => CatalogState
+  logger: { info: (...args: unknown[]) => void, warn: (...args: unknown[]) => void }
+  /** Seams for tests. */
+  fetch?: typeof fetch
+  statusCacheMs?: number
+  now?: () => number
+}
+
+interface StatusCache {
+  maskedKey: string
+  at: number
+  me: ConsoleIdentity | null
+  meError: string | undefined
+}
+
+/**
+ * The console panel's three route handlers. One service instance per Web
+ * connection; the resolved key only travels as `maskKey()` output.
+ */
+export function createConsoleService(options: ConsoleServiceOptions): { handleStatus: () => Promise<Response>, handleLogout: () => Promise<Response>, handleCatalog: () => Promise<Response> } {
+  const origin = normalizeOrigin(options.baseURL)
+  const cacheMs = options.statusCacheMs ?? STATUS_CACHE_MS
+  const now = options.now ?? Date.now
+  let cache: StatusCache | undefined
+
+  const handleStatus = async (): Promise<Response> => {
+    const credentials = options.credentials()
+    if (credentials === undefined) return json({ configured: false })
+    let current: { value: string, source: string } | undefined
+    try {
+      current = await credentials.resolve(options.apiKeyEnv)
+    } catch (error: unknown) {
+      options.logger.warn('resolving %s failed: %s', options.apiKeyEnv, error instanceof Error ? error.message : String(error))
+      return json({ configured: false })
+    }
+    if (current === undefined) return json({ configured: false })
+    const maskedKey = maskKey(current.value)
+    // The key value itself is deliberately dropped here; only the mask leaves.
+    if (cache !== undefined && cache.maskedKey === maskedKey && now() - cache.at < cacheMs) {
+      return json({ configured: true, maskedKey, credential: options.apiKeyEnv, me: cache.me, ...(cache.meError === undefined ? {} : { meError: cache.meError }) })
+    }
+    let me: ConsoleIdentity | null = null
+    let meError: string | undefined
+    try {
+      me = identityOf(await fetchMe(origin, current.value, options.fetch))
+    } catch (error: unknown) {
+      meError = error instanceof Error ? error.message : String(error)
+    }
+    cache = { maskedKey, at: now(), me, meError }
+    return json({ configured: true, maskedKey, credential: options.apiKeyEnv, me, ...(meError === undefined ? {} : { meError }) })
+  }
+
+  const handleLogout = async (): Promise<Response> => {
+    const credentials = options.credentials()
+    if (credentials === undefined) return json({ ok: true, action: 'not-configured' })
+    let current: { value: string, source: string } | undefined
+    try {
+      current = await credentials.resolve(options.apiKeyEnv)
+    } catch (error: unknown) {
+      return json({ ok: false, error: `could not read the credential: ${error instanceof Error ? error.message : String(error)}` }, 500)
+    }
+    if (current === undefined) return json({ ok: true, action: 'not-configured' })
+    cache = undefined
+    // Same rule as the logout CLI: a key from the environment is not ours to revoke or delete.
+    if (current.source !== 'file') return json({ ok: true, action: 'external', source: current.source })
+    let revoked = false
+    let warning: string | undefined
+    try {
+      await revokeKey(origin, current.value, options.fetch)
+      revoked = true
+      options.logger.info('Tako console revoked %s on %s', maskKey(current.value), origin)
+    } catch (error: unknown) {
+      warning = `could not revoke ${maskKey(current.value)} on Tako (${error instanceof Error ? error.message : String(error)}); removed it locally anyway`
+      options.logger.warn('Tako console: %s', warning)
+    }
+    await credentials.unset(options.apiKeyEnv)
+    return revoked
+      ? json({ ok: true, action: 'revoked' })
+      : json({ ok: true, action: 'removed', warning })
+  }
+
+  const handleCatalog = async (): Promise<Response> => {
+    const state = options.catalog()
+    return json({ models: state.models.map(model => ({ ...model })), lastSyncAt: state.lastSyncAt, nextSyncAt: state.nextSyncAt })
+  }
+
+  return { handleStatus, handleLogout, handleCatalog }
+}
+
+/** The `/api/desktop/me` fields the console shows; nothing else is forwarded. */
+function identityOf(identity: TakoIdentity): ConsoleIdentity {
+  const picked: ConsoleIdentity = {}
+  if (identity.userName !== undefined) picked.userName = identity.userName
+  if (identity.planName !== undefined) picked.planName = identity.planName
+  if (identity.quotaRemain !== undefined) picked.quotaRemain = identity.quotaRemain
+  if (identity.quotaUsed !== undefined) picked.quotaUsed = identity.quotaUsed
+  return picked
 }

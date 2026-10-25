@@ -707,6 +707,54 @@ await testCase('m', 'Web UI: client bundle served for the Models page; /api/tako
   }
 })
 
+await testCase('n', 'console routes: /api/tako.status + /api/tako.catalog + logout against the mock', async detail => {
+  const home = newHome('web-console')
+  await pluginCmd(home, 'web', 'add', tgz)
+  setPluginConfig(home, 'web', pluginConfig)
+  const handle = spawnDsh(home, ['web', '--no-open', '--port', '0', '--host', '127.0.0.1'])
+  handle.child.stdout.on('data', chunk => { handle.log.stdout += chunk })
+  try {
+    const url = await waitFor(() => /dsh web: (http\S+)/.exec(handle.log.stdout)?.[1], 90_000, 'dsh web to print its URL')
+    await waitFor(() => takoRoute(home, 'web') !== undefined, 30_000, 'the Tako route (first sync done)')
+    // Exchange the launch token for the browser session cookie, as the browser does.
+    const first = await fetch(url, { redirect: 'manual' })
+    const cookie = (first.headers.getSetCookie?.() ?? []).map(value => value.split(';')[0]).join('; ')
+    const origin = new URL(url).origin
+    const headers = { cookie, origin, 'content-type': 'application/json' }
+    const api = (method, path, body) => fetch(`${origin}/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }).then(response => response.json())
+    const status0 = await api('GET', 'api/tako.status')
+    check(detail, JSON.stringify(status0) === '{"configured":false}', `status without a key -> ${JSON.stringify(status0)}`)
+    const catalog = await api('GET', 'api/tako.catalog')
+    const expected = await expectedModels()
+    check(detail, JSON.stringify(catalog.models.map(model => model.id)) === JSON.stringify(expected.map(model => model.id)), `catalog lists the ${catalog.models.length} synced models in catalog order`)
+    check(detail, typeof catalog.lastSyncAt === 'number' && catalog.nextSyncAt - catalog.lastSyncAt === 30 * 60_000, `catalog lastSyncAt -> nextSyncAt = ${catalog.nextSyncAt - catalog.lastSyncAt}ms (refreshIntervalMs default)`)
+    // Sign in through the login route, then read the account back through the console status.
+    const started = await api('POST', 'api/tako.login', { action: 'start' })
+    check(detail, started.status === 'pending', `login start -> ${started.status}`)
+    const landed = await browse(started.url)
+    check(detail, landed.status === 200 && landed.body.includes('登录成功'), `browser landed on the callback: HTTP ${landed.status}`)
+    const done = await waitFor(async () => { const status = await api('GET', `api/tako.login?id=${started.id}`); return status.status !== 'pending' ? status : undefined }, 20_000, 'the sign-in to finish')
+    const key = mock.state.tokenExchanges.filter(entry => entry.ok).at(-1)?.key
+    check(detail, done.status === 'success', `login -> ${done.status}`)
+    const status1 = await api('GET', 'api/tako.status')
+    check(detail, status1.configured === true && status1.maskedKey === `cr_****${key?.slice(-4)}` && status1.credential === 'TAKO_API_KEY', `status after sign-in -> ${JSON.stringify({ ...status1, me: '…' })}`)
+    check(detail, status1.me?.userName === 'e2e-user' && status1.me?.planName === 'E2E Plan' && status1.me?.quotaRemain === 1000 && status1.me?.quotaUsed === 5, `status me -> ${JSON.stringify(status1.me)}`)
+    check(detail, !JSON.stringify(status1).includes(key), 'status carries only the masked key')
+    // Logout: revoke on the mock, credential removed, back to not configured.
+    const meBefore = mock.state.requests.filter(request => request.url === '/api/desktop/me').length
+    const statusAgain = await api('GET', 'api/tako.status')
+    check(detail, mock.state.requests.filter(request => request.url === '/api/desktop/me').length === meBefore, 'a second status read within 45s is served from the cache (no extra /api/desktop/me)')
+    const out = await api('POST', 'api/tako.logout', {})
+    check(detail, out.ok === true && out.action === 'revoked', `logout -> ${JSON.stringify(out)}`)
+    check(detail, mock.state.revoked.includes(key), 'mock /api/desktop/revoke received the key')
+    check(detail, storedRefs(home).refs.TAKO_API_KEY === undefined, 'TAKO_API_KEY removed from the credentials file')
+    const status2 = await api('GET', 'api/tako.status')
+    check(detail, status2.configured === false, `status after logout -> ${JSON.stringify(status2)}`)
+  } finally {
+    await stopChild(handle)
+  }
+})
+
 // ---------------------------------------------------------------- report
 
 async function finish() {
