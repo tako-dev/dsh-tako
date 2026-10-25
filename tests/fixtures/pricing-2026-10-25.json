@@ -1,0 +1,1119 @@
+{
+  "data": [
+    {
+      "model_name": "deepseek-v4.1-flash",
+      "description": "DeepSeek V4.1 Flash。官方现役 Flash，1M 上下文，支持视觉与工具调用。",
+      "tags": "1M,Vision",
+      "enable_groups": [
+        "mini",
+        "pro-x1",
+        "pro-x2",
+        "按量计费",
+        "pro-mini",
+        "pro-x3",
+        "pro-x4",
+        "default"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-opus-5-5",
+      "description": "Claude Opus 5.5。仅支持 Claude Code 客户端使用,其他客户端上游会报错。反代渠道,价格更便宜。 上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "mini",
+        "default",
+        "pro-mini",
+        "pro-x1"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-5.6-luna",
+      "description": "GPT-5.6 Luna。高性价比 5.6，适合大量日常任务。 上下文 272K。",
+      "tags": "Vision,272K",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "kimi-k3.1-pro-highspeed",
+      "description": "Kimi K3.1 Pro Highspeed。官方价 $4 / $20，缓存读 $0.20。上下文 1M。",
+      "tags": "Vision,1M",
+      "enable_groups": [
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-fable-5",
+      "description": "Claude Fable 5。仅支持 Claude Code 客户端使用，其他客户端上游会报错。创作向 Claude，偏写作、分析与可控智能体。挂在官方订阅渠道。 上下文 1M。",
+      "tags": "Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "按量计费",
+        "mini",
+        "pro-mini",
+        "default",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "muse-spark-1.3-contributor",
+      "description": "Muse Spark 1.3 Contributor。与 1.3 同能力的共享数据档，价格更低。 上下文 1M。",
+      "tags": "Reasoning,Vision,Audio,1M",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "mimo-v2.6-pro",
+      "description": "MiMo V2.6 Pro。小米旗舰基座，1T 以上参数，长程智能体与复杂交付。 上下文 1M。",
+      "tags": "1M",
+      "enable_groups": [
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "deepseek-v4.1-flash-1017",
+      "description": "DeepSeek V4.1 Flash 1017。2026-10-17 快照，和现役 Flash 同价，1M 上下文，支持视觉与工具调用。",
+      "tags": "1M,Vision",
+      "enable_groups": [
+        "default",
+        "pro-x1",
+        "pro-x3",
+        "pro-x4",
+        "mini",
+        "pro-mini",
+        "pro-x2",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-6-astra",
+      "description": "GPT-6 Astra。最强端到端模型，复杂专业工作、编码与智能体工作流。 上下文 1.05M。",
+      "tags": "Vision,1.05M",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x1",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-6-luna",
+      "description": "GPT-6 Luna。6 代高性价比款,适合大量日常任务。 上下文 1M,缓存输入 1 折。",
+      "tags": "Vision,1.05M",
+      "enable_groups": [
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-sonnet-5",
+      "description": "Claude Sonnet 5。仅支持 Claude Code 客户端使用，其他客户端上游会报错。反代渠道，价格更便宜。日常编码与规划的主力档。 上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "default",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "mini",
+        "pro-mini"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-haiku-5-5",
+      "description": "Claude Haiku 5.5。仅支持 Claude Code 客户端使用，其他客户端上游会报错。反代渠道，价格更便宜。上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "pro-mini",
+        "default",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "deepseek-v4-pro",
+      "description": "DeepSeek V4 Pro。开源 MoE 旗舰，长程编码与智能体。 上下文 1M。",
+      "tags": "1M",
+      "enable_groups": [
+        "按量计费",
+        "pro-x1",
+        "pro-x2",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x3",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "jev-latest",
+      "description": "结构化决策模型，不是聊天。给一份 state 和 Choice / Score / Noul 问题，返回可分支的答案和概率。走 POST /v1/systemone。文本，64K。英文最好。",
+      "tags": "64K,决策",
+      "enable_groups": [
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2"
+      ],
+      "supported_endpoint_types": [
+        "systemone"
+      ]
+    },
+    {
+      "model_name": "speech_asr",
+      "description": "Speech ASR。小米官方语音识别入口。",
+      "tags": "Audio,ASR",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "speech-asr",
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "minimax-m3",
+      "description": "MiniMax M3。多模态长上下文编码与推理。 上下文 1M。",
+      "tags": "Vision,1M",
+      "enable_groups": [
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-opus-4-8",
+      "description": "Claude Opus 4.8。仅支持 Claude Code 客户端使用，其他客户端上游会报错。反代渠道，价格更便宜。攻坚推理、编码与长程智能体。 上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "default",
+        "pro-x2",
+        "pro-x3",
+        "pro-x1",
+        "pro-x4",
+        "按量计费",
+        "mini",
+        "pro-mini"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "codex-auto-review",
+      "description": "Codex Auto Review。代码评审路由模型，自动挑选合适的 GPT 档。",
+      "tags": "路由",
+      "enable_groups": [
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-5.6-sol",
+      "description": "GPT-5.6 Sol。5.6 主力档，复杂专业工作与编码。 上下文 272K。",
+      "tags": "Vision,272K",
+      "enable_groups": [
+        "pro-x1",
+        "pro-x3",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x2",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-5.6-terra",
+      "description": "GPT-5.6 Terra。能力与成本折中的日常 5.6。 上下文 272K。",
+      "tags": "Vision,272K",
+      "enable_groups": [
+        "default",
+        "pro-mini",
+        "pro-x1",
+        "pro-x3",
+        "按量计费",
+        "mini",
+        "pro-x2",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "speech_tts",
+      "description": "Speech TTS。小米官方语音合成入口。",
+      "tags": "Audio,TTS",
+      "enable_groups": [
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "speech-tts",
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-6.1-sol",
+      "description": "GPT-6.1 Sol。6 代主力档,编程与智能体(Agent)工作流。 上下文 1M,缓存输入 1 折。",
+      "tags": "Vision,1.05M",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "default",
+        "pro-x4",
+        "按量计费",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "kimi-k3.1-pro",
+      "description": "Kimi K3.1 Pro。官方价 $2 / $10，缓存读 $0.20。上下文 1M。",
+      "tags": "Vision,1M",
+      "enable_groups": [
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-fable-5-1",
+      "description": null,
+      "tags": null,
+      "enable_groups": [
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "mini",
+        "pro-mini",
+        "default"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "hy3",
+      "description": "腾讯混元 Hy3。295B MoE / 21B 激活，256K 上下文。",
+      "tags": "256K",
+      "enable_groups": [
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "grok-4.5",
+      "description": "Grok 4.5。xAI 对话、编码与工具，幻觉更低。 上下文 500K。",
+      "tags": "Vision,500K",
+      "enable_groups": [
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "composer-2.5",
+      "description": "Composer 2.5。xAI 托管的 Cursor Composer，走 Grok 渠道。不要和 cursor-composer-2.5 混用。",
+      "tags": "Agent",
+      "enable_groups": [
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "grok-4.6",
+      "description": "Grok 4.6。xAI 前沿档，长程智能体、编码与看图。 上下文 500K。",
+      "tags": "Vision,500K",
+      "enable_groups": [
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gemma-4-31b-it",
+      "description": "Gemma 4 31B Instruct。Google 开源指令模型，AI Studio 免费档。",
+      "tags": "Open model,31B",
+      "enable_groups": [
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "gemini",
+        "openai",
+        "anthropic"
+      ]
+    },
+    {
+      "model_name": "gpt-image-2.5-sunburst",
+      "description": "GPT Image 2.5 Sunburst。OpenAI 新一代生图模型,按提示生图、修图与视觉设计。",
+      "tags": "Vision,生图",
+      "enable_groups": [
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2"
+      ],
+      "supported_endpoint_types": [
+        "image-generation",
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "grok-imagine-image-quality",
+      "description": "Grok Imagine。按张生图，偏画质档。 上下文 8K。",
+      "tags": "Vision,生图,8K",
+      "enable_groups": [
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-haiku-4-5",
+      "description": "Claude Haiku 4.5。反代渠道，价格更便宜。最快的轻量 Claude，适合分类、办公和低延迟助手。 上下文 200K。",
+      "tags": "反代,Vision,200K",
+      "enable_groups": [
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "web_search",
+      "description": "Web Search。联网搜索工具，走 Groq / KAB，不是对话模型。",
+      "tags": "工具,搜索",
+      "enable_groups": [
+        "default",
+        "mini",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "pro-mini",
+        "pro-x1"
+      ],
+      "supported_endpoint_types": [
+        "search",
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "glm-5.3-flash",
+      "description": "GLM-5.3 Flash。原生多模态的高效编码档。 上下文 1M。",
+      "tags": "Vision,1M",
+      "enable_groups": [
+        "pro-x4",
+        "按量计费",
+        "pro-mini",
+        "pro-x1",
+        "default",
+        "mini",
+        "pro-x2",
+        "pro-x3"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gemini-3-pro-image",
+      "description": "Gemini 3 Pro Image。原生生图。按张计价，走 Gemini 协议。",
+      "tags": "Image generation,Vision",
+      "enable_groups": [
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3"
+      ],
+      "supported_endpoint_types": [
+        "image-generation",
+        "gemini",
+        "openai",
+        "anthropic"
+      ]
+    },
+    {
+      "model_name": "gemini-3.1-flash-image",
+      "description": "Gemini 3.1 Flash Image。高速原生生图。按张计价。",
+      "tags": "Image generation,Vision",
+      "enable_groups": [
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2"
+      ],
+      "supported_endpoint_types": [
+        "image-generation",
+        "gemini",
+        "openai",
+        "anthropic"
+      ]
+    },
+    {
+      "model_name": "tako-auto",
+      "description": "免费模型自动调度池：优先 deepseek-v4-flash 含看图工具，资源不够时会自动路由至其他免费模型。",
+      "tags": "免费,自动调度",
+      "enable_groups": [
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-5.6",
+      "description": "GPT-5.6。复杂专业工作、编码与智能体工作流。 上下文 272K。",
+      "tags": "Vision,272K",
+      "enable_groups": [
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-image-2",
+      "description": "GPT Image 2。按提示生图、修图与视觉设计。",
+      "tags": "Vision,生图",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "image-generation",
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-opus-4-7",
+      "description": "Claude Opus 4.7。仅支持 Claude Code 客户端使用，其他客户端上游会报错。反代渠道，价格更便宜。更强的软件工程与高风险推理。 上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "pro-x2",
+        "pro-x3",
+        "按量计费",
+        "mini",
+        "pro-mini",
+        "default",
+        "pro-x1",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "mimo-v2.6-flash",
+      "description": "MiMo V2.6 Flash。小米开源 MoE 架构，309B 总参 / 15B 激活，高性价比档。 上下文 1M。",
+      "tags": "Vision,Audio,1M",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-sonnet-5-5",
+      "description": "Claude Sonnet 5.5。仅支持 Claude Code 客户端使用，其他客户端上游会报错。反代渠道，价格更便宜。 上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "default",
+        "pro-x3",
+        "按量计费",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x4",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-opus-5",
+      "description": "Claude Opus 5。仅支持 Claude Code 客户端使用，其他客户端上游会报错。反代渠道，价格更便宜。最强 Claude 档的反代入口。 上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "pro-x3",
+        "pro-x4",
+        "mini",
+        "default",
+        "pro-x1",
+        "pro-x2",
+        "按量计费",
+        "pro-mini"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-6-sol",
+      "description": "GPT-6 Sol。6 代主力档,编程与智能体(Agent)工作流。 上下文 1M,缓存输入 1 折。",
+      "tags": "Vision,1.05M",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gpt-image-2.5-flare",
+      "description": "GPT Image 2.5 Flare。OpenAI 新一代生图模型,按提示生图、修图与视觉设计。",
+      "tags": "Vision,生图",
+      "enable_groups": [
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default"
+      ],
+      "supported_endpoint_types": [
+        "image-generation",
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "kimi-k3",
+      "description": "Kimi K3。百万上下文多模态智能体，可开关高思考。Kimi / 自部署 / 腾讯云都能调。 上下文 1M。",
+      "tags": "Vision,1M",
+      "enable_groups": [
+        "按量计费",
+        "default",
+        "pro-mini",
+        "pro-x1",
+        "pro-x3",
+        "mini",
+        "pro-x2",
+        "pro-x4"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "k3",
+      "description": "k3。Kimi K3 的上游短名，和 kimi-k3 同一模型。优先用 kimi-k3。 上下文 1M。",
+      "tags": "Vision,1M",
+      "enable_groups": [
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "gemini-3.1-pro-preview",
+      "description": "Gemini 3.1 Pro Preview。Google 高阶推理与多模态，官方直连。 上下文 1M。",
+      "tags": "Reasoning,Vision,1M",
+      "enable_groups": [
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini"
+      ],
+      "supported_endpoint_types": [
+        "gemini",
+        "openai",
+        "anthropic"
+      ]
+    },
+    {
+      "model_name": "beam",
+      "description": "Reflection 的通用模型，上下文 100 万，性能接近 glm-5.2，速度飞快，价格比 DeepSeek 还便宜",
+      "tags": "1M",
+      "enable_groups": [
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-opus-4-6",
+      "description": "Claude Opus 4.6。仅支持 Claude Code 客户端使用，其他客户端上游会报错。反代渠道，价格更便宜。高阶编码、规划与慢思考。 上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "pro-mini",
+        "default",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "mini"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "claude-sonnet-4-6",
+      "description": "Claude Sonnet 4.6。仅支持 Claude Code 客户端使用，其他客户端上游会报错。反代渠道，价格更便宜。生产向编码智能体。 上下文 1M。",
+      "tags": "反代,Vision,1M,仅Claude Code",
+      "enable_groups": [
+        "pro-x3",
+        "pro-x4",
+        "按量计费",
+        "mini",
+        "pro-mini",
+        "default",
+        "pro-x1",
+        "pro-x2"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "grok-4.7",
+      "description": "Grok 4.7。xAI 最新前沿档，长程智能体、编码与看图。 上下文 500K。",
+      "tags": "Vision,500K",
+      "enable_groups": [
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "glm-5.3",
+      "description": "GLM-5.3。新一代旗舰，长程编码、智能体与复杂交付。 上下文 1M。",
+      "tags": "1M",
+      "enable_groups": [
+        "default",
+        "pro-x1",
+        "pro-x2",
+        "mini",
+        "pro-mini",
+        "pro-x3",
+        "pro-x4",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "muse-spark-1.2-contributor",
+      "description": "Muse Spark 1.2 Contributor。与 1.2 同能力的共享数据档，价格更低。 上下文 1M。",
+      "tags": "Reasoning,Vision,Audio,1M",
+      "enable_groups": [
+        "pro-x4",
+        "按量计费",
+        "default",
+        "mini",
+        "pro-mini",
+        "pro-x1",
+        "pro-x2",
+        "pro-x3"
+      ],
+      "supported_endpoint_types": [
+        "anthropic",
+        "openai",
+        "gemini"
+      ]
+    },
+    {
+      "model_name": "deepseek-v4-flash",
+      "description": "DeepSeek V4 Flash。便宜的长上下文推理与编码。官方与自部署都能调。 上下文 1M。",
+      "tags": "1M",
+      "enable_groups": [
+        "pro-mini",
+        "pro-x2",
+        "pro-x3",
+        "pro-x4",
+        "default",
+        "mini",
+        "pro-x1",
+        "按量计费"
+      ],
+      "supported_endpoint_types": [
+        "openai",
+        "anthropic",
+        "gemini"
+      ]
+    }
+  ],
+  "usable_group": {
+    "mini": "Mini",
+    "pro-mini": "Pro mini",
+    "pro-x1": "Pro x1",
+    "pro-x2": "Pro x2",
+    "pro-x3": "Pro x3",
+    "pro-x4": "Pro x4",
+    "按量计费": "默认分组"
+  }
+}
