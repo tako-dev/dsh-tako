@@ -1,6 +1,6 @@
 {
   "name": "dsh-tako",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tako models for the official DeepSeek Harness (dsh): one install, live model list with context windows",
   "type": "module",
   "main": "lib/index.js",
