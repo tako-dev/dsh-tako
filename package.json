@@ -22,7 +22,13 @@
       "patch": "./cordis.patch.yml"
     }
   },
-  "keywords": ["dsh", "deepseek-harness", "tako", "llm", "plugin"],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "tako",
+    "llm",
+    "plugin"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tako-dev/dsh-tako.git"
@@ -36,7 +42,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "pnpm typecheck && pnpm test && pnpm build"
+    "prepublishOnly": "npm run typecheck && npm test && npm run build",
+    "e2e": "node scripts/e2e/run.mjs"
   },
   "peerDependencies": {
     "@deepseek-ai/schemastery": "^3.18.0"
@@ -47,6 +54,7 @@
     "@deepseek-ai/schemastery": "^3.18.5",
     "@types/node": "^22.10.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.2.0"
+    "vitest": "^3.2.0",
+    "yaml": "^2.9.1"
   }
 }
