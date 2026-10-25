@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserLoginHandle, BrowserLoginOptions, TakoGrant } from '../src/login.ts'
-import { TakoLoginError } from '../src/login.ts'
+import { defaultDeviceName, TakoLoginError } from '../src/login.ts'
 import { createLoginService, LOGIN_ROUTE } from '../src/web.ts'
 
 const KEY = 'cr_0123456789abcdefWXYZ'
@@ -44,7 +44,7 @@ describe('Models-page sign-in route', () => {
     expect(await (await svc.handle(request('GET'))).json()).toEqual({ status: 'idle' })
     const started = await (await svc.handle(request('POST', { action: 'start' }))).json() as { status: string, id: string, url: string }
     expect(started).toMatchObject({ status: 'pending', url: 'https://tako.test/app/authorize?x=1', redirectUri: 'http://127.0.0.1:50001/tako/callback' })
-    expect(login.pending[0]!.options).toMatchObject({ origin: 'https://tako.test', deviceName: `dsh-tako@${process.platform}` })
+    expect(login.pending[0]!.options).toMatchObject({ origin: 'https://tako.test', deviceName: defaultDeviceName() })
     await login.pending[0]!.resolve({ key: KEY, userName: 'alice', planName: 'Pro' })
     await tick()
     expect(set).toHaveBeenCalledExactlyOnceWith('TAKO_API_KEY', KEY)

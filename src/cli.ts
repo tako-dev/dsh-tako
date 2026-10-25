@@ -34,7 +34,7 @@ Options:
 login options:
   --no-open             print the sign-in URL instead of opening a browser
   --port <port>         fixed loopback callback port (1024-65535), e.g. for \`ssh -L <port>:127.0.0.1:<port>\`
-  --device-name <name>  label shown on the Tako authorization page (default: dsh-tako@<platform>)
+  --device-name <name>  label shown on the Tako authorization page (default: dsh-tako@<hostname>)
 
 The key is stored in $DSH_HOME/.credentials.yaml under the credential name, through
 dsh's own credential provider. Running dsh processes pick it up on the next request.

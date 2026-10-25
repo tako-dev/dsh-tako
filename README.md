@@ -76,12 +76,12 @@ npx dsh-tako whoami                   # 查看当前 key 对应的 Tako 账号�
 npx dsh-tako logout                   # 在 Tako 吊销这个 key，并从 dsh 凭据里删除
 ```
 
-`login` 的其他参数：`--port <端口>` 固定回调端口（1024–65535，默认随机）、`--device-name <名字>` 授权页和 Tako 令牌列表里显示的设备名（默认 `dsh-tako@<平台>`，如 `dsh-tako@darwin`）、`--base-url`、`--api-key-env`、`--dsh <路径>`（dsh 安装位置，默认找 `PATH` 上的 `dsh`，再找 npm 全局目录；也可用环境变量 `DSH_TAKO_DSH`）。CLI 用的是你本机 dsh 安装里的官方凭据模块（`@deepseek-ai/dsh-credentials-local`），所以必须能找到 dsh；`DSH_HOME` 照常生效。
+`login` 的其他参数：`--port <端口>` 固定回调端口（1024–65535，默认随机）、`--device-name <名字>` 授权页和 Tako 令牌列表里显示的设备名（默认 `dsh-tako@<主机名>`：取 `hostname` 的第一段，去掉 `.local` 等域后缀，其他字符换成 `-`，整体不超过 32 个字符；取不到主机名时用 `dsh-tako@<平台>`）、`--base-url`、`--api-key-env`、`--dsh <路径>`（dsh 安装位置，默认找 `PATH` 上的 `dsh`，再找 npm 全局目录；也可用环境变量 `DSH_TAKO_DSH`）。CLI 用的是你本机 dsh 安装里的官方凭据模块（`@deepseek-ai/dsh-credentials-local`），所以必须能找到 dsh；`DSH_HOME` 照常生效。
 
 流程细节：CLI 或 dsh 进程在 `127.0.0.1` 上开一个一次性回调端口（只监听本机回环地址），用 PKCE（S256）和随机 `state` 发起授权，等待 5 分钟（与 Tako 授权码有效期一致），收到 `state` 不匹配的回调会忽略并继续等待。拒绝授权、超时、换 key 失败时不写任何凭据。
 
 注意：
-- Tako 以「`tako-connect@<设备名>`」命名签发的令牌，**同名的旧令牌会被替换（吊销）**。两台同平台机器都用默认设备名登录时，后登录的会让前一台的 key 失效，请给其中一台加 `--device-name`（例如 `--device-name dsh-tako@work-mac`）。Web 界面的按钮固定使用默认设备名。
+- Tako 以「`tako-connect@<设备名>`」命名签发的令牌，**同名的旧令牌会被替换（吊销）**。默认设备名带主机名，所以不同机器互不影响；同一台机器重新登录（CLI 或 Web 按钮都一样）会替换这台机器之前的 key，这是预期行为。主机名相同（或截断到 32 字符后相同）的两台机器仍会互相替换，这时给其中一台加 `--device-name`（例如 `--device-name dsh-tako@work-mac`）。Web 按钮固定使用默认设备名。
 - 登录写入的是凭据文件，优先级高于同名环境变量；要改回用环境变量，运行 `dsh-tako logout` 或在「设置 → 模型」里清空。
 - `dsh-tako logout` 只处理凭据文件里的 key；key 来自环境变量或 `.env` 时它不会去吊销。
 
@@ -235,7 +235,7 @@ Instead of pasting a key, sign in to Tako in the browser:
 
 Both run a PKCE (S256) authorization-code flow with a one-shot listener on `127.0.0.1` (5-minute wait, `state` checked), and store the issued `cr_` key through dsh's own credential service (`ctx.credentials.set`, the same path the Models page uses) under the plugin's `apiKeyEnv`. Running dsh processes use it on the next request. The key is never printed; only `cr_****` plus the last four characters. The CLI loads `@deepseek-ai/dsh-credentials-local` from your dsh installation (found via `dsh` on `PATH`, the global npm root, `--dsh`, or `DSH_TAKO_DSH`), and reads `baseURL` / `apiKeyEnv` from the profile's `dsh-tako` config (default profile `web`).
 
-Tako names the token `tako-connect@<device name>` and replaces an older token with the same name, so two machines on the same platform signing in with the default `dsh-tako@<platform>` revoke each other's key; pass `--device-name` on one of them.
+Tako names the token `tako-connect@<device name>` and replaces an older token with the same name. The default device name is `dsh-tako@<hostname>` (first label of the host name, other characters replaced by `-`, at most 32 characters; `dsh-tako@<platform>` when there is no usable host name), so signing in again on the same machine replaces that machine's previous key while other machines keep theirs. Two hosts with the same (or same-after-truncation) name still replace each other; pass `--device-name` on one of them.
 
 **Remote dsh**: Tako redirects the browser to `127.0.0.1:<port>` on the machine running the browser. When dsh runs on a remote host, either paste a key (Settings → Models or `TAKO_API_KEY`), or forward a fixed port: `ssh -L 53682:127.0.0.1:53682 user@remote`, then on the remote host `npx dsh-tako login --no-open --port 53682` and open the printed URL locally. The Web button only completes when the page is opened on the dsh host itself; on a remote address the card says so.
 

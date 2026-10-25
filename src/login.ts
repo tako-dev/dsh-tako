@@ -9,6 +9,7 @@
 
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
+import { hostname as osHostname } from 'node:os'
 
 /** OAuth client id the Tako server accepts for third-party DSH integrations. */
 export const CLIENT_ID = 'tako-connect'
@@ -56,9 +57,33 @@ export function sanitizeDeviceName(raw: string): string {
     .slice(0, MAX_DEVICE_NAME_LENGTH)
 }
 
-/** Default device label: `dsh-tako@<platform>`. */
-export function defaultDeviceName(platform: string = process.platform): string {
-  return sanitizeDeviceName(`dsh-tako@${platform}`)
+const DEVICE_PREFIX = 'dsh-tako@'
+
+/**
+ * The short host name as a device-name fragment: the first DNS label (so
+ * `mac.local` and `box.corp.example.com` lose their domain), characters
+ * outside `[A-Za-z0-9._+-]` replaced by `-`, runs of `-` collapsed, and
+ * leading/trailing punctuation trimmed. Empty when nothing usable remains.
+ */
+export function hostLabel(hostname: string): string {
+  const first = hostname.trim().split('.')[0] ?? ''
+  return first
+    .replace(/[^A-Za-z0-9._+-]/gu, '-')
+    .replace(/-{2,}/gu, '-')
+    .replace(/^[-._+]+|[-._+]+$/gu, '')
+}
+
+/**
+ * Default device label: `dsh-tako@<hostname>`, capped at the server's
+ * 32-character limit without a trailing `.`/`-`; `dsh-tako@<platform>` when
+ * the host name yields nothing. Tako replaces an older token with the same
+ * name, so the host name keeps machines on one platform from revoking each
+ * other's key.
+ */
+export function defaultDeviceName(hostname: string = osHostname(), platform: string = process.platform): string {
+  const host = hostLabel(hostname)
+  if (host === '') return sanitizeDeviceName(`${DEVICE_PREFIX}${platform}`)
+  return `${DEVICE_PREFIX}${host}`.slice(0, MAX_DEVICE_NAME_LENGTH).replace(/[-._+]+$/u, '')
 }
 
 /** Mask a key for display: `cr_****abcd`. */

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { CliDeps } from '../src/cli.ts'
 import { main } from '../src/cli.ts'
 import type { BrowserLoginHandle, BrowserLoginOptions, TakoGrant } from '../src/login.ts'
-import { TakoLoginError } from '../src/login.ts'
+import { defaultDeviceName, TakoLoginError } from '../src/login.ts'
 import { pluginConfigFromPatch } from '../src/shared.ts'
 import type { CredentialStore, DshRuntime } from '../src/store.ts'
 import { locateDsh } from '../src/store.ts'
@@ -82,7 +82,7 @@ describe('dsh-tako login', () => {
     expect(result.code).toBe(0)
     expect(store.set).toHaveBeenCalledExactlyOnceWith('TAKO_API_KEY', KEY)
     expect(store.close).toHaveBeenCalled()
-    expect(seen[0]).toMatchObject({ origin: 'https://tako.shiroha.tech', deviceName: `dsh-tako@${process.platform}` })
+    expect(seen[0]).toMatchObject({ origin: 'https://tako.shiroha.tech', deviceName: defaultDeviceName() })
     expect(openBrowser).toHaveBeenCalledWith('https://tako.shiroha.tech/app/authorize?client_id=tako-connect&state=s')
     expect(result.stdout).toContain('Signed in as alice (Pro).')
     expect(result.stdout).toContain('cr_****WXYZ')

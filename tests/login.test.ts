@@ -74,10 +74,33 @@ describe('PKCE and state', () => {
   })
 
   it('sanitizes device names the way the server does', () => {
-    expect(defaultDeviceName('darwin')).toBe('dsh-tako@darwin')
     expect(sanitizeDeviceName('  my mac / 工作 ')).toBe('my-mac')
     expect(sanitizeDeviceName('@@a b@@')).toBe('a-b')
     expect(sanitizeDeviceName('x'.repeat(40))).toHaveLength(32)
+  })
+
+  it('defaults the device name to dsh-tako@<hostname>', () => {
+    expect(defaultDeviceName('build-box', 'linux')).toBe('dsh-tako@build-box')
+    // Domain suffixes go: .local (macOS Bonjour) and any FQDN.
+    expect(defaultDeviceName('Hashiros-MacBook-Pro.local', 'darwin')).toBe('dsh-tako@Hashiros-MacBook-Pro')
+    expect(defaultDeviceName('web01.corp.example.com', 'linux')).toBe('dsh-tako@web01')
+    // Spaces and non-ASCII become `-`, collapsed and trimmed.
+    expect(defaultDeviceName('my mac', 'darwin')).toBe('dsh-tako@my-mac')
+    expect(defaultDeviceName('张三的 MacBook', 'darwin')).toBe('dsh-tako@MacBook')
+    expect(defaultDeviceName('工作机', 'win32')).toBe('dsh-tako@win32')
+    // Long names stop at the server's 32-character limit, never on a trailing `-`/`.`.
+    const long = defaultDeviceName('a-very-long-hostname-for-the-ci-runner-0042', 'linux')
+    expect(long).toBe('dsh-tako@a-very-long-hostname-fo')
+    expect(long.length).toBeLessThanOrEqual(32)
+    expect(defaultDeviceName('abcdefghijklmnopqrstuv-xyz', 'linux')).toBe('dsh-tako@abcdefghijklmnopqrstuv')
+    expect(defaultDeviceName('abcdefghijklmnopqrstuv-.local', 'linux')).toBe('dsh-tako@abcdefghijklmnopqrstuv')
+    expect(defaultDeviceName('abcdefghijklmnopqrstuv_.xyz', 'linux')).toBe('dsh-tako@abcdefghijklmnopqrstuv')
+    // Empty or unusable host names fall back to the platform.
+    expect(defaultDeviceName('', 'darwin')).toBe('dsh-tako@darwin')
+    expect(defaultDeviceName('   ', 'linux')).toBe('dsh-tako@linux')
+    expect(defaultDeviceName('.local', 'linux')).toBe('dsh-tako@linux')
+    // What the server keeps is what we send.
+    for (const name of [long, defaultDeviceName('张三的 MacBook', 'darwin'), defaultDeviceName()]) expect(sanitizeDeviceName(name)).toBe(name)
   })
 
   it('masks keys to the last four characters', () => {

@@ -630,7 +630,10 @@ await testCase('j', 'dsh-tako login --no-open: PKCE loopback sign-in stores the 
   check(detail, result.code === 0, `dsh-tako login exited ${result.code}${result.code !== 0 ? `: ${result.stderr.trim()}` : ''}`)
   check(detail, authorize.origin === mock.origin && authorize.searchParams.get('client_id') === 'tako-connect' && authorize.searchParams.get('code_challenge_method') === 'S256', `authorize URL from the profile config: ${authorize.origin}${authorize.pathname} client_id=${authorize.searchParams.get('client_id')}`)
   check(detail, /^http:\/\/127\.0\.0\.1:\d+\/tako\/callback$/.test(authorize.searchParams.get('redirect_uri') ?? ''), `redirect_uri ${authorize.searchParams.get('redirect_uri')}`)
-  check(detail, authorize.searchParams.get('device_name') === `dsh-tako@${process.platform}`, `device_name ${authorize.searchParams.get('device_name')}`)
+  // Expected default from the packed build itself: dsh-tako@<short hostname>.
+  const { defaultDeviceName } = await import(pathToFileURL(join(installCli(), '../../dsh-tako/lib/login.js')).href)
+  const deviceName = authorize.searchParams.get('device_name')
+  check(detail, deviceName === defaultDeviceName() && /^dsh-tako@[A-Za-z0-9._+-]+$/.test(deviceName) && deviceName.length <= 32, `device_name ${deviceName} (default dsh-tako@<hostname>)`)
   check(detail, result.browser?.status === 200 && result.browser.body.includes('登录成功'), `browser landed on the callback page: HTTP ${result.browser?.status}`)
   check(detail, exchanges.length === 1 && exchanges[0].ok && exchanges[0].body.client_id === 'tako-connect', `mock token endpoint: ${JSON.stringify(exchanges.map(entry => entry.ok ? 'ok (PKCE verifier matched the challenge)' : entry.reason))}`)
   check(detail, loginKey !== undefined && !result.stdout.includes(loginKey) && !result.stderr.includes(loginKey), 'the key never appears in the CLI output')
