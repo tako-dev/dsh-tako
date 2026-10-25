@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Config as PluginConfig } from '../src/index.ts'
-import { apply, canonicalJson, Config, FALLBACK_MODELS, normalizeOrigin, PI_AI_NS, routeProfile, start } from '../src/index.ts'
+import { apply, canonicalJson, checkCredential, Config, FALLBACK_MODELS, MISSING_KEY_HINT, normalizeOrigin, PI_AI_NS, routeProfile, start } from '../src/index.ts'
 
 const fixtureText = readFileSync(new URL('./fixtures/pricing-2026-10-25.json', import.meta.url), 'utf8')
 
@@ -14,6 +14,8 @@ interface FakeOptions {
   base?: Record<string, unknown>
   writable?: boolean
   sectionMissingFor?: number
+  keyConfigured?: boolean
+  noCredentials?: boolean
 }
 
 function fakeCtx(options: FakeOptions = {}) {
@@ -44,12 +46,17 @@ function fakeCtx(options: FakeOptions = {}) {
     }),
     mutate,
   }
+  const describeCredential = vi.fn(async (_ref: string) => ({ configured: options.keyConfigured ?? true }))
+  const credentials = options.noCredentials === true ? undefined : { describe: describeCredential }
+  const inject = vi.fn()
   const ctx = {
     settings,
     logger,
+    get: (name: string) => name === 'credentials' ? credentials : undefined,
+    inject,
     effect: (fn: () => () => void) => { disposers.push(fn()) },
   } as unknown as Context
-  return { ctx, mutate, logger, settings, user: () => user, dispose: () => disposers.forEach(fn => fn()) }
+  return { ctx, mutate, logger, settings, inject, describeCredential, user: () => user, dispose: () => disposers.forEach(fn => fn()) }
 }
 
 const okFetch = (body: string = fixtureText) => vi.fn(async () => new Response(body, { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch
@@ -231,16 +238,47 @@ describe('sync', () => {
     expect(fake.mutate).toHaveBeenCalledTimes(1)
   })
 
-  it('apply registers the sync as an effect', async () => {
+  it('apply registers the sync as an effect and the Web route behind connection + credentials', async () => {
     const fake = fakeCtx()
     const original = globalThis.fetch
     globalThis.fetch = okFetch()
     try {
       apply(fake.ctx, config())
       await until(() => fake.mutate.mock.calls.length === 1)
+      expect(fake.inject).toHaveBeenCalledWith(['connection', 'credentials'], expect.any(Function))
     } finally {
       globalThis.fetch = original
       fake.dispose()
     }
+  })
+})
+
+describe('missing-key hint', () => {
+  it('logs the login hint once when the key reference is unconfigured', async () => {
+    const fake = fakeCtx({ keyConfigured: false })
+    stops.push(start(fake.ctx, config({ refreshIntervalMs: 20 }), { fetch: okFetch() }))
+    await until(() => fake.logger.warn.mock.calls.some(call => call[0] === MISSING_KEY_HINT))
+    await settle()
+    expect(fake.describeCredential).toHaveBeenCalledTimes(1)
+    expect(fake.describeCredential).toHaveBeenCalledWith('TAKO_API_KEY')
+    expect(fake.logger.warn.mock.calls.filter(call => call[0] === MISSING_KEY_HINT)).toEqual([[MISSING_KEY_HINT, 'TAKO_API_KEY']])
+    expect(MISSING_KEY_HINT).toContain('dsh-tako login')
+  })
+
+  it('stays quiet when the key is configured', async () => {
+    const fake = fakeCtx({ keyConfigured: true })
+    stops.push(start(fake.ctx, config({ apiKeyEnv: 'MY_TAKO' }), { fetch: okFetch() }))
+    await until(() => fake.describeCredential.mock.calls.length === 1)
+    await settle()
+    expect(fake.describeCredential).toHaveBeenCalledWith('MY_TAKO')
+    expect(fake.logger.warn).not.toHaveBeenCalled()
+  })
+
+  it('reports undefined without a credential service and survives a failing one', async () => {
+    expect(await checkCredential(fakeCtx({ noCredentials: true }).ctx, config())).toBeUndefined()
+    const broken = fakeCtx()
+    broken.describeCredential.mockRejectedValueOnce(new Error('boom'))
+    expect(await checkCredential(broken.ctx, config())).toBeUndefined()
+    expect(broken.logger.warn).not.toHaveBeenCalled()
   })
 })

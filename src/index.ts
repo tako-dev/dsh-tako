@@ -15,8 +15,12 @@ import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { CatalogOptions, TakoModel, TakoModelOverride, TakoPricingResponse } from './catalog.ts'
 import { buildCatalog } from './catalog.ts'
+import { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
+import { applyWeb } from './web.ts'
 
 export * from './catalog.ts'
+export { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
+export { LOGIN_ROUTE } from './web.ts'
 
 /** Cordis plugin name. */
 export const name = 'dsh-tako'
@@ -28,8 +32,6 @@ export const inject = ['settings']
 export const PI_AI_NS = 'llm-pi-ai'
 /** Route key, and therefore the provider id shown in model selectors. */
 export const PROVIDER = 'tako'
-export const DEFAULT_BASE_URL = 'https://tako.shiroha.tech'
-export const DEFAULT_API_KEY_ENV = 'TAKO_API_KEY'
 
 /** Used only when the directory has never been reachable, so the route still appears. */
 export const FALLBACK_MODELS: TakoModel[] = [
@@ -79,12 +81,6 @@ export const Config: z<Config> = z.object({
   overrides: z.dict(ModelOverride).default({}).description('按模型 id 修正上下文、输出上限或输入模态'),
 })
 
-/** Strip trailing slashes and one `/v1` so both spellings of the origin work. */
-export function normalizeOrigin(baseURL: string): string {
-  const trimmed = baseURL.trim().replace(/\/+$/, '')
-  return trimmed.endsWith('/v1') ? trimmed.slice(0, -3) : trimmed
-}
-
 /** The `providers.tako` value written into the pi-ai settings section. */
 export function routeProfile(config: Config, models: readonly TakoModel[]): Record<string, unknown> {
   return {
@@ -126,6 +122,32 @@ function piAiSection(ctx: Context): PiAiSection | undefined {
   return ctx.settings.describe().find(descriptor => descriptor.ns === PI_AI_NS) as PiAiSection | undefined
 }
 
+/** The slice of the official `ctx.credentials` service the startup hint reads. */
+interface CredentialDescriber {
+  describe: (ref: string) => Promise<{ configured: boolean, source?: string }>
+}
+
+/** Shown once per start when the route's key reference resolves to nothing. */
+export const MISSING_KEY_HINT = 'no Tako API key is configured as %s: run "npx dsh-tako login" to sign in with the browser, or paste a key in Settings -> Models -> Tako'
+
+/**
+ * Log {@link MISSING_KEY_HINT} when the installation's credential service
+ * reports the key reference unconfigured. Never reads the value.
+ * @returns whether a key is configured, or `undefined` when no credential service is mounted.
+ */
+export async function checkCredential(ctx: Context, config: Config): Promise<boolean | undefined> {
+  try {
+    const credentials = ctx.get('credentials') as CredentialDescriber | undefined
+    if (credentials === undefined) return undefined
+    const info = await credentials.describe(config.apiKeyEnv)
+    if (!info.configured) ctx.logger.warn(MISSING_KEY_HINT, config.apiKeyEnv)
+    return info.configured
+  } catch (error: unknown) {
+    ctx.logger.debug?.('could not check the Tako credential: %s', error instanceof Error ? error.message : String(error))
+    return undefined
+  }
+}
+
 /** Optional seams for tests; production uses the global `fetch` and timers. */
 export interface SyncDeps {
   fetch?: typeof fetch
@@ -152,6 +174,7 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
     overrides: config.overrides,
   }
   const controller = new AbortController()
+  let credentialChecked = false
   const timers = new Set<ReturnType<typeof setTimeout>>()
   const later = (fn: () => void, ms: number): void => {
     const timer = setTimeout(() => { timers.delete(timer); fn() }, ms)
@@ -191,6 +214,11 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
       else logger.warn('settings section "%s" is not active; Tako route not written', PI_AI_NS)
       return
     }
+    // pi-ai is up, and the credential provider mounts before it in dsh-base.
+    if (!credentialChecked) {
+      credentialChecked = true
+      void checkCredential(ctx, config)
+    }
     try {
       if (models !== undefined) {
         if (models.length === 0) {
@@ -222,7 +250,11 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
   }
 }
 
-/** Cordis entry: keep `providers.tako` in sync for the plugin's lifetime. */
+/**
+ * Cordis entry: keep `providers.tako` in sync for the plugin's lifetime, and,
+ * in a profile with the Web connection, serve the Models-page sign-in route.
+ */
 export function apply(ctx: Context, config: Config): void {
   ctx.effect(() => start(ctx, config))
+  applyWeb(ctx, config)
 }

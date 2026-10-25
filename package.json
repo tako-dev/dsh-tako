@@ -1,7 +1,7 @@
 {
   "name": "dsh-tako",
   "version": "0.1.1",
-  "description": "Tako models for the official DeepSeek Harness (dsh): one install, live model list with context windows",
+  "description": "Tako models for the official DeepSeek Harness (dsh): live model list with context windows, plus browser sign-in",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -10,16 +10,24 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./client": "./client/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "client",
     "cordis.patch.yml"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings-models"
+      ]
     }
   },
   "keywords": [
@@ -56,5 +64,8 @@
     "typescript": "^5.7.0",
     "vitest": "^3.2.0",
     "yaml": "^2.9.1"
+  },
+  "bin": {
+    "dsh-tako": "lib/bin.js"
   }
 }
