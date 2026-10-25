@@ -1,9 +1,15 @@
 /**
- * Minimal stand-in for Tako: the public pricing directory and an
- * OpenAI-compatible chat endpoint returning a fixed reply.
+ * Minimal stand-in for Tako: the public pricing directory, an
+ * OpenAI-compatible chat endpoint returning a fixed reply, and the desktop
+ * sign-in contract (`/app/authorize` acting as a user who already confirmed,
+ * `/api/desktop/token|me|revoke`) with the server's PKCE and redirect checks.
  */
+import { createHash, randomBytes } from 'node:crypto'
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
+
+const LOOPBACK_CALLBACK = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):(\d{4,5})\/tako\/callback$/
+const CLIENT_IDS = new Set(['dsh-desktop', 'tako-connect'])
 
 export const REPLY = 'TAKO_E2E_FIXED_REPLY_42'
 
@@ -16,7 +22,22 @@ export async function startMockTako({ pricingFile }) {
     pricingBody: readFileSync(pricingFile, 'utf8'),
     /** @type {{ method: string, url: string, authorization?: string, model?: string, stream?: boolean, at: number }[]} */
     requests: [],
+    /** `approve` redirects with a code; `deny` redirects with error=access_denied. */
+    authorizeMode: 'approve',
+    /** Force the token endpoint to answer `{ success: false, error }`. */
+    tokenError: undefined,
+    /** @type {Map<string, { challenge: string, redirectUri: string, clientId: string, deviceName: string, expires: number }>} */
+    codes: new Map(),
+    /** Keys issued by the token endpoint and not revoked. */
+    keys: new Map(),
+    /** @type {{ url: string, params: Record<string, string> }[]} */
+    authorizations: [],
+    /** @type {{ ok: boolean, reason?: string, key?: string, body: Record<string, unknown> }[]} */
+    tokenExchanges: [],
+    revoked: [],
   }
+  const fail = (res, error, message = error) => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: false, error, message }))
+  const bearer = req => (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '')
   const server = createServer((req, res) => {
     const chunks = []
     req.on('data', chunk => chunks.push(chunk))
@@ -39,6 +60,63 @@ export async function startMockTako({ pricingFile }) {
           return
         }
         res.writeHead(200, { 'content-type': 'application/json' }).end(state.pricingBody)
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/app/authorize') {
+        const params = Object.fromEntries(url.searchParams)
+        state.authorizations.push({ url: url.href, params })
+        const redirect = params.redirect_uri ?? ''
+        const valid = LOOPBACK_CALLBACK.test(redirect) && Number(LOOPBACK_CALLBACK.exec(redirect)[2]) >= 1024
+          && CLIENT_IDS.has(params.client_id) && params.response_type === 'code'
+          && params.code_challenge_method === 'S256' && /^[A-Za-z0-9_-]{43,128}$/.test(params.code_challenge ?? '')
+        if (!valid) {
+          res.writeHead(400, { 'content-type': 'text/plain' }).end('mock: invalid authorize request')
+          return
+        }
+        const target = new URL(redirect)
+        if (state.authorizeMode === 'deny') {
+          target.searchParams.set('error', 'access_denied')
+        } else {
+          const code = randomBytes(16).toString('hex')
+          state.codes.set(code, { challenge: params.code_challenge, redirectUri: redirect, clientId: params.client_id, deviceName: params.device_name ?? '', expires: Date.now() + 5 * 60_000 })
+          target.searchParams.set('code', code)
+        }
+        if (params.state !== undefined) target.searchParams.set('state', params.state)
+        res.writeHead(302, { location: target.href }).end()
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/api/desktop/token') {
+        const record = reason => { state.tokenExchanges.push({ ok: reason === undefined, reason, body: { ...body, code_verifier: body?.code_verifier ? '<redacted>' : undefined } }) }
+        if (state.tokenError !== undefined) { record(state.tokenError); fail(res, state.tokenError); return }
+        if (body?.grant_type !== 'authorization_code') { record('unsupported_grant_type'); fail(res, 'unsupported_grant_type'); return }
+        const entry = state.codes.get(body.code)
+        state.codes.delete(body.code) // one-time, like the server
+        if (entry === undefined || entry.expires < Date.now()) { record('invalid_grant: unknown code'); fail(res, 'invalid_grant'); return }
+        if (entry.redirectUri !== body.redirect_uri || entry.clientId !== body.client_id) { record('invalid_grant: redirect/client mismatch'); fail(res, 'invalid_grant'); return }
+        const verifier = String(body.code_verifier ?? '')
+        if (!/^[A-Za-z0-9\-._~]{43,128}$/.test(verifier) || createHash('sha256').update(verifier).digest('base64url') !== entry.challenge) {
+          record('invalid_grant: PKCE verifier does not match the challenge'); fail(res, 'invalid_grant'); return
+        }
+        const key = `cr_e2e${randomBytes(18).toString('hex')}`
+        const name = `${entry.clientId}@${entry.deviceName}`.slice(0, 50)
+        state.keys.set(key, { name, id: state.keys.size + 1 })
+        state.tokenExchanges.push({ ok: true, key, body: { ...body, code_verifier: '<redacted>' } })
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: true, data: { key, token_id: state.keys.get(key).id, name, user: { name: 'e2e-user' }, plan: { name: 'E2E Plan' } } }))
+        return
+      }
+      if (req.method === 'GET' && url.pathname === '/api/desktop/me') {
+        const token = state.keys.get(bearer(req))
+        if (token === undefined) { res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ success: false, error: 'invalid_token', message: 'invalid token' })); return }
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: true, data: { user: { id: '7', name: 'e2e-user' }, plan: { name: 'E2E Plan' }, token: { id: token.id, name: token.name }, quota: { remain: 1000, used: 5 } } }))
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/api/desktop/revoke') {
+        const key = bearer(req)
+        const token = state.keys.get(key)
+        if (token === undefined) { res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ success: false, error: 'invalid_token', message: 'invalid token' })); return }
+        state.keys.delete(key)
+        state.revoked.push(key)
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: true, data: { revoked: true, token_id: token.id } }))
         return
       }
       if (req.method === 'GET' && url.pathname === '/v1/models') {

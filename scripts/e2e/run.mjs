@@ -6,7 +6,9 @@
  * directory, points every DSH_HOME (and HOME) at temporary directories, starts
  * a mock Tako, installs the tarball with `dsh plugin --profile <p> add`, and
  * boots real profiles: `web` for the settings behavior and `acp` (Agent
- * Client Protocol over stdio) for the model list and a real chat turn.
+ * Client Protocol over stdio) for the model list and a real chat turn, then
+ * signs in with `dsh-tako login` and the Web route against the mock's
+ * `/app/authorize` + `/api/desktop/token`.
  *
  * Environment:
  *   DSH_VERSION   dsh version to install (default 0.2.1-rc.2)
@@ -541,6 +543,164 @@ await testCase('i', 'dsh plugin add <http URL to the tgz> (GitHub Release style 
     notes.i = `works; package.json records "${manifest.dependencies?.['dsh-tako']}"`
   } finally {
     await new Promise(resolve => server.close(resolve))
+  }
+})
+
+// ---------------------------------------------------------------- browser sign-in
+
+/** Install the packed tarball the way `npx dsh-tako` would, outside any profile. */
+let cliBin
+function installCli() {
+  if (cliBin !== undefined) return cliBin
+  const dir = join(work, 'cli-install')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'dsh-tako-cli-e2e', private: true }))
+  // The CLI needs no peer; skip resolving the plugin's schemastery peer.
+  run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', '--legacy-peer-deps', tgz], { cwd: dir })
+  cliBin = join(dir, 'node_modules/.bin/dsh-tako')
+  if (!existsSync(cliBin)) throw new Error(`dsh-tako bin not installed at ${cliBin}`)
+  return cliBin
+}
+
+/** dsh on PATH exactly as a global install puts it, so the CLI finds it by itself. */
+const pathWithDsh = home => ({ PATH: `${join(dshDir, 'node_modules/.bin')}${process.platform === 'win32' ? ';' : ':'}${home.env.PATH ?? ''}` })
+
+/** Run `dsh-tako <args>`; `onUrl` receives the printed authorize URL (the "browser"). */
+function cli(home, args, { onUrl, extraEnv = {} } = {}) {
+  const child = spawn(installCli(), args, { cwd: home.cwd, env: { ...home.env, ...pathWithDsh(home), ...extraEnv }, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' })
+  children.add(child)
+  let stdout = ''
+  let stderr = ''
+  let browser
+  child.stdout.setEncoding('utf8')
+  child.stdout.on('data', chunk => {
+    stdout += chunk
+    const url = /(http:\/\/\S+\/app\/authorize\?\S+)/.exec(stdout)?.[1]
+    if (url !== undefined && browser === undefined && onUrl !== undefined) browser = onUrl(url)
+  })
+  child.stderr.on('data', chunk => { stderr += chunk })
+  const timer = setTimeout(() => { try { process.kill(-child.pid, 'SIGKILL') } catch {} }, 120_000)
+  return new Promise(resolve => child.on('exit', async code => {
+    clearTimeout(timer)
+    children.delete(child)
+    resolve({ code, stdout, stderr, browser: await browser })
+  }))
+}
+
+/** What a browser does with the authorize URL when the user already confirmed: follow the 302 to the loopback callback. */
+async function browse(url) {
+  const response = await fetch(url, { redirect: 'follow' })
+  return { status: response.status, url: response.url, body: await response.text() }
+}
+
+function storedRefs(home) {
+  const file = join(home.env.DSH_HOME, '.credentials.yaml')
+  if (!existsSync(file)) return { refs: {}, mode: undefined }
+  return { refs: YAML.parse(readFileSync(file, 'utf8'))?.refs ?? {}, mode: statSync(file).mode & 0o777 }
+}
+
+/** One chat turn through `dsh acp`; returns the mock's chat requests for it. */
+async function chatTurn(home, extraEnv) {
+  const before = mock.chatRequests().length
+  const acp = startAcp(home, extraEnv)
+  try {
+    await acp.call('initialize', { protocolVersion: 1, clientCapabilities: {} })
+    const session = await waitFor(async () => {
+      const result = await acp.call('session/new', { cwd: home.cwd, mcpServers: [] })
+      return takoGroup(result) !== undefined ? result : undefined
+    }, 30_000, 'a Tako group in the ACP model option')
+    await acp.call('session/set_config_option', { sessionId: session.sessionId, configId: 'model', value: JSON.stringify(['tako', 'deepseek-v4.1-flash']) })
+    const prompt = await acp.call('session/prompt', { sessionId: session.sessionId, prompt: [{ type: 'text', text: 'Reply with the fixed e2e text.' }] }, 120_000)
+    return { stopReason: prompt.stopReason, requests: mock.chatRequests().slice(before) }
+  } finally {
+    await acp.stop()
+  }
+}
+
+let loginKey
+const loginHome = newHome('cli-login')
+await testCase('j', 'dsh-tako login --no-open: PKCE loopback sign-in stores the key via dsh credentials, dsh acp uses it', async detail => {
+  await pluginCmd(loginHome, 'acp', 'add', tgz)
+  setPluginConfig(loginHome, 'acp', pluginConfig)
+  const exchangesBefore = mock.state.tokenExchanges.length
+  const result = await cli(loginHome, ['login', '--no-open', '--profile', 'acp'], { onUrl: browse })
+  const exchanges = mock.state.tokenExchanges.slice(exchangesBefore)
+  loginKey = exchanges.find(entry => entry.ok)?.key
+  const authorize = new URL(/(http:\/\/\S+\/app\/authorize\?\S+)/.exec(result.stdout)?.[1] ?? 'http://invalid/')
+  check(detail, result.code === 0, `dsh-tako login exited ${result.code}${result.code !== 0 ? `: ${result.stderr.trim()}` : ''}`)
+  check(detail, authorize.origin === mock.origin && authorize.searchParams.get('client_id') === 'tako-connect' && authorize.searchParams.get('code_challenge_method') === 'S256', `authorize URL from the profile config: ${authorize.origin}${authorize.pathname} client_id=${authorize.searchParams.get('client_id')}`)
+  check(detail, /^http:\/\/127\.0\.0\.1:\d+\/tako\/callback$/.test(authorize.searchParams.get('redirect_uri') ?? ''), `redirect_uri ${authorize.searchParams.get('redirect_uri')}`)
+  check(detail, authorize.searchParams.get('device_name') === `dsh-tako@${process.platform}`, `device_name ${authorize.searchParams.get('device_name')}`)
+  check(detail, result.browser?.status === 200 && result.browser.body.includes('登录成功'), `browser landed on the callback page: HTTP ${result.browser?.status}`)
+  check(detail, exchanges.length === 1 && exchanges[0].ok && exchanges[0].body.client_id === 'tako-connect', `mock token endpoint: ${JSON.stringify(exchanges.map(entry => entry.ok ? 'ok (PKCE verifier matched the challenge)' : entry.reason))}`)
+  check(detail, loginKey !== undefined && !result.stdout.includes(loginKey) && !result.stderr.includes(loginKey), 'the key never appears in the CLI output')
+  check(detail, result.stdout.includes(`cr_****${loginKey?.slice(-4)}`), `CLI shows only cr_****${loginKey?.slice(-4)}`)
+  const stored = storedRefs(loginHome)
+  check(detail, stored.refs.TAKO_API_KEY === loginKey, '$DSH_HOME/.credentials.yaml refs.TAKO_API_KEY is the issued key')
+  if (process.platform !== 'win32') check(detail, stored.mode === 0o600, `credentials file mode ${stored.mode?.toString(8)}`)
+  // No TAKO_API_KEY in the environment: the only key is the stored one.
+  const chat = await chatTurn(loginHome, {})
+  check(detail, chat.stopReason === 'end_turn' && chat.requests.length >= 1, `dsh acp chat turn: stopReason=${chat.stopReason}, ${chat.requests.length} request(s)`)
+  check(detail, chat.requests.every(request => request.authorization === `Bearer ${loginKey}`), `mock saw Authorization: Bearer cr_****${loginKey?.slice(-4)} (the new key)`)
+})
+
+await testCase('k', 'dsh-tako whoami / logout: /api/desktop/me, then revoke + credential removed', async detail => {
+  if (loginKey === undefined) throw new Error('case j did not sign in')
+  const who = await cli(loginHome, ['whoami', '--profile', 'acp'])
+  check(detail, who.code === 0 && who.stdout.includes('e2e-user') && who.stdout.includes('E2E Plan'), `whoami exited ${who.code}: ${who.stdout.trim().split('\n').join(' | ')}`)
+  check(detail, !who.stdout.includes(loginKey), 'whoami does not print the key')
+  const out = await cli(loginHome, ['logout', '--profile', 'acp'])
+  check(detail, out.code === 0, `logout exited ${out.code}: ${out.stdout.trim()}${out.stderr.trim()}`)
+  check(detail, mock.state.revoked.includes(loginKey), 'mock /api/desktop/revoke received the key')
+  check(detail, storedRefs(loginHome).refs.TAKO_API_KEY === undefined, 'TAKO_API_KEY removed from the credentials file')
+  const after = await cli(loginHome, ['whoami', '--profile', 'acp'])
+  check(detail, after.code === 1 && after.stderr.includes('dsh-tako login'), `whoami after logout exited ${after.code}: ${after.stderr.trim()}`)
+})
+
+await testCase('l', 'dsh-tako login when the user denies in the browser: exit 1, nothing stored', async detail => {
+  mock.state.authorizeMode = 'deny'
+  try {
+    const result = await cli(loginHome, ['login', '--no-open', '--profile', 'acp'], { onUrl: browse })
+    check(detail, result.code === 1 && /denied/.test(result.stderr), `exit ${result.code}: ${result.stderr.trim()}`)
+    check(detail, result.browser?.body.includes('拒绝') === true, 'browser shows the denied page')
+    check(detail, storedRefs(loginHome).refs.TAKO_API_KEY === undefined, 'no credential written')
+  } finally {
+    mock.state.authorizeMode = 'approve'
+  }
+})
+
+await testCase('m', 'Web UI: client bundle served for the Models page; /api/tako.login signs in and stores the key', async detail => {
+  const home = newHome('web-login')
+  await pluginCmd(home, 'web', 'add', tgz)
+  setPluginConfig(home, 'web', pluginConfig)
+  const handle = spawnDsh(home, ['web', '--no-open', '--port', '0', '--host', '127.0.0.1'])
+  handle.child.stdout.on('data', chunk => { handle.log.stdout += chunk })
+  try {
+    const url = await waitFor(() => /dsh web: (http\S+)/.exec(handle.log.stdout)?.[1], 90_000, 'dsh web to print its URL')
+    await waitFor(() => takoRoute(home, 'web') !== undefined, 30_000, 'the Tako route')
+    // Exchange the launch token for the browser session cookie, as the browser does.
+    const first = await fetch(url, { redirect: 'manual' })
+    const cookie = (first.headers.getSetCookie?.() ?? []).map(value => value.split(';')[0]).join('; ')
+    const origin = new URL(url).origin
+    const html = await (await fetch(`${origin}/`, { headers: { cookie } })).text()
+    const bundle = /"id":"dsh-tako","url":"([^"]+)"/.exec(html)?.[1]
+    check(detail, bundle !== undefined, `boot graph lists the dsh-tako client bundle: ${bundle}`)
+    const script = bundle === undefined ? '' : await (await fetch(`${origin}/${bundle}`, { headers: { cookie } })).text()
+    check(detail, script.includes("'settings.models.provider-card'") && script.includes("id: 'dsh-tako'"), `bundle (${script.length} bytes) registers the settings.models.provider-card slot`)
+    const unauthenticated = await fetch(`${origin}/api/tako.login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
+    check(detail, unauthenticated.status === 401 || unauthenticated.status === 403, `route without the session cookie -> HTTP ${unauthenticated.status}`)
+    const api = (method, body, query = '') => fetch(`${origin}/api/tako.login${query}`, { method, headers: { cookie, origin, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }).then(response => response.json())
+    const started = await api('POST', { action: 'start' })
+    check(detail, started.status === 'pending' && started.url?.startsWith(`${mock.origin}/app/authorize?`), `POST start -> ${started.status}, redirect_uri ${started.redirectUri}`)
+    const landed = await browse(started.url)
+    check(detail, landed.status === 200 && landed.body.includes('登录成功'), `browser landed on the callback: HTTP ${landed.status}`)
+    const done = await waitFor(async () => { const status = await api('GET', undefined, `?id=${started.id}`); return status.status !== 'pending' ? status : undefined }, 20_000, 'the sign-in to finish')
+    const key = mock.state.tokenExchanges.filter(entry => entry.ok).at(-1)?.key
+    check(detail, done.status === 'success' && done.user === 'e2e-user' && done.key === `cr_****${key?.slice(-4)}`, `GET status -> ${JSON.stringify(done)}`)
+    check(detail, !JSON.stringify(done).includes(key), 'status response carries only the masked key')
+    check(detail, storedRefs(home).refs.TAKO_API_KEY === key, 'credentials file refs.TAKO_API_KEY is the issued key (written by ctx.credentials.set)')
+  } finally {
+    await stopChild(handle)
   }
 })
 
