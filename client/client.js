@@ -103,6 +103,10 @@ window.__ModuleLoader__.load({
         copy: '复制',
         copied: '已复制',
         updateFailed: '检查更新失败',
+        updateNow: '立即更新',
+        updating: '正在更新…',
+        updateInstalled: '已安装 {version}，请重启 dsh 后生效',
+        updateInstallFailed: '更新失败',
       },
       en: {
         signIn: 'Sign in to Tako with the browser',
@@ -161,6 +165,10 @@ window.__ModuleLoader__.load({
         copy: 'Copy',
         copied: 'Copied',
         updateFailed: 'Could not check for updates',
+        updateNow: 'Update now',
+        updating: 'Updating…',
+        updateInstalled: 'Installed {version}. Restart dsh to load it.',
+        updateInstallFailed: 'Update failed',
       },
     }
 
@@ -417,15 +425,18 @@ window.__ModuleLoader__.load({
     /**
      * The update card: the plugin cannot hot-update itself, so this compares
      * the installed version with npm's latest (host route, cached server-side)
-     * and, when behind, offers the upgrade command with a copy button. It
-     * loads on its own and renders while pending, so it never blocks the
-     * other cards.
+     * and, when behind, POSTs /api/tako.update to install it, then asks the
+     * user to restart dsh. The upgrade command with a copy button stays as a
+     * fallback. It loads on its own and renders while pending, so it never
+     * blocks the other cards.
      */
     function UpdateCard(props) {
       const t = props.t ?? fallbackT
       const [update, setUpdate] = useState(undefined)
       const [updateError, setUpdateError] = useState(undefined)
       const [copied, setCopied] = useState(false)
+      const [installing, setInstalling] = useState(false)
+      const [installError, setInstallError] = useState(undefined)
       const alive = useRef(true)
       const commandText = useRef(undefined)
       useEffect(() => () => { alive.current = false }, [])
@@ -458,17 +469,57 @@ window.__ModuleLoader__.load({
         selection.addRange(range)
       }
 
+      const install = async () => {
+        setInstalling(true)
+        setInstallError(undefined)
+        try {
+          const next = await call('POST', UPDATE_ROUTE, {})
+          if (!alive.current) return
+          if (next.ok === true) {
+            setUpdate({
+              ...update,
+              ...next,
+              pendingRestart: next.pendingRestart === true || next.skipped !== true,
+              installed: next.installed || next.latest,
+            })
+            setInstallError(undefined)
+          } else {
+            setInstallError(next.error !== undefined && next.error !== '' ? String(next.error) : t('updateInstallFailed'))
+          }
+        } catch (error) {
+          if (alive.current) setInstallError(String(error && error.message || error))
+        } finally {
+          if (alive.current) setInstalling(false)
+        }
+      }
+
       const children = []
+      const installedVersion = update === undefined ? '' : (update.installed || update.latest || update.current || '')
+      const showInstalled = update !== undefined && (update.pendingRestart === true || (update.ok === true && update.skipped === false))
+      const showUpToDate = update !== undefined && (update.upToDate === true || (update.ok === true && update.skipped === true && update.pendingRestart !== true))
       if (update === undefined) {
         children.push(h('div', { key: 'x', role: 'status', style: muted }, updateError === undefined ? '…' : t('updateFailed')))
       } else if (update.checkError !== undefined) {
         children.push(h('div', { key: 'x', role: 'status', style: muted, title: String(update.checkError) }, t('updateFailed')))
-      } else if (update.upToDate) {
+      } else if (showInstalled) {
+        children.push(h('div', { key: 'done', role: 'status', style: { fontSize: '0.85em', color: 'var(--dsw-alias-state-success-primary)' } }, t('updateInstalled', { version: installedVersion })))
+      } else if (showUpToDate) {
         children.push(h('div', { key: 'x', role: 'status', style: muted }, t('upToDate', { version: update.current })))
       } else {
         children.push(h('div', { key: 'new', style: rowStyle },
           h('span', null, t('updateAvailable')),
           h('b', { style: mono }, update.latest)))
+        children.push(h('button', {
+          key: 'now',
+          type: 'button',
+          'data-testid': 'dsh-tako-console-update-now',
+          disabled: installing,
+          onClick: install,
+          style: { ...buttonStyle, opacity: installing ? 0.6 : 1, alignSelf: 'flex-start' },
+        }, installing ? t('updating') : t('updateNow')))
+        if (installError !== undefined) {
+          children.push(h('div', { key: 'ierr', role: 'alert', style: { fontSize: '0.85em', color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere' } }, `${t('updateInstallFailed')}: ${installError}`))
+        }
         children.push(h('div', { key: 'hint', style: { ...muted, fontSize: '0.85em' } }, t('updateCommand')))
         children.push(h('div', { key: 'cmd', style: rowStyle },
           h('code', {

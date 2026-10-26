@@ -1,5 +1,5 @@
 /**
- * `dsh-tako` command line: `login`, `logout`, `whoami`.
+ * `dsh-tako` command line: `login`, `logout`, `whoami`, `update`.
  *
  * dsh dispatches its first argument as a profile name (or `plugin`), so a
  * plugin cannot add `dsh tako ...`; this is a separate bin that opens the
@@ -16,6 +16,7 @@ import { openBrowser } from './open.ts'
 import { DEFAULT_PROFILE, normalizeOrigin, pluginConfigFromPatch } from './shared.ts'
 import type { DshRuntime } from './store.ts'
 import { loadDshRuntime, locateDsh } from './store.ts'
+import { fetchLatest, isOlder, readInstalledVersion, runUpgrade, type RunUpgradeInput, type UpgradeResult } from './upgrade.ts'
 
 export const USAGE = `Usage: dsh-tako <command> [options]
 
@@ -23,6 +24,7 @@ Commands:
   login     Sign in to Tako in the browser and save the API key to dsh's credentials
   logout    Revoke the saved key on Tako and remove it from dsh's credentials
   whoami    Show the Tako account behind the configured key
+  update    Install the latest dsh-tako into the dsh profile and print a restart reminder
 
 Options:
   --profile <name>      dsh profile whose dsh-tako config to read (default: ${DEFAULT_PROFILE})
@@ -56,6 +58,8 @@ export interface CliDeps {
   loginTimeoutMs?: number
   /** Register a Ctrl-C handler; returns the unregister function. */
   onInterrupt?: (handler: () => void) => () => void
+  runUpgrade?: (input: RunUpgradeInput) => Promise<UpgradeResult>
+  readInstalledVersion?: (profileDir: string) => string | undefined
 }
 
 const defaultLoadRuntime = async (dshPath: string | undefined, env: NodeJS.ProcessEnv): Promise<DshRuntime> => loadDshRuntime(locateDsh(dshPath, env), env)
@@ -221,6 +225,41 @@ async function whoami(values: Record<string, string | boolean | undefined>, io: 
   return 0
 }
 
+async function update(values: Record<string, string | boolean | undefined>, io: CliIo, deps: CliDeps): Promise<number> {
+  const runtime = await (deps.loadRuntime ?? defaultLoadRuntime)(values.dsh as string | undefined, io.env)
+  const profile = (values.profile as string | undefined) ?? DEFAULT_PROFILE
+  if (!/^[A-Za-z0-9._-]+$/u.test(profile)) throw new UsageError(`invalid profile name ${JSON.stringify(profile)}`)
+  const profileDir = join(runtime.dshHome, 'profiles', profile)
+  const current = (deps.readInstalledVersion ?? readInstalledVersion)(profileDir)
+  if (current === undefined) {
+    io.stderr(`dsh-tako is not installed in profile ${profile}; run: dsh plugin --profile ${profile} add dsh-tako\n`)
+    return 1
+  }
+  let latest: string
+  try {
+    ({ latest } = await fetchLatest(deps.fetch ?? fetch))
+  } catch (error: unknown) {
+    io.stderr(`dsh-tako update: ${error instanceof Error ? error.message : String(error)}\n`)
+    return 1
+  }
+  if (!isOlder(current, latest)) {
+    io.stdout(`dsh-tako ${current} is already the latest.\n`)
+    return 0
+  }
+  const result = await (deps.runUpgrade ?? runUpgrade)({
+    latest,
+    profile: { name: profile, dir: profileDir },
+    env: io.env,
+    dsh: values.dsh as string | undefined,
+  })
+  if (!result.ok) {
+    io.stderr(`dsh-tako update: ${result.error}\n`)
+    return 1
+  }
+  io.stdout(`Installed dsh-tako ${result.installed} (was ${current}). Restart dsh to load it.\n`)
+  return 0
+}
+
 /** Run one CLI invocation; resolves with the exit code. */
 export async function main(argv: readonly string[], io: CliIo, deps: CliDeps = {}): Promise<number> {
   let parsed
@@ -259,6 +298,7 @@ export async function main(argv: readonly string[], io: CliIo, deps: CliDeps = {
       case 'login': return await login(values, io, deps)
       case 'logout': return await logout(values, io, deps)
       case 'whoami': return await whoami(values, io, deps)
+      case 'update': return await update(values, io, deps)
       default:
         io.stderr(`dsh-tako: unknown command ${JSON.stringify(command)}\n\n${USAGE}`)
         return 2

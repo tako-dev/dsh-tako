@@ -6,20 +6,30 @@
  * authentication fence; only the owner reaches them. `/api/tako.login` runs
  * the loopback sign-in on the dsh host; the console routes report the stored
  * key (masked), revoke it on logout, expose the synced model catalog, and
- * compare the installed version with npm's `dist-tags.latest`. Issued and
- * stored keys go through the installation's own `ctx.credentials`, which also
- * tells the Models page to refresh. A resolved key value never leaves the
- * host: status answers carry `maskKey()` output only.
+ * compare the installed version with npm's `dist-tags.latest` (POST installs
+ * that latest into the profile; restart dsh to load it). Issued and stored
+ * keys go through the installation's own `ctx.credentials`, which also tells
+ * the Models page to refresh. A resolved key value never leaves the host:
+ * status answers carry `maskKey()` output only.
  * @module dsh-tako/web
  */
 
-import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { TakoModel } from './catalog.ts'
 import type { BrowserLoginHandle, BrowserLoginOptions, TakoIdentity } from './login.ts'
 import { defaultDeviceName, fetchMe, maskKey, revokeKey, startBrowserLogin, TakoLoginError } from './login.ts'
 import { normalizeOrigin } from './shared.ts'
+import { createUpdateService, profileFromPluginPath, type PluginManagerLike } from './upgrade.ts'
+
+export {
+  createUpdateService,
+  pluginVersion,
+  UPDATE_CACHE_MS,
+  UPDATE_ERROR_CACHE_MS,
+  type UpdateAnswer,
+  type UpdateServiceOptions,
+} from './upgrade.ts'
 
 /** Route path below `/api`; the browser calls the relative `api/tako.login`. */
 export const LOGIN_ROUTE = '/api/tako.login'
@@ -29,7 +39,7 @@ export const STATUS_ROUTE = '/api/tako.status'
 export const LOGOUT_ROUTE = '/api/tako.logout'
 /** Console route: the model catalog the plugin last synced, and when it refreshes. */
 export const CATALOG_ROUTE = '/api/tako.catalog'
-/** Console route: how the installed version compares with npm's `dist-tags.latest`. */
+/** Console route: GET compares with npm latest; POST installs it (restart to load). */
 export const UPDATE_ROUTE = '/api/tako.update'
 
 /** Same grammar the settings controller enforces for credential references. */
@@ -150,6 +160,19 @@ export function createLoginService(options: LoginServiceOptions): { handle: (req
   return { handle, dispose: () => { current?.handle.cancel(); current = undefined } }
 }
 
+/** The host plugin manager, if this profile mounted one. Read at POST time. */
+function pluginManagerOf(ctx: Context): PluginManagerLike | undefined {
+  try {
+    const fromGet = (ctx as unknown as { get?: (name: string) => unknown }).get?.('pluginManager')
+    if (fromGet !== undefined && fromGet !== null) return fromGet as PluginManagerLike
+  } catch { /* not mounted */ }
+  try {
+    return (ctx as unknown as { pluginManager?: PluginManagerLike }).pluginManager
+  } catch {
+    return undefined
+  }
+}
+
 /** Mount the routes while the Web connection and the credential service are both up. */
 export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: string }, web: { catalog: () => CatalogState } = { catalog: () => emptyCatalogState() }): void {
   ctx.inject(['connection', 'credentials'], inner => {
@@ -167,7 +190,11 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
       catalog: web.catalog,
       logger: inner.logger,
     })
-    const updateService = createUpdateService({ logger: inner.logger })
+    const updateService = createUpdateService({
+      logger: inner.logger,
+      pluginManager: () => pluginManagerOf(ctx),
+      profile: () => profileFromPluginPath(fileURLToPath(import.meta.url)) ?? { name: 'web' },
+    })
     inner.effect(() => {
       const unregisters = [
         connection.fetch.register({
@@ -196,9 +223,9 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
         }),
         connection.fetch.register({
           path: UPDATE_ROUTE,
-          methods: ['GET'],
+          methods: ['GET', 'POST'],
           requestBody: 'buffered',
-          fetch: () => updateService.handleUpdate(),
+          fetch: request => request.method === 'POST' ? updateService.handleInstall() : updateService.handleUpdate(),
         }),
       ]
       return async () => {
@@ -364,112 +391,4 @@ function identityOf(identity: TakoIdentity): ConsoleIdentity {
     picked.quotaUsedUsd = identity.quotaUsed / QUOTA_PER_UNIT
   }
   return picked
-}
-
-// ---------------------------------------------------------------- update route
-
-let cachedVersion: string | undefined
-
-/**
- * This package's own version, read from the `package.json` shipped beside
- * `lib/` (`import.meta.url` keeps working inside the npm package, where the
- * file sits next to the build output). Falls back to `unknown` if it cannot
- * be read.
- */
-export function pluginVersion(): string {
-  if (cachedVersion === undefined) {
-    try {
-      cachedVersion = (JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')) as { version?: string }).version ?? 'unknown'
-    } catch {
-      cachedVersion = 'unknown'
-    }
-  }
-  return cachedVersion
-}
-
-/**
- * The plugin is published from the official npm registry, so the check reads
- * that registry directly — never a configured mirror that could sit in front
- * of it on the host. Only the dist-tags document is fetched, not the packument.
- */
-const NPM_DIST_TAGS_URL = 'https://registry.npmjs.org/-/package/dsh-tako/dist-tags'
-
-/** How long a fresh registry answer stays cached, so opening the panel does not hit npm every time. */
-export const UPDATE_CACHE_MS = 60 * 60_000
-/** How long a failed check stays cached: short, so a blip does not pin the error for an hour. */
-export const UPDATE_ERROR_CACHE_MS = 5 * 60_000
-const UPDATE_TIMEOUT_MS = 10_000
-
-/** What `GET /api/tako.update` answers: the verdict, or why there is none. */
-export type UpdateAnswer =
-  | { current: string, latest: string, upToDate: boolean }
-  | { current: string, checkError: string }
-
-export interface UpdateServiceOptions {
-  logger: { info: (...args: unknown[]) => void, warn: (...args: unknown[]) => void }
-  /** Seams for tests. */
-  fetch?: typeof fetch
-  now?: () => number
-  /** Overrides the installed version read from `package.json`. */
-  currentVersion?: string
-  cacheMs?: number
-  errorCacheMs?: number
-  timeoutMs?: number
-}
-
-/** `x.y.z` as comparable numbers; `undefined` when the value is not a plain release. */
-function versionTuple(version: string): [number, number, number] | undefined {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version)
-  return match === null ? undefined : [Number(match[1]), Number(match[2]), Number(match[3])]
-}
-
-/**
- * Whether `current` sorts before `latest`. Plain `x.y.z` triples compare
- * numerically (`0.10.0` is newer than `0.9.0`); anything else falls back to
- * string order, which keeps a local prerelease from reading as behind.
- */
-function isOlder(current: string, latest: string): boolean {
-  const a = versionTuple(current)
-  const b = versionTuple(latest)
-  if (a === undefined || b === undefined) return current < latest
-  return a[0] < b[0] || (a[0] === b[0] && (a[1] < b[1] || (a[1] === b[1] && a[2] < b[2])))
-}
-
-/**
- * The update-route handler. One instance per Web connection; the answer is
- * cached in memory, so the registry is asked at most once per cache TTL per
- * connection. A failed check answers `{current, checkError}` with HTTP 200.
- */
-export function createUpdateService(options: UpdateServiceOptions): { handleUpdate: () => Promise<Response> } {
-  const fetchImpl = options.fetch ?? fetch
-  const now = options.now ?? Date.now
-  const current = options.currentVersion ?? pluginVersion()
-  let cache: { answer: UpdateAnswer, at: number, ttl: number } | undefined
-
-  const check = async (): Promise<UpdateAnswer> => {
-    try {
-      const response = await fetchImpl(NPM_DIST_TAGS_URL, {
-        headers: { accept: 'application/json' },
-        signal: AbortSignal.timeout(options.timeoutMs ?? UPDATE_TIMEOUT_MS),
-      })
-      if (!response.ok) throw new Error(`npm dist-tags answered HTTP ${response.status}`)
-      const tags = await response.json() as { latest?: unknown }
-      if (typeof tags.latest !== 'string' || tags.latest === '') throw new Error('npm dist-tags carry no latest tag')
-      options.logger.info('dsh-tako update check: installed %s, npm latest %s', current, tags.latest)
-      return { current, latest: tags.latest, upToDate: !isOlder(current, tags.latest) }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error)
-      options.logger.warn('dsh-tako update check failed: %s', message)
-      return { current, checkError: message }
-    }
-  }
-
-  const handleUpdate = async (): Promise<Response> => {
-    if (cache !== undefined && now() - cache.at < cache.ttl) return json(cache.answer)
-    const answer = await check()
-    cache = { answer, at: now(), ttl: 'checkError' in answer ? (options.errorCacheMs ?? UPDATE_ERROR_CACHE_MS) : (options.cacheMs ?? UPDATE_CACHE_MS) }
-    return json(answer)
-  }
-
-  return { handleUpdate }
 }

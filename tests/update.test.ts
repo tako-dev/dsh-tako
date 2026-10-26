@@ -1,6 +1,9 @@
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createUpdateService, pluginVersion, UPDATE_CACHE_MS, UPDATE_ERROR_CACHE_MS, UPDATE_ROUTE, type UpdateServiceOptions } from '../src/web.ts'
+import { NPM_REGISTRY, profileFromPluginPath, type SpawnAddRequest, type UpgradeResult } from '../src/upgrade.ts'
 
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: string }
 
@@ -135,5 +138,180 @@ describe('console route /api/tako.update', () => {
 
   it('pluginVersion() reads the package.json that ships beside lib/', () => {
     expect(pluginVersion()).toBe(manifest.version)
+  })
+})
+
+describe('POST /api/tako.update', () => {
+  it('skips when already up to date and does not install', async () => {
+    const runUpgrade = vi.fn()
+    const pluginManager = { installBundle: vi.fn() }
+    const { svc } = service({
+      currentVersion: '0.4.0',
+      registry: registryFetch({ latest: '0.4.0' }),
+      runUpgrade,
+      pluginManager: () => pluginManager,
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ok: true, skipped: true, current: '0.4.0', latest: '0.4.0' })
+    expect(runUpgrade).not.toHaveBeenCalled()
+    expect(pluginManager.installBundle).not.toHaveBeenCalled()
+  })
+
+  it('skips with pendingRestart when the disk is already latest and the running copy is behind', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-tako-disk-'))
+    const dir = join(root, 'profiles', 'web')
+    mkdirSync(join(dir, 'node_modules', 'dsh-tako'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'dsh-tako', 'package.json'), JSON.stringify({ name: 'dsh-tako', version: '0.4.0' }))
+    const runUpgrade = vi.fn()
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      profile: () => ({ name: 'web', dir }),
+      runUpgrade,
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      ok: true,
+      skipped: true,
+      current: '0.3.0',
+      latest: '0.4.0',
+      installed: '0.4.0',
+      pendingRestart: true,
+    })
+    expect(runUpgrade).not.toHaveBeenCalled()
+  })
+
+  it('installs via pluginManager.installBundle with the official registry', async () => {
+    const installBundle = vi.fn(async () => ({ application: 'restart-required', version: '0.4.0' }))
+    const spawnAdd = vi.fn()
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      pluginManager: () => ({ installBundle }),
+      spawnAdd,
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      ok: true,
+      skipped: false,
+      current: '0.3.0',
+      latest: '0.4.0',
+      installed: '0.4.0',
+      application: 'restart-required',
+      via: 'plugin-manager',
+      pendingRestart: true,
+    })
+    expect(installBundle).toHaveBeenCalledExactlyOnceWith('dsh-tako@0.4.0', { registry: NPM_REGISTRY })
+    expect(spawnAdd).not.toHaveBeenCalled()
+  })
+
+  it('spawns dsh plugin add when there is no pluginManager', async () => {
+    const spawnAdd = vi.fn(async (_request: SpawnAddRequest) => ({ status: 0, stdout: '', stderr: '' }))
+    const locateDsh = vi.fn(() => ({ packageJson: '/opt/dsh/package.json', version: '1.0.0' }))
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      spawnAdd,
+      locateDsh,
+      execPath: '/usr/bin/node',
+      profile: () => ({ name: 'web' }),
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, skipped: false, via: 'cli', installed: '0.4.0', pendingRestart: true })
+    expect(spawnAdd).toHaveBeenCalledTimes(1)
+    const spawned = spawnAdd.mock.calls.at(0)?.at(0)
+    expect(spawned).toBeDefined()
+    const args = spawned!.args.join(' ')
+    expect(args).toContain('--registry=https://registry.npmjs.org/')
+    expect(args).toContain('--config.minimum-release-age=0')
+    expect(args).toContain('dsh-tako@0.4.0')
+    expect(spawned!.args[0]).toBe('/opt/dsh/lib/bin.js')
+  })
+
+  it('does not install when the registry check failed', async () => {
+    const runUpgrade = vi.fn()
+    const { svc } = service({ registry: registryFetch({ fail: true }), runUpgrade })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    const body = await response.json() as Record<string, unknown>
+    expect(body.current).toBe('0.3.0')
+    expect(typeof body.error).toBe('string')
+    expect(body.ok).toBeUndefined()
+    expect(runUpgrade).not.toHaveBeenCalled()
+  })
+
+  it('rejects a second POST with 409 while an install is running', async () => {
+    let started!: () => void
+    const startedPromise = new Promise<void>(resolve => { started = resolve })
+    let finish!: (result: UpgradeResult) => void
+    const runUpgrade = vi.fn(() => {
+      started()
+      return new Promise<UpgradeResult>(resolve => { finish = resolve })
+    })
+    const { svc } = service({ registry: registryFetch({ latest: '0.4.0' }), runUpgrade })
+    const first = svc.handleInstall()
+    await startedPromise
+    const second = await svc.handleInstall()
+    expect(second.status).toBe(409)
+    expect(await second.json()).toEqual({ error: 'install already running' })
+    finish({ ok: true, via: 'plugin-manager', application: 'restart-required', installed: '0.4.0' })
+    expect((await first).status).toBe(200)
+  })
+
+  it('returns the pluginManager error and does not fall back to spawn', async () => {
+    const spawnAdd = vi.fn()
+    const installBundle = vi.fn(async () => ({
+      application: 'failed',
+      error: { code: 'operation-error', diagnostic: 'pnpm exploded' },
+      packageResult: { output: 'ignored output tail' },
+    }))
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      pluginManager: () => ({ installBundle }),
+      spawnAdd,
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    const body = await response.json() as Record<string, unknown>
+    expect(body).toMatchObject({ ok: false, current: '0.3.0', latest: '0.4.0' })
+    expect(String(body.error)).toContain('pnpm exploded')
+    expect(String(body.error)).not.toContain('[object Object]')
+    expect(spawnAdd).not.toHaveBeenCalled()
+  })
+
+  it('retries spawn without minimum-release-age when the old pnpm rejects the flag', async () => {
+    const spawnAdd = vi.fn(async (request: SpawnAddRequest) => {
+      if (request.args.some(arg => arg.includes('minimum-release-age'))) {
+        return { status: 1, stdout: '', stderr: 'Unknown option: --config.minimum-release-age' }
+      }
+      return { status: 0, stdout: 'added dsh-tako', stderr: '' }
+    })
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      spawnAdd,
+      locateDsh: () => ({ packageJson: '/opt/dsh/package.json', version: '1.0.0' }),
+      execPath: '/usr/bin/node',
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, via: 'cli', installed: '0.4.0' })
+    expect(spawnAdd).toHaveBeenCalledTimes(2)
+    const firstArgs = spawnAdd.mock.calls.at(0)?.at(0)?.args.join(' ') ?? ''
+    const secondArgs = spawnAdd.mock.calls.at(1)?.at(0)?.args.join(' ') ?? ''
+    expect(firstArgs).toContain('--config.minimum-release-age=0')
+    expect(secondArgs).not.toContain('minimum-release-age')
+  })
+})
+
+describe('profileFromPluginPath', () => {
+  it('walks up from the plugin file to $DSH_HOME/profiles/<name>', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-tako-profile-'))
+    const dir = join(root, 'profiles', 'web')
+    const plugin = join(dir, 'node_modules', 'dsh-tako', 'lib')
+    mkdirSync(plugin, { recursive: true })
+    writeFileSync(join(dir, 'package.json'), '{}')
+    writeFileSync(join(plugin, 'web.js'), '')
+    expect(profileFromPluginPath(join(plugin, 'web.js'))).toEqual({ name: 'web', dir })
   })
 })

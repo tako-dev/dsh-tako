@@ -30,6 +30,7 @@ const EXPECTED_KEYS = [
   'catalogCard', 'catalogModel', 'catalogContext', 'catalogVision', 'yes', 'no', 'catalogDefault', 'catalogEmpty',
   'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry',
   'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'copy', 'copied', 'updateFailed',
+  'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
 ]
 
 let row: ModuleRow | undefined

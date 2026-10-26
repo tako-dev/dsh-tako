@@ -736,6 +736,15 @@ await testCase('n', 'console routes: /api/tako.status + /api/tako.catalog + /api
     check(detail, (upd.upToDate === true && typeof upd.latest === 'string') || typeof upd.checkError === 'string', `update verdict -> ${JSON.stringify(upd)}`)
     const updAgain = await api('GET', 'api/tako.update')
     check(detail, JSON.stringify(updAgain) === JSON.stringify(upd), `a second update read answers the same -> ${JSON.stringify(updAgain)}`)
+    if (upd.upToDate === true) {
+      const posted = await api('POST', 'api/tako.update', {})
+      check(detail, posted.ok === true && posted.skipped === true, `POST update when up to date skips -> ${JSON.stringify(posted)}`)
+    } else if (typeof upd.checkError === 'string') {
+      const postedRes = await fetch(`${origin}/api/tako.update`, { method: 'POST', headers, body: '{}' })
+      let posted
+      try { posted = await postedRes.json() } catch { posted = undefined }
+      check(detail, postedRes.status !== 500 && posted !== undefined, `POST update after checkError -> HTTP ${postedRes.status} ${JSON.stringify(posted)}`)
+    }
     // Sign in through the login route, then read the account back through the console status.
     const started = await api('POST', 'api/tako.login', { action: 'start' })
     check(detail, started.status === 'pending', `login start -> ${started.status}`)

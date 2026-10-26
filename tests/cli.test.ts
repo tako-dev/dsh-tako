@@ -211,6 +211,50 @@ describe('dsh-tako logout / whoami', () => {
   })
 })
 
+describe('dsh-tako update', () => {
+  const latestFetch = (latest: string) => vi.fn(async () => Response.json({ latest })) as unknown as typeof fetch
+
+  it('already the latest exits 0 without installing', async () => {
+    const { store } = fakeStore()
+    const runUpgrade = vi.fn()
+    const result = await run(['update'], {
+      loadRuntime: async () => fakeRuntime(store),
+      fetch: latestFetch('0.3.0'),
+      readInstalledVersion: () => '0.3.0',
+      runUpgrade,
+    })
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain('dsh-tako 0.3.0 is already the latest.')
+    expect(runUpgrade).not.toHaveBeenCalled()
+  })
+
+  it('installs when behind and reminds to restart', async () => {
+    const { store } = fakeStore()
+    const runUpgrade = vi.fn(async () => ({ ok: true as const, via: 'cli' as const, application: 'restart-required' as const, installed: '0.4.0' }))
+    const result = await run(['update'], {
+      loadRuntime: async () => fakeRuntime(store),
+      fetch: latestFetch('0.4.0'),
+      readInstalledVersion: () => '0.3.0',
+      runUpgrade,
+    })
+    expect(result.code).toBe(0)
+    expect(runUpgrade).toHaveBeenCalled()
+    expect(result.stdout).toContain('Installed')
+    expect(result.stdout).toContain('Restart')
+  })
+
+  it('exits 1 when the plugin is not in the profile', async () => {
+    const { store } = fakeStore()
+    const result = await run(['update', '--profile', 'acp'], { loadRuntime: async () => fakeRuntime(store) })
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('dsh plugin --profile acp add dsh-tako')
+  })
+
+  it('--help lists update', async () => {
+    expect((await run(['--help'], {})).stdout).toContain('update')
+  })
+})
+
 describe('profile config and dsh discovery', () => {
   it('reads the plugin row, including bundle-style insert lists', () => {
     expect(pluginConfigFromPatch(undefined)).toEqual({ baseURL: 'https://tako.shiroha.tech', apiKeyEnv: 'TAKO_API_KEY', fromProfile: false })
