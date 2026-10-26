@@ -10,7 +10,16 @@
  * registers the full page `tako-console` in the `main` slot, and adds the
  * `sidebar.panellist` entry that opens it (same id, like the official plugin
  * manager panel). The panel talks to the plugin's host routes
- * (`api/tako.status|logout|catalog`) with relative fetches.
+ * (`api/tako.status|logout|catalog|update`) with relative fetches.
+ *
+ * All visible texts go through the dsh client's official i18n: `apply`
+ * registers this namespace's zh/en dictionaries with the host's `ctx.locale`
+ * service, slot entries declare the namespace so their components receive
+ * `t` through props, and the sidebar label reads a bound translate so it
+ * follows language switches. Hosts without the locale service (older dsh,
+ * or stubbed test contexts) keep rendering through the inline fallback
+ * dictionary below, which picks the language from `<html lang>` exactly like
+ * the pre-i18n client did.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-tako',
@@ -23,65 +32,160 @@ window.__ModuleLoader__.load({
     const STATUS_ROUTE = 'api/tako.status'
     const LOGOUT_ROUTE = 'api/tako.logout'
     const CATALOG_ROUTE = 'api/tako.catalog'
+    const UPDATE_ROUTE = 'api/tako.update'
+    /** The command the update card offers: re-running the install upgrades the plugin. */
+    const UPGRADE_COMMAND = 'dsh plugin --profile web add dsh-tako'
     const PI_AI_NS = 'llm-pi-ai'
     const PROVIDER = 'tako'
     const PANEL_ID = 'tako-console'
     const POLL_MS = 1500
+    /** This plugin's own locale-namespace id, as registered with `ctx.locale`. */
+    const NS = 'dsh-tako'
 
-    const zh = () => {
+    // The complete zh/en dictionary. It is registered with the host's locale
+    // service (which interpolates `{name}` holes itself) and doubles as the
+    // offline fallback for hosts that have no such service.
+    const DICTS = {
+      zh: {
+        signIn: '通过浏览器登录 Tako',
+        signInAgain: '重新登录 Tako',
+        cancel: '取消',
+        waiting: '请在新打开的 Tako 页面确认授权…',
+        openLink: '没有弹出页面？点这里打开',
+        success: '已登录，API key 已保存',
+        failed: '登录失败',
+        denied: '已在 Tako 页面拒绝授权',
+        timeout: '等待超时（5 分钟），请重试',
+        remote: '当前页面不是从 dsh 所在机器的本机地址打开的：登录完成后 Tako 会跳回 dsh 主机的 127.0.0.1，浏览器在另一台机器上时这一步到不了。请改为粘贴 API key，或在 dsh 主机上运行 dsh-tako login --no-open --port <端口> 并用 ssh -L 转发。',
+        // console panel
+        panel: 'Tako 控制台',
+        consoleTitle: 'Tako 控制台',
+        accountCard: '登录状态',
+        signedIn: '已登录',
+        signedOut: '未登录',
+        account: '账号',
+        plan: '套餐',
+        unknown: '未知',
+        whoamiFailed: '账号信息获取失败',
+        signOut: '退出',
+        signOutWorking: '退出中…',
+        logoutRevoked: '已在 Tako 吊销这个 key，并从 dsh 凭据中删除',
+        logoutRemoved: '已从 dsh 凭据中删除，但在 Tako 吊销失败',
+        logoutNone: '没有已保存的 Tako key',
+        logoutExternal: '这个 key 来自环境变量或 .env，插件不去吊销或删除；要停用请在对应位置移除',
+        quotaCard: '余额 / 额度',
+        quotaRemain: '剩余额度',
+        quotaUsed: '已用额度',
+        quotaPoints: '点',
+        quotaUsedShare: '已用占比 {percent}',
+        quotaNoteUsd: '美元按 Tako 官网口径换算：500,000 点 = $1',
+        quotaNoteUnknown: '单位是 Tako 额度点数；美元换算未知',
+        quotaNeedsLogin: '需要登录后查看',
+        quotaUnavailable: '暂时拿不到额度信息',
+        catalogCard: '模型目录',
+        catalogModel: '模型',
+        catalogContext: '上下文窗口',
+        catalogVision: '图片输入',
+        yes: '支持',
+        no: '不支持',
+        catalogDefault: '默认',
+        catalogEmpty: '目录尚未同步；插件会在启动后拉取 Tako 的公开目录',
+        refreshIn: '约 {minutes} 分钟后刷新',
+        refreshSoon: '即将刷新',
+        refreshOnlyAtStartup: '只在启动时刷新',
+        loadFailed: '加载失败',
+        retry: '重试',
+        // update card
+        updateCard: '更新',
+        updateAvailable: '有新版本',
+        updateCommand: '升级命令（升级后重启 dsh 生效）:',
+        upToDate: '已是最新版本 {version}',
+        copy: '复制',
+        copied: '已复制',
+        updateFailed: '检查更新失败',
+      },
+      en: {
+        signIn: 'Sign in to Tako with the browser',
+        signInAgain: 'Sign in to Tako again',
+        cancel: 'Cancel',
+        waiting: 'Confirm the request on the Tako page that just opened…',
+        openLink: 'Nothing opened? Open the sign-in page',
+        success: 'Signed in; the API key is saved',
+        failed: 'Sign-in failed',
+        denied: 'The request was declined on the Tako page',
+        timeout: 'Timed out after 5 minutes; try again',
+        remote: 'This page is not opened from the dsh host itself: Tako redirects back to 127.0.0.1 on the dsh host, which a browser on another machine cannot reach. Paste an API key instead, or run dsh-tako login --no-open --port <port> on the host and forward it with ssh -L.',
+        // console panel
+        panel: 'Tako Console',
+        consoleTitle: 'Tako Console',
+        accountCard: 'Sign-in status',
+        signedIn: 'Signed in',
+        signedOut: 'Not signed in',
+        account: 'Account',
+        plan: 'Plan',
+        unknown: 'unknown',
+        whoamiFailed: 'Could not fetch the account',
+        signOut: 'Sign out',
+        signOutWorking: 'Signing out…',
+        logoutRevoked: 'The key was revoked on Tako and removed from dsh credentials',
+        logoutRemoved: 'Removed from dsh credentials, but revoking it on Tako failed',
+        logoutNone: 'No Tako key is stored',
+        logoutExternal: 'This key comes from an environment variable or .env; remove it there instead',
+        quotaCard: 'Quota',
+        quotaRemain: 'Credit remaining',
+        quotaUsed: 'Credit used',
+        quotaPoints: 'points',
+        quotaUsedShare: '{percent} used',
+        quotaNoteUsd: 'USD is converted the way the Tako site does it: 500,000 points = $1',
+        quotaNoteUnknown: 'Shown in Tako quota points; the USD conversion is unknown',
+        quotaNeedsLogin: 'Sign in to see your quota',
+        quotaUnavailable: 'Quota information is unavailable',
+        catalogCard: 'Model catalog',
+        catalogModel: 'Model',
+        catalogContext: 'Context window',
+        catalogVision: 'Image input',
+        yes: 'Yes',
+        no: 'No',
+        catalogDefault: 'default',
+        catalogEmpty: 'The catalog has not synced yet; the plugin fetches Tako\'s public directory after startup',
+        refreshIn: 'refreshes in ~{minutes} min',
+        refreshSoon: 'refreshing soon',
+        refreshOnlyAtStartup: 'refreshed at startup only',
+        loadFailed: 'Could not load',
+        retry: 'Retry',
+        // update card
+        updateCard: 'Update',
+        updateAvailable: 'Update available:',
+        updateCommand: 'Upgrade command (restart dsh after upgrading):',
+        upToDate: 'Up to date: {version}',
+        copy: 'Copy',
+        copied: 'Copied',
+        updateFailed: 'Could not check for updates',
+      },
+    }
+
+    /**
+     * The fallback translator for hosts without the locale service: the same
+     * dictionaries, with the language read from `<html lang>` (or the
+     * browser), like the pre-i18n client. Anything but a zh* page language
+     * falls back to English, and `{name}` holes interpolate like the service.
+     */
+    const fallbackLang = () => {
       const lang = (document.documentElement.lang || navigator.language || '').toLowerCase()
-      return lang.startsWith('zh')
+      return lang.startsWith('zh') ? 'zh' : 'en'
     }
-    const T = {
-      signIn: ['通过浏览器登录 Tako', 'Sign in to Tako with the browser'],
-      signInAgain: ['重新登录 Tako', 'Sign in to Tako again'],
-      cancel: ['取消', 'Cancel'],
-      waiting: ['请在新打开的 Tako 页面确认授权…', 'Confirm the request on the Tako page that just opened…'],
-      openLink: ['没有弹出页面？点这里打开', 'Nothing opened? Open the sign-in page'],
-      success: ['已登录，API key 已保存', 'Signed in; the API key is saved'],
-      failed: ['登录失败', 'Sign-in failed'],
-      denied: ['已在 Tako 页面拒绝授权', 'The request was declined on the Tako page'],
-      timeout: ['等待超时（5 分钟），请重试', 'Timed out after 5 minutes; try again'],
-      remote: [
-        '当前页面不是从 dsh 所在机器的本机地址打开的：登录完成后 Tako 会跳回 dsh 主机的 127.0.0.1，浏览器在另一台机器上时这一步到不了。请改为粘贴 API key，或在 dsh 主机上运行 dsh-tako login --no-open --port <端口> 并用 ssh -L 转发。',
-        'This page is not opened from the dsh host itself: Tako redirects back to 127.0.0.1 on the dsh host, which a browser on another machine cannot reach. Paste an API key instead, or run dsh-tako login --no-open --port <port> on the host and forward it with ssh -L.',
-      ],
-      // console panel
-      panel: ['Tako 控制台', 'Tako Console'],
-      consoleTitle: ['Tako 控制台', 'Tako Console'],
-      accountCard: ['登录状态', 'Sign-in status'],
-      signedIn: ['已登录', 'Signed in'],
-      signedOut: ['未登录', 'Not signed in'],
-      account: ['账号', 'Account'],
-      plan: ['套餐', 'Plan'],
-      unknown: ['未知', 'unknown'],
-      whoamiFailed: ['账号信息获取失败', 'Could not fetch the account'],
-      signOut: ['退出', 'Sign out'],
-      signOutWorking: ['退出中…', 'Signing out…'],
-      logoutRevoked: ['已在 Tako 吊销这个 key，并从 dsh 凭据中删除', 'The key was revoked on Tako and removed from dsh credentials'],
-      logoutRemoved: ['已从 dsh 凭据中删除，但在 Tako 吊销失败', 'Removed from dsh credentials, but revoking it on Tako failed'],
-      logoutNone: ['没有已保存的 Tako key', 'No Tako key is stored'],
-      logoutExternal: ['这个 key 来自环境变量或 .env，插件不去吊销或删除；要停用请在对应位置移除', 'This key comes from an environment variable or .env; remove it there instead'],
-      quotaCard: ['余额 / 额度', 'Quota'],
-      quotaRemain: ['剩余', 'Remaining'],
-      quotaUsed: ['已用', 'Used'],
-      quotaNeedsLogin: ['需要登录后查看', 'Sign in to see your quota'],
-      quotaUnavailable: ['暂时拿不到额度信息', 'Quota information is unavailable'],
-      catalogCard: ['模型目录', 'Model catalog'],
-      catalogModel: ['模型', 'Model'],
-      catalogContext: ['上下文窗口', 'Context window'],
-      catalogVision: ['图片输入', 'Image input'],
-      yes: ['支持', 'Yes'],
-      no: ['不支持', 'No'],
-      catalogDefault: ['默认', 'default'],
-      catalogEmpty: ['目录尚未同步；插件会在启动后拉取 Tako 的公开目录', 'The catalog has not synced yet; the plugin fetches Tako\'s public directory after startup'],
-      refreshIn: (minutes) => [`约 ${minutes} 分钟后刷新`, `refreshes in ~${minutes} min`],
-      refreshSoon: ['即将刷新', 'refreshing soon'],
-      refreshOnlyAtStartup: ['只在启动时刷新', 'refreshed at startup only'],
-      loadFailed: ['加载失败', 'Could not load'],
-      retry: ['重试', 'Retry'],
+    const fallbackT = (key, params) => {
+      const template = DICTS[fallbackLang()][key]
+      if (template === undefined) return key
+      if (params === undefined || params === null) return template
+      return template.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match)
     }
-    const t = key => T[key][zh() ? 0 : 1]
+    /**
+     * The namespace-bound translator used outside components (the sidebar
+     * label thunk): the locale service's bound translate once the dictionaries
+     * are registered, the inline fallback until then.
+     */
+    let boundT = fallbackT
     const loopback = () => ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(window.location.hostname)
 
     async function call(method, route, body) {
@@ -161,6 +265,7 @@ window.__ModuleLoader__.load({
     /** The pending/success/error notes and the sign-in link, shared by both surfaces. */
     function LoginProgress(props) {
       const state = props.state
+      const t = props.t ?? fallbackT
       const children = []
       const note = (key, text, tone) => children.push(h('div', {
         key,
@@ -187,6 +292,7 @@ window.__ModuleLoader__.load({
 
     function TakoSignIn(props) {
       const provider = props.provider
+      const t = props.t ?? fallbackT
       const login = useTakoLogin()
       if (provider === undefined || provider.provider !== PROVIDER) return null
 
@@ -201,7 +307,7 @@ window.__ModuleLoader__.load({
         }, props.keyConfigured ? t('signInAgain') : t('signIn')),
         login.busy ? h('button', { type: 'button', onClick: login.cancel, style: { font: 'inherit', padding: '4px 8px', border: 'none', background: 'transparent', color: 'inherit', textDecoration: 'underline', cursor: 'pointer' } }, t('cancel')) : null,
       ))
-      const progress = LoginProgress({ state: login.state })
+      const progress = LoginProgress({ state: login.state, t })
       if (progress !== null) children.push(h('div', { key: 'progress' }, progress))
       return h('div', { 'data-dsh-tako': 'sign-in', style: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' } }, children)
     }
@@ -256,6 +362,7 @@ window.__ModuleLoader__.load({
     /** "refreshes in ~x min", counted down locally from nextSyncAt; no server polling. */
     function Countdown(props) {
       const nextSyncAt = props.nextSyncAt
+      const t = props.t ?? fallbackT
       const [, setTick] = useState(0)
       useEffect(() => {
         if (nextSyncAt === null || nextSyncAt === undefined) return
@@ -264,12 +371,13 @@ window.__ModuleLoader__.load({
       }, [nextSyncAt])
       if (nextSyncAt === null || nextSyncAt === undefined) return t('refreshOnlyAtStartup')
       const minutes = Math.ceil(Math.max(0, nextSyncAt - Date.now()) / 60000)
-      return minutes <= 0 ? t('refreshSoon') : T.refreshIn(minutes)[zh() ? 0 : 1]
+      return minutes <= 0 ? t('refreshSoon') : t('refreshIn', { minutes })
     }
 
     function AccountCard(props) {
       const status = props.status
       const login = props.login
+      const t = props.t ?? fallbackT
       const children = []
       const configured = status !== undefined && status.configured === true
       const detail = (key, label, value) => h('div', { key, style: rowStyle },
@@ -298,7 +406,7 @@ window.__ModuleLoader__.load({
       }
       if (login.busy) actions.push(h('button', { key: 'cancel', type: 'button', onClick: login.cancel, style: quietButton }, t('cancel')))
       if (actions.length > 0) children.push(h('div', { key: 'actions', style: rowStyle }, actions))
-      const progress = LoginProgress({ state: login.state })
+      const progress = LoginProgress({ state: login.state, t })
       if (progress !== null) children.push(progress)
       if (props.logoutNote !== undefined) {
         children.push(h('div', { key: 'note', role: 'status', style: { fontSize: '0.85em', overflowWrap: 'anywhere' } }, props.logoutNote))
@@ -306,8 +414,106 @@ window.__ModuleLoader__.load({
       return Card({ name: 'account', title: t('accountCard'), children })
     }
 
+    /**
+     * The update card: the plugin cannot hot-update itself, so this compares
+     * the installed version with npm's latest (host route, cached server-side)
+     * and, when behind, offers the upgrade command with a copy button. It
+     * loads on its own and renders while pending, so it never blocks the
+     * other cards.
+     */
+    function UpdateCard(props) {
+      const t = props.t ?? fallbackT
+      const [update, setUpdate] = useState(undefined)
+      const [updateError, setUpdateError] = useState(undefined)
+      const [copied, setCopied] = useState(false)
+      const alive = useRef(true)
+      const commandText = useRef(undefined)
+      useEffect(() => () => { alive.current = false }, [])
+      useEffect(() => {
+        void (async () => {
+          try {
+            const next = await call('GET', UPDATE_ROUTE)
+            if (!alive.current) return
+            setUpdate(next)
+            setUpdateError(undefined)
+          } catch (error) {
+            if (alive.current) setUpdateError(String(error && error.message || error))
+          }
+        })()
+      }, [])
+
+      const copyCommand = async () => {
+        try {
+          await navigator.clipboard.writeText(UPGRADE_COMMAND)
+          setCopied(true)
+          return
+        } catch {}
+        // Not a secure context or the clipboard is blocked: select the text, so a manual copy still works.
+        const node = commandText.current
+        const selection = node === undefined || node === null ? null : window.getSelection()
+        if (selection === null || selection === undefined) return
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+
+      const children = []
+      if (update === undefined) {
+        children.push(h('div', { key: 'x', role: 'status', style: muted }, updateError === undefined ? '…' : t('updateFailed')))
+      } else if (update.checkError !== undefined) {
+        children.push(h('div', { key: 'x', role: 'status', style: muted, title: String(update.checkError) }, t('updateFailed')))
+      } else if (update.upToDate) {
+        children.push(h('div', { key: 'x', role: 'status', style: muted }, t('upToDate', { version: update.current })))
+      } else {
+        children.push(h('div', { key: 'new', style: rowStyle },
+          h('span', null, t('updateAvailable')),
+          h('b', { style: mono }, update.latest)))
+        children.push(h('div', { key: 'hint', style: { ...muted, fontSize: '0.85em' } }, t('updateCommand')))
+        children.push(h('div', { key: 'cmd', style: rowStyle },
+          h('code', {
+            ref: commandText,
+            'data-testid': 'dsh-tako-upgrade-command',
+            style: { ...mono, whiteSpace: 'nowrap', overflowX: 'auto', padding: '4px 10px', border: '0.5px solid var(--dsw-alias-border-l2)', borderRadius: 'var(--dsw-radius-sm)', background: 'var(--dsw-alias-interactive-bg-hover)' },
+          }, UPGRADE_COMMAND),
+          h('button', { type: 'button', 'data-testid': 'dsh-tako-console-copy-upgrade', onClick: copyCommand, style: { ...buttonStyle, padding: '4px 10px' } }, copied ? t('copied') : t('copy'))))
+      }
+      return Card({ name: 'update', title: t('updateCard'), children })
+    }
+
+    /**
+     * The site's own palette for the quota bar: Tako's stylesheet defines
+     * `--primary: #3ea4ec` for light and `#0e72bc` under `.dark` (verified on
+     * https://tako.shiroha.tech). dsh signals dark with `body[data-ds-dark-theme]`,
+     * so a tiny class beats an inline style here: it follows theme switches live.
+     */
+    const ensureQuotaStyle = () => {
+      if (document.getElementById('dsh-tako-quota-style') !== null) return
+      const style = document.createElement('style')
+      style.id = 'dsh-tako-quota-style'
+      style.textContent = '.dsh-tako-quota-bar{background:#3ea4ec}'
+        + 'body[data-ds-dark-theme] .dsh-tako-quota-bar{background:#0e72bc}'
+      document.head.appendChild(style)
+    }
+
+    /**
+     * Money the way the site's console prints it: USD with the narrow symbol,
+     * up to 2 decimals from $1, up to 4 below, values that would round to
+     * zero bumped to the smallest shown step.
+     */
+    const fmtUsd = value => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+      const digits = Math.abs(value) >= 1 ? 2 : 4
+      const floor = 10 ** -digits
+      const shown = value !== 0 && Math.abs(value) < floor ? (value > 0 ? floor : -floor) : value
+      return shown.toLocaleString(undefined, { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 0, maximumFractionDigits: digits })
+    }
+    /** A share (0-1) as a percent, mirroring the site's two-digit cap. */
+    const fmtPercent = share => share.toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 2 })
+
     function QuotaCard(props) {
       const status = props.status
+      const t = props.t ?? fallbackT
       const children = []
       const configured = status !== undefined && status.configured === true
       if (!configured) {
@@ -315,22 +521,38 @@ window.__ModuleLoader__.load({
       } else if (status.me === null || status.me === undefined) {
         children.push(h('div', { key: 'x', style: muted }, t('quotaUnavailable')))
       } else {
-        const remain = status.me.quotaRemain
-        const used = status.me.quotaUsed
+        ensureQuotaStyle()
+        const me = status.me
+        const remain = me.quotaRemain
+        const used = me.quotaUsed
+        const remainUsd = typeof me.quotaRemainUsd === 'number' ? me.quotaRemainUsd : undefined
+        const usedUsd = typeof me.quotaUsedUsd === 'number' ? me.quotaUsedUsd : undefined
         const total = typeof remain === 'number' && typeof used === 'number' ? remain + used : undefined
-        children.push(h('div', { key: 'nums', style: rowStyle },
-          h('span', null, `${t('quotaRemain')} `),
-          h('b', { style: mono }, fmtNumber(remain)),
-          h('span', { style: muted }, `  ·  ${t('quotaUsed')} `),
-          h('span', { style: mono }, fmtNumber(used)),
-          total !== undefined && total > 0 ? h('span', { style: { ...muted, fontSize: '0.85em' } }, `( ${Math.round((used / total) * 100)}% )`) : null,
-        ))
-        if (total !== undefined && total > 0) {
+        const share = total !== undefined && total > 0 ? used / total : undefined
+        // The site's quota-card hierarchy: a small label, the big value, and
+        // the raw points as a second line. USD first — that is how the Tako
+        // console prices quota (quota_display_type: USD) — points as fallback.
+        const stat = (key, label, usd, points) => h('div', { key, style: { flex: '1 1 140px', minWidth: 0 } },
+          h('div', { style: { ...muted, fontSize: '12px', lineHeight: '16px' } }, label),
+          h('div', { 'data-testid': `dsh-tako-quota-${key}`, style: { ...mono, fontSize: '22px', fontWeight: 600, lineHeight: '30px' } },
+            usd !== undefined ? fmtUsd(usd) : typeof points === 'number' ? `${fmtNumber(points)} ${t('quotaPoints')}` : '—'),
+          usd !== undefined && typeof points === 'number'
+            ? h('div', { style: { ...muted, ...mono, fontSize: '12px', lineHeight: '16px' } }, `${fmtNumber(points)} ${t('quotaPoints')}`)
+            : null)
+        children.push(h('div', { key: 'stats', style: { display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '2px' } },
+          stat('remain', t('quotaRemain'), remainUsd, remain),
+          stat('used', t('quotaUsed'), usedUsd, used)))
+        if (share !== undefined) {
           children.push(h('div', {
             key: 'bar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': total, 'aria-valuenow': used,
             style: { height: '6px', borderRadius: '3px', background: 'var(--dsw-alias-interactive-bg-hover)', overflow: 'hidden' },
           },
-            h('div', { style: { width: `${Math.min(100, (used / total) * 100)}%`, height: '100%', background: 'var(--dsw-alias-state-business-primary)' } })))
+            h('div', { className: 'dsh-tako-quota-bar', style: { width: `${Math.min(100, share * 100)}%`, height: '100%' } })))
+          children.push(h('div', { key: 'share', style: { ...muted, fontSize: '12px', lineHeight: '16px' } }, t('quotaUsedShare', { percent: fmtPercent(share) })))
+        }
+        if (remain !== undefined || used !== undefined) {
+          children.push(h('div', { key: 'note', style: { ...muted, fontSize: '12px', lineHeight: '16px' } },
+            remainUsd !== undefined ? t('quotaNoteUsd') : t('quotaNoteUnknown')))
         }
       }
       return Card({ name: 'quota', title: t('quotaCard'), children })
@@ -338,6 +560,7 @@ window.__ModuleLoader__.load({
 
     function CatalogCard(props) {
       const catalog = props.catalog
+      const t = props.t ?? fallbackT
       const children = []
       if (catalog === undefined) {
         children.push(h('div', { key: 'x', style: muted }, props.error === undefined ? '…' : `${t('loadFailed')}: ${props.error}`))
@@ -360,12 +583,13 @@ window.__ModuleLoader__.load({
       return Card({
         name: 'catalog',
         title: t('catalogCard'),
-        extra: catalog === undefined || catalog.nextSyncAt === undefined ? undefined : h(Countdown, { nextSyncAt: catalog.nextSyncAt }),
+        extra: catalog === undefined || catalog.nextSyncAt === undefined ? undefined : h(Countdown, { nextSyncAt: catalog.nextSyncAt, t }),
         children,
       })
     }
 
-    function TakoConsolePage() {
+    function TakoConsolePage(props) {
+      const t = props.t ?? fallbackT
       const [status, setStatus] = useState(undefined)
       const [statusError, setStatusError] = useState(undefined)
       const [catalog, setCatalog] = useState(undefined)
@@ -432,9 +656,10 @@ window.__ModuleLoader__.load({
           `${t('loadFailed')}: ${statusError}`,
           h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, style: quietButton }, t('retry'))))
       }
-      children.push(AccountCard({ status, login, busyLogout, onLogout: logout, logoutNote }))
-      children.push(QuotaCard({ status }))
-      children.push(CatalogCard({ catalog, error: catalogError }))
+      children.push(AccountCard({ status, login, busyLogout, onLogout: logout, logoutNote, t }))
+      children.push(h(UpdateCard, { key: 'update', t }))
+      children.push(QuotaCard({ status, t }))
+      children.push(CatalogCard({ catalog, error: catalogError, t }))
       return h('div', {
         'data-testid': 'dsh-tako-console-page',
         style: { height: '100%', minHeight: 0, overflowY: 'auto', background: 'var(--dsw-alias-bg-base)', fontSize: '14px', lineHeight: '22px' },
@@ -445,19 +670,52 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        /**
+         * Register the dictionaries with the host's locale service so every
+         * text follows the client's language setting. Activation is gated only
+         * on `slots` (a hard requirement on `locale` would park the whole
+         * plugin on hosts without the service), so the service may appear
+         * after `apply`: try it now, and otherwise retry whenever a service
+         * is provided. Registering bumps the locale revision, so outlets
+         * already on screen pick the dictionaries up late; the disposer hangs
+         * on this plugin's fiber, so a plugin disable/re-enable re-registers.
+         * Hosts (or stubs) without a usable service keep the inline fallback.
+         */
+        const adoptLocale = face => {
+          if (face === undefined || typeof face.register !== 'function' || typeof face.bind !== 'function') return false
+          try {
+            const dispose = face.register(NS, DICTS)
+            boundT = face.bind(NS)
+            if (typeof ctx.effect === 'function') ctx.effect(() => dispose, 'dsh-tako: locale dictionaries')
+            return true
+          } catch {
+            return false
+          }
+        }
+        if (!adoptLocale(typeof ctx.get === 'function' ? ctx.get('locale') : undefined) && typeof ctx.on === 'function') {
+          ctx.on('internal/service', (name, value) => {
+            if (name !== 'locale') return
+            if (value === undefined) { boundT = fallbackT; return }
+            adoptLocale(value)
+          })
+        }
+
         ctx.slots.inject('settings.models.provider-card', () => ctx.slots.register({
           name: 'settings.models.provider-card',
           key: PI_AI_NS,
+          locale: NS,
         }, TakoSignIn))
         ctx.slots.inject('main', () => ctx.slots.register({
           name: 'main',
           key: PANEL_ID,
+          locale: NS,
         }, TakoConsolePage))
         ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
           name: 'sidebar.panellist',
           id: PANEL_ID,
           order: 20,
-          label: () => t('panel'),
+          label: () => boundT('panel'),
+          locale: NS,
         }, TakoPanelIcon))
       },
     }

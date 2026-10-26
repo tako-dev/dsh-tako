@@ -61,6 +61,18 @@ dsh web
 
 `dsh plugin --profile <名字> add dsh-tako` 对任何 profile 都能装；但只装了 `dsh-base` 的自建 profile 没有界面，要用浏览器界面请装进 `web`。`headless` 等其他内置 profile 用同样的命令安装（未逐一验证）。
 
+### 更新
+
+插件装进 profile 后由 pnpm 管理，正在运行的插件不能热更新自己，所以升级就是重新执行安装命令（从 npm 拉最新版本），然后重启 dsh：
+
+```sh
+dsh plugin --profile web add dsh-tako
+```
+
+（锁版本写 `dsh-tako@0.3.0`；用 GitHub Release 的 tgz URL 安装的，换成新版本的 URL 即可。）
+
+「Tako 控制台」的「更新」卡会对比本机版本和 npm 官方源上的最新版本：落后时显示新版本号和上面的升级命令（可一键复制），已是最新时显示当前版本号。检查固定走 `registry.npmjs.org`（发布走官方源，不读本机 npm 配置，避免镜像同步延迟造成误报），结果在插件内存里缓存 1 小时；检查失败只显示灰字提示，不影响其他卡片。
+
 ### 一键登录
 
 在浏览器里登录 Tako 并确认授权，插件拿到一个新的 `cr_` key，通过 dsh 官方的凭据服务（`ctx.credentials.set`，和「设置 → 模型」保存密钥是同一条路径）写进 `$DSH_HOME/.credentials.yaml`，凭据名就是插件配置的 `apiKeyEnv`（默认 `TAKO_API_KEY`）。正在运行的 dsh 下一次请求就会用上，不用重启。key 不会出现在终端或页面上，只显示 `cr_****` 加末 4 位。
@@ -88,13 +100,16 @@ npx dsh-tako logout                   # 在 Tako 吊销这个 key，并从 dsh �
 
 ### Tako 控制台
 
-`web` profile 的左侧栏多一个 Tako 图标（「Tako 控制台」），点开是一页三张卡：
+`web` profile 的左侧栏多一个 Tako 图标（「Tako 控制台」），点开是一页四张卡：
 
 - **登录状态**：是否已保存 key、掩码后的 key（`cr_****` + 末 4 位，明文永不下发到页面）、Tako 账号与套餐。未登录时按钮是「通过浏览器登录 Tako」；已登录时是「重新登录」和「退出」——「退出」先在 Tako 吊销这个 key（失败不阻断），再从 dsh 凭据里删除，语义与 `dsh-tako logout` 相同；key 来自环境变量时不吊销也不删除。
-- **余额 / 额度**：`/api/desktop/me` 返回的剩余与已用额度及占比进度条。未登录显示「需要登录后查看」；临时取不到（例如 Tako 不可达）会在登录状态卡里显示原因，整页不报错。账号信息在插件内存里缓存 45 秒，不会每开一次页面就打一次 Tako。
+- **更新**：对比本机版本和 npm 官方源的最新版本；落后时显示新版本号和升级命令（可一键复制），已是最新时显示当前版本号，检查失败时只显示灰字提示。检查结果缓存 1 小时，见上面的[更新](#更新)一节。
+- **余额 / 额度**：与 Tako 官网控制台同一套口径。剩余额度、已用额度两个大数字按美元显示，原始额度点数作为第二行小字（`/api/desktop/me` 的点数按官网换算 500,000 点 = $1，服务端补发 `quotaRemainUsd` / `quotaUsedUsd`，点数字段保留），下面是已用占比进度条（进度条填色用 Tako 官网主色）与换算说明小字。未登录显示「需要登录后查看」；临时取不到（例如 Tako 不可达）会在登录状态卡里显示原因，整页不报错。账号信息在插件内存里缓存 45 秒，不会每开一次页面就打一次 Tako。
 - **模型目录**：插件当前写入 `providers.tako` 的模型（`include` / `exclude` / `pinned` / `overrides` 过滤后的结果），列出模型名、上下文窗口、是否支持图片输入；右上角显示距下次目录刷新的倒计时（按 `nextSyncAt` 在浏览器本地倒数，不轮询服务端）。
 
-面板数据来自插件注册的三个路由：`GET /api/tako.status`、`POST /api/tako.logout`、`GET /api/tako.catalog`，和 Web 界面同源、走 dsh 的浏览器登录围栏。目录尚未同步时模型卡显示空态而不是报错。
+面板数据来自插件注册的四个路由：`GET /api/tako.status`、`POST /api/tako.logout`、`GET /api/tako.catalog`、`GET /api/tako.update`，和 Web 界面同源、走 dsh 的浏览器登录围栏。目录尚未同步时模型卡显示空态而不是报错。
+
+界面语言跟随 dsh 客户端的语言设置：控制台四张卡、「设置 → 模型」登录卡片和侧栏名称的全部文案走 dsh 官方的 i18n 体系，在「设置 → 通用 → 语言」切换时即时变化。插件的词典注册在自己的 `dsh-tako` 命名空间；宿主还没有这套体系时（更老的 dsh），自动回退为按页面语言取中英文案，行为与旧版本一致。
 
 #### dsh 在远程服务器上
 
@@ -201,7 +216,7 @@ npm test        # 单元测试（离线）
 npm run e2e     # 端到端：装干净的官方 dsh，起 mock Tako，真机安装并启动 web / acp profile，跑一键登录
 ```
 
-`npm run e2e`（`scripts/e2e/run.mjs`）在临时目录里装 `@deepseek-ai/dsh`（版本用 `DSH_VERSION` 指定，默认 `0.2.1-rc.2`），每个场景用全新的 `DSH_HOME` 和 `HOME`，不碰 `~/.dsh`，也不需要真实 key。它用 `npm pack` 出的 tgz 执行 `dsh plugin --profile web add`，覆盖：路由写入与模型列表、重启不重写、带假 key 时 dsh 列出 Tako 模型、经 `dsh acp` 走官方链路完成一次真实对话（断言 mock 收到 `Authorization: Bearer test-key` 和正确的 model）、目录不可达时的兜底、`exclude` / `pinned`、删除路由后重启、`dsh plugin remove`、按 http URL 安装；以及一键登录：mock 的 `/app/authorize` 模拟用户已确认（302 回 `redirect_uri` 带 code），`/api/desktop/token` 校验 PKCE verifier，`dsh-tako login --no-open` 写入凭据后 `dsh acp` 不带环境变量完成一轮对话（断言 mock 收到 `Bearer <新 key>`）、`whoami` / `logout`（吊销并删除凭据）、拒绝授权不写凭据、Web 路由 `/api/tako.login` 走同一流程并检查客户端插件包已下发、控制台路由（`/api/tako.status` 未登录态、`/api/tako.catalog` 同步数据与缓存、登录→退出后凭据被清且 mock 收到 revoke）。需要 pnpm 在 `PATH` 上。其他环境变量：`E2E_TGZ`（用现成的 tgz）、`E2E_DSH_DIR`（复用已装好的 dsh）、`E2E_ONLY=a,d`（只跑部分用例）、`E2E_KEEP=1`（保留 dsh 安装目录）。结束时打印临时目录和 `e2e-report.json` 路径。
+`npm run e2e`（`scripts/e2e/run.mjs`）在临时目录里装 `@deepseek-ai/dsh`（版本用 `DSH_VERSION` 指定，默认 `0.2.1-rc.2`），每个场景用全新的 `DSH_HOME` 和 `HOME`，不碰 `~/.dsh`，也不需要真实 key。它用 `npm pack` 出的 tgz 执行 `dsh plugin --profile web add`，覆盖：路由写入与模型列表、重启不重写、带假 key 时 dsh 列出 Tako 模型、经 `dsh acp` 走官方链路完成一次真实对话（断言 mock 收到 `Authorization: Bearer test-key` 和正确的 model）、目录不可达时的兜底、`exclude` / `pinned`、删除路由后重启、`dsh plugin remove`、按 http URL 安装；以及一键登录：mock 的 `/app/authorize` 模拟用户已确认（302 回 `redirect_uri` 带 code），`/api/desktop/token` 校验 PKCE verifier，`dsh-tako login --no-open` 写入凭据后 `dsh acp` 不带环境变量完成一轮对话（断言 mock 收到 `Bearer <新 key>`）、`whoami` / `logout`（吊销并删除凭据）、拒绝授权不写凭据、Web 路由 `/api/tako.login` 走同一流程并检查客户端插件包已下发、控制台路由（`/api/tako.status` 未登录态、`/api/tako.catalog` 同步数据与缓存、`/api/tako.update` 应答形状（读的是真实 npm 源）、登录→退出后凭据被清且 mock 收到 revoke）。需要 pnpm 在 `PATH` 上。其他环境变量：`E2E_TGZ`（用现成的 tgz）、`E2E_DSH_DIR`（复用已装好的 dsh）、`E2E_ONLY=a,d`（只跑部分用例）、`E2E_KEEP=1`（保留 dsh 安装目录）。结束时打印临时目录和 `e2e-report.json` 路径。
 
 CI（`.github/workflows/ci.yml`）在 push 到 `main` 和 PR 时用 Node 22 / 24 跑 `npm ci → typecheck → test → build → npm pack → e2e`。
 
@@ -231,6 +246,16 @@ dsh web
 
 Set the key in **Settings → Models → Tako** (stored as `TAKO_API_KEY` in `$DSH_HOME/.credentials.yaml`) or export `TAKO_API_KEY` before starting. Without a key the model picker shows no Tako models.
 
+### Updating
+
+The plugin is installed into the profile by pnpm and cannot hot-update itself; upgrading means re-running the install command, which fetches the latest version from npm, and then restarting dsh:
+
+```sh
+dsh plugin --profile web add dsh-tako
+```
+
+The console's **Update** card compares the installed version with npm's latest: when behind it shows the new version and that command (with a copy button), and when current it shows the installed version. The check always reads `registry.npmjs.org` — the registry the plugin is published to, regardless of local npm configuration — and caches the answer in memory for an hour; a failed check only shows a gray note and never breaks the other cards.
+
 ### One-click sign-in
 
 Instead of pasting a key, sign in to Tako in the browser:
@@ -250,13 +275,16 @@ Tako names the token `tako-connect@<device name>` and replaces an older token wi
 
 ### Tako console
 
-The `web` profile's sidebar gains a Tako icon ("Tako Console") opening a page with three cards:
+The `web` profile's sidebar gains a Tako icon ("Tako Console") opening a page with four cards:
 
 - **Sign-in status**: whether a key is stored, the masked key (`cr_****` plus the last four characters; the plaintext never reaches the page), and the Tako account and plan. Signed out, the button reads "Sign in to Tako with the browser"; signed in, "Sign in again" and "Sign out" — sign-out revokes the key on Tako first (a failure does not block) and then removes it from dsh credentials, the same semantics as `dsh-tako logout`; a key that comes from an environment variable is neither revoked nor deleted.
-- **Quota**: remaining and used quota from `/api/desktop/me` with a usage bar. Signed out it says to sign in first; when Tako is unreachable the reason shows on the sign-in card and the page still renders. The account answer is cached in the plugin's memory for 45 seconds, so opening the panel does not hit Tako every time.
+- **Update**: the installed version against npm's latest; when behind it shows the new version and the upgrade command with a copy button, when current the installed version, and only a gray note when the check fails. The answer is cached for an hour; see [Updating](#updating) above.
+- **Quota**: the same numbers the Tako console shows. Remaining and used quota as two big USD figures, with the raw quota points from `/api/desktop/me` as a small second line (the plugin's status route divides at the site's own rate — 500,000 points = $1 — adding `quotaRemainUsd` / `quotaUsedUsd` while keeping the raw points), then the usage-share bar (filled with the Tako site's primary color) and the conversion note. Signed out it says to sign in first; when Tako is unreachable the reason shows on the sign-in card and the page still renders. The account answer is cached in the plugin's memory for 45 seconds, so opening the panel does not hit Tako every time.
 - **Model catalog**: what the plugin currently writes to `providers.tako` (after `include` / `exclude` / `pinned` / `overrides`) — model, context window, image input — with a countdown to the next directory refresh computed locally from `nextSyncAt` (no server polling).
 
-The panel reads three routes the plugin registers on the Web connection: `GET /api/tako.status`, `POST /api/tako.logout`, `GET /api/tako.catalog`, same origin and behind dsh's browser authentication fence. Before the first sync the catalog card shows an empty state instead of an error.
+The panel reads four routes the plugin registers on the Web connection: `GET /api/tako.status`, `POST /api/tako.logout`, `GET /api/tako.catalog`, `GET /api/tako.update`, same origin and behind dsh's browser authentication fence. Before the first sync the catalog card shows an empty state instead of an error.
+
+The UI language follows the dsh client's language setting: every text on the four cards, the Settings → Models sign-in card, and the sidebar entry goes through dsh's official i18n and switches live with Settings → General → Language. The plugin's dictionaries are registered under its own `dsh-tako` namespace; on hosts without that system (older dsh) the texts fall back to picking Chinese or English from the page language, exactly as before.
 
 **Remote dsh**: Tako redirects the browser to `127.0.0.1:<port>` on the machine running the browser. When dsh runs on a remote host, either paste a key (Settings → Models or `TAKO_API_KEY`), or forward a fixed port: `ssh -L 53682:127.0.0.1:53682 user@remote`, then on the remote host `npx dsh-tako login --no-open --port 53682` and open the printed URL locally. The Web button only completes when the page is opened on the dsh host itself; on a remote address the card says so.
 
@@ -266,7 +294,7 @@ To uninstall, run `dsh plugin --profile web remove dsh-tako` and then delete `pr
 
 Tested against `@deepseek-ai/dsh` `0.2.1-rc.2`. `dsh plugin` needs pnpm on `PATH`.
 
-Development: `npm ci`, `npm run typecheck`, `npm test`, and `npm run e2e` (installs a clean official dsh into a temp dir with a fresh `DSH_HOME`, starts a mock Tako, installs the packed tarball, and drives real `web` and `acp` profiles, including one chat turn, `dsh-tako login` / `whoami` / `logout` against the mock's `/app/authorize` and `/api/desktop/*`, the Web sign-in route, and the console routes `/api/tako.status` / `/api/tako.logout` / `/api/tako.catalog` with their cache and logout flow). Releasing: bump `version`, commit and push to `main`, then push a `vX.Y.Z` tag; the Release workflow checks the tag, runs everything including e2e, publishes with npm Trusted Publishing (GitHub Actions OIDC, provenance included; no `NPM_TOKEN` secret), and creates or updates a GitHub Release with the tarball. Re-running it is safe: an already-published version is skipped when its `dist.integrity` equals the freshly packed tarball, and fails otherwise.
+Development: `npm ci`, `npm run typecheck`, `npm test`, and `npm run e2e` (installs a clean official dsh into a temp dir with a fresh `DSH_HOME`, starts a mock Tako, installs the packed tarball, and drives real `web` and `acp` profiles, including one chat turn, `dsh-tako login` / `whoami` / `logout` against the mock's `/app/authorize` and `/api/desktop/*`, the Web sign-in route, and the console routes `/api/tako.status` / `/api/tako.logout` / `/api/tako.catalog` with their cache and logout flow, plus the `/api/tako.update` answer shape against the real npm registry). Releasing: bump `version`, commit and push to `main`, then push a `vX.Y.Z` tag; the Release workflow checks the tag, runs everything including e2e, publishes with npm Trusted Publishing (GitHub Actions OIDC, provenance included; no `NPM_TOKEN` secret), and creates or updates a GitHub Release with the tarball. Re-running it is safe: an already-published version is skipped when its `dist.integrity` equals the freshly packed tarball, and fails otherwise.
 
 ## License
 
