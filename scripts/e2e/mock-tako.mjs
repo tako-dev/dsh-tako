@@ -107,7 +107,7 @@ export async function startMockTako({ pricingFile }) {
       if (req.method === 'GET' && url.pathname === '/api/desktop/me') {
         const token = state.keys.get(bearer(req))
         if (token === undefined) { res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ success: false, error: 'invalid_token', message: 'invalid token' })); return }
-        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: true, data: { user: { id: '7', name: 'e2e-user' }, plan: { name: 'E2E Plan' }, token: { id: token.id, name: token.name }, quota: { remain: 1000, used: 5 } } }))
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: true, data: { user: { id: '7', name: 'e2e-user' }, plan: { name: 'E2E Plan' }, token: { id: token.id, name: token.name }, quota: { remain: 1_000_000, used: 250_000 } } }))
         return
       }
       if (req.method === 'POST' && url.pathname === '/api/desktop/revoke') {

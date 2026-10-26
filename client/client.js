@@ -74,8 +74,12 @@ window.__ModuleLoader__.load({
         logoutNone: '没有已保存的 Tako key',
         logoutExternal: '这个 key 来自环境变量或 .env，插件不去吊销或删除；要停用请在对应位置移除',
         quotaCard: '余额 / 额度',
-        quotaRemain: '剩余',
-        quotaUsed: '已用',
+        quotaRemain: '剩余额度',
+        quotaUsed: '已用额度',
+        quotaPoints: '点',
+        quotaUsedShare: '已用占比 {percent}',
+        quotaNoteUsd: '美元按 Tako 官网口径换算：500,000 点 = $1',
+        quotaNoteUnknown: '单位是 Tako 额度点数；美元换算未知',
         quotaNeedsLogin: '需要登录后查看',
         quotaUnavailable: '暂时拿不到额度信息',
         catalogCard: '模型目录',
@@ -128,8 +132,12 @@ window.__ModuleLoader__.load({
         logoutNone: 'No Tako key is stored',
         logoutExternal: 'This key comes from an environment variable or .env; remove it there instead',
         quotaCard: 'Quota',
-        quotaRemain: 'Remaining',
-        quotaUsed: 'Used',
+        quotaRemain: 'Credit remaining',
+        quotaUsed: 'Credit used',
+        quotaPoints: 'points',
+        quotaUsedShare: '{percent} used',
+        quotaNoteUsd: 'USD is converted the way the Tako site does it: 500,000 points = $1',
+        quotaNoteUnknown: 'Shown in Tako quota points; the USD conversion is unknown',
         quotaNeedsLogin: 'Sign in to see your quota',
         quotaUnavailable: 'Quota information is unavailable',
         catalogCard: 'Model catalog',
@@ -171,7 +179,6 @@ window.__ModuleLoader__.load({
       if (template === undefined) return key
       if (params === undefined || params === null) return template
       return template.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match)
-    }
     }
     /**
      * The namespace-bound translator used outside components (the sidebar
@@ -474,6 +481,36 @@ window.__ModuleLoader__.load({
       return Card({ name: 'update', title: t('updateCard'), children })
     }
 
+    /**
+     * The site's own palette for the quota bar: Tako's stylesheet defines
+     * `--primary: #3ea4ec` for light and `#0e72bc` under `.dark` (verified on
+     * https://tako.shiroha.tech). dsh signals dark with `body[data-ds-dark-theme]`,
+     * so a tiny class beats an inline style here: it follows theme switches live.
+     */
+    const ensureQuotaStyle = () => {
+      if (document.getElementById('dsh-tako-quota-style') !== null) return
+      const style = document.createElement('style')
+      style.id = 'dsh-tako-quota-style'
+      style.textContent = '.dsh-tako-quota-bar{background:#3ea4ec}'
+        + 'body[data-ds-dark-theme] .dsh-tako-quota-bar{background:#0e72bc}'
+      document.head.appendChild(style)
+    }
+
+    /**
+     * Money the way the site's console prints it: USD with the narrow symbol,
+     * up to 2 decimals from $1, up to 4 below, values that would round to
+     * zero bumped to the smallest shown step.
+     */
+    const fmtUsd = value => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+      const digits = Math.abs(value) >= 1 ? 2 : 4
+      const floor = 10 ** -digits
+      const shown = value !== 0 && Math.abs(value) < floor ? (value > 0 ? floor : -floor) : value
+      return shown.toLocaleString(undefined, { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 0, maximumFractionDigits: digits })
+    }
+    /** A share (0-1) as a percent, mirroring the site's two-digit cap. */
+    const fmtPercent = share => share.toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 2 })
+
     function QuotaCard(props) {
       const status = props.status
       const t = props.t ?? fallbackT
@@ -484,22 +521,38 @@ window.__ModuleLoader__.load({
       } else if (status.me === null || status.me === undefined) {
         children.push(h('div', { key: 'x', style: muted }, t('quotaUnavailable')))
       } else {
-        const remain = status.me.quotaRemain
-        const used = status.me.quotaUsed
+        ensureQuotaStyle()
+        const me = status.me
+        const remain = me.quotaRemain
+        const used = me.quotaUsed
+        const remainUsd = typeof me.quotaRemainUsd === 'number' ? me.quotaRemainUsd : undefined
+        const usedUsd = typeof me.quotaUsedUsd === 'number' ? me.quotaUsedUsd : undefined
         const total = typeof remain === 'number' && typeof used === 'number' ? remain + used : undefined
-        children.push(h('div', { key: 'nums', style: rowStyle },
-          h('span', null, `${t('quotaRemain')} `),
-          h('b', { style: mono }, fmtNumber(remain)),
-          h('span', { style: muted }, `  ·  ${t('quotaUsed')} `),
-          h('span', { style: mono }, fmtNumber(used)),
-          total !== undefined && total > 0 ? h('span', { style: { ...muted, fontSize: '0.85em' } }, `( ${Math.round((used / total) * 100)}% )`) : null,
-        ))
-        if (total !== undefined && total > 0) {
+        const share = total !== undefined && total > 0 ? used / total : undefined
+        // The site's quota-card hierarchy: a small label, the big value, and
+        // the raw points as a second line. USD first — that is how the Tako
+        // console prices quota (quota_display_type: USD) — points as fallback.
+        const stat = (key, label, usd, points) => h('div', { key, style: { flex: '1 1 140px', minWidth: 0 } },
+          h('div', { style: { ...muted, fontSize: '12px', lineHeight: '16px' } }, label),
+          h('div', { 'data-testid': `dsh-tako-quota-${key}`, style: { ...mono, fontSize: '22px', fontWeight: 600, lineHeight: '30px' } },
+            usd !== undefined ? fmtUsd(usd) : typeof points === 'number' ? `${fmtNumber(points)} ${t('quotaPoints')}` : '—'),
+          usd !== undefined && typeof points === 'number'
+            ? h('div', { style: { ...muted, ...mono, fontSize: '12px', lineHeight: '16px' } }, `${fmtNumber(points)} ${t('quotaPoints')}`)
+            : null)
+        children.push(h('div', { key: 'stats', style: { display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '2px' } },
+          stat('remain', t('quotaRemain'), remainUsd, remain),
+          stat('used', t('quotaUsed'), usedUsd, used)))
+        if (share !== undefined) {
           children.push(h('div', {
             key: 'bar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': total, 'aria-valuenow': used,
             style: { height: '6px', borderRadius: '3px', background: 'var(--dsw-alias-interactive-bg-hover)', overflow: 'hidden' },
           },
-            h('div', { style: { width: `${Math.min(100, (used / total) * 100)}%`, height: '100%', background: 'var(--dsw-alias-state-business-primary)' } })))
+            h('div', { className: 'dsh-tako-quota-bar', style: { width: `${Math.min(100, share * 100)}%`, height: '100%' } })))
+          children.push(h('div', { key: 'share', style: { ...muted, fontSize: '12px', lineHeight: '16px' } }, t('quotaUsedShare', { percent: fmtPercent(share) })))
+        }
+        if (remain !== undefined || used !== undefined) {
+          children.push(h('div', { key: 'note', style: { ...muted, fontSize: '12px', lineHeight: '16px' } },
+            remainUsd !== undefined ? t('quotaNoteUsd') : t('quotaNoteUnknown')))
         }
       }
       return Card({ name: 'quota', title: t('quotaCard'), children })
