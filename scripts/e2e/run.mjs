@@ -690,6 +690,7 @@ await testCase('m', 'Web UI: client bundle served for the Models page; /api/tako
     check(detail, bundle !== undefined, `boot graph lists the dsh-tako client bundle: ${bundle}`)
     const script = bundle === undefined ? '' : await (await fetch(`${origin}/${bundle}`, { headers: { cookie } })).text()
     check(detail, script.includes("'settings.models.provider-card'") && script.includes("id: 'dsh-tako'"), `bundle (${script.length} bytes) registers the settings.models.provider-card slot`)
+    check(detail, script.includes('dsh-tako-quota-bar') && script.includes('quotaRemainUsd'), `bundle carries the quota card's themed bar and USD fields (dsh-tako-quota-bar, quotaRemainUsd)`)
     const unauthenticated = await fetch(`${origin}/api/tako.login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
     check(detail, unauthenticated.status === 401 || unauthenticated.status === 403, `route without the session cookie -> HTTP ${unauthenticated.status}`)
     const api = (method, body, query = '') => fetch(`${origin}/api/tako.login${query}`, { method, headers: { cookie, origin, 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }).then(response => response.json())
@@ -738,7 +739,7 @@ await testCase('n', 'console routes: /api/tako.status + /api/tako.catalog + logo
     check(detail, done.status === 'success', `login -> ${done.status}`)
     const status1 = await api('GET', 'api/tako.status')
     check(detail, status1.configured === true && status1.maskedKey === `cr_****${key?.slice(-4)}` && status1.credential === 'TAKO_API_KEY', `status after sign-in -> ${JSON.stringify({ ...status1, me: '…' })}`)
-    check(detail, status1.me?.userName === 'e2e-user' && status1.me?.planName === 'E2E Plan' && status1.me?.quotaRemain === 1000 && status1.me?.quotaUsed === 5, `status me -> ${JSON.stringify(status1.me)}`)
+    check(detail, status1.me?.userName === 'e2e-user' && status1.me?.planName === 'E2E Plan' && status1.me?.quotaRemain === 1_000_000 && status1.me?.quotaUsed === 250_000 && status1.me?.quotaRemainUsd === 2 && status1.me?.quotaUsedUsd === 0.5, `status me -> ${JSON.stringify(status1.me)}`)
     check(detail, !JSON.stringify(status1).includes(key), 'status carries only the masked key')
     // Logout: revoke on the mock, credential removed, back to not configured.
     const meBefore = mock.state.requests.filter(request => request.url === '/api/desktop/me').length

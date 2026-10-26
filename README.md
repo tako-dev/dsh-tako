@@ -91,7 +91,7 @@ npx dsh-tako logout                   # 在 Tako 吊销这个 key，并从 dsh �
 `web` profile 的左侧栏多一个 Tako 图标（「Tako 控制台」），点开是一页三张卡：
 
 - **登录状态**：是否已保存 key、掩码后的 key（`cr_****` + 末 4 位，明文永不下发到页面）、Tako 账号与套餐。未登录时按钮是「通过浏览器登录 Tako」；已登录时是「重新登录」和「退出」——「退出」先在 Tako 吊销这个 key（失败不阻断），再从 dsh 凭据里删除，语义与 `dsh-tako logout` 相同；key 来自环境变量时不吊销也不删除。
-- **余额 / 额度**：`/api/desktop/me` 返回的剩余与已用额度及占比进度条。未登录显示「需要登录后查看」；临时取不到（例如 Tako 不可达）会在登录状态卡里显示原因，整页不报错。账号信息在插件内存里缓存 45 秒，不会每开一次页面就打一次 Tako。
+- **余额 / 额度**：与 Tako 官网控制台同一套口径。剩余额度、已用额度两个大数字按美元显示，原始额度点数作为第二行小字（`/api/desktop/me` 的点数按官网换算 500,000 点 = $1，服务端补发 `quotaRemainUsd` / `quotaUsedUsd`，点数字段保留），下面是已用占比进度条（进度条填色用 Tako 官网主色）与换算说明小字。未登录显示「需要登录后查看」；临时取不到（例如 Tako 不可达）会在登录状态卡里显示原因，整页不报错。账号信息在插件内存里缓存 45 秒，不会每开一次页面就打一次 Tako。
 - **模型目录**：插件当前写入 `providers.tako` 的模型（`include` / `exclude` / `pinned` / `overrides` 过滤后的结果），列出模型名、上下文窗口、是否支持图片输入；右上角显示距下次目录刷新的倒计时（按 `nextSyncAt` 在浏览器本地倒数，不轮询服务端）。
 
 面板数据来自插件注册的三个路由：`GET /api/tako.status`、`POST /api/tako.logout`、`GET /api/tako.catalog`，和 Web 界面同源、走 dsh 的浏览器登录围栏。目录尚未同步时模型卡显示空态而不是报错。
@@ -253,7 +253,7 @@ Tako names the token `tako-connect@<device name>` and replaces an older token wi
 The `web` profile's sidebar gains a Tako icon ("Tako Console") opening a page with three cards:
 
 - **Sign-in status**: whether a key is stored, the masked key (`cr_****` plus the last four characters; the plaintext never reaches the page), and the Tako account and plan. Signed out, the button reads "Sign in to Tako with the browser"; signed in, "Sign in again" and "Sign out" — sign-out revokes the key on Tako first (a failure does not block) and then removes it from dsh credentials, the same semantics as `dsh-tako logout`; a key that comes from an environment variable is neither revoked nor deleted.
-- **Quota**: remaining and used quota from `/api/desktop/me` with a usage bar. Signed out it says to sign in first; when Tako is unreachable the reason shows on the sign-in card and the page still renders. The account answer is cached in the plugin's memory for 45 seconds, so opening the panel does not hit Tako every time.
+- **Quota**: the same numbers the Tako console shows. Remaining and used quota as two big USD figures, with the raw quota points from `/api/desktop/me` as a small second line (the plugin's status route divides at the site's own rate — 500,000 points = $1 — adding `quotaRemainUsd` / `quotaUsedUsd` while keeping the raw points), then the usage-share bar (filled with the Tako site's primary color) and the conversion note. Signed out it says to sign in first; when Tako is unreachable the reason shows on the sign-in card and the page still renders. The account answer is cached in the plugin's memory for 45 seconds, so opening the panel does not hit Tako every time.
 - **Model catalog**: what the plugin currently writes to `providers.tako` (after `include` / `exclude` / `pinned` / `overrides`) — model, context window, image input — with a countdown to the next directory refresh computed locally from `nextSyncAt` (no server polling).
 
 The panel reads three routes the plugin registers on the Web connection: `GET /api/tako.status`, `POST /api/tako.logout`, `GET /api/tako.catalog`, same origin and behind dsh's browser authentication fence. Before the first sync the catalog card shows an empty state instead of an error.

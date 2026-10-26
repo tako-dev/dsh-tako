@@ -1,23 +1,26 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createConsoleService, emptyCatalogState, type CatalogState, type ConsoleServiceOptions } from '../src/web.ts'
+import { createConsoleService, emptyCatalogState, QUOTA_PER_UNIT, type CatalogState, type ConsoleServiceOptions } from '../src/web.ts'
 
 const KEY = 'cr_0123456789abcdefWXYZ'
 
+// The quota numbers of the Tako docs page's worked example
+// (https://tako.shiroha.tech/docs/account/balance): 1,000,000 available +
+// 250,000 used = 1,250,000 granted, i.e. $2.00 remaining, $0.50 used.
 const ME_DATA = {
   user: { id: '7', name: 'e2e-user' },
   plan: { name: 'E2E Plan' },
   token: { id: 3, name: 'tako-connect@dsh-tako@mac' },
-  quota: { remain: 1000, used: 5 },
+  quota: { remain: 1_000_000, used: 250_000 },
 }
 
 /** A fake Tako answering `/api/desktop/me` and `/api/desktop/revoke`. */
-function takoFetch(options: { meFails?: boolean, meStatus?: number, revokeFails?: boolean } = {}) {
+function takoFetch(options: { meFails?: boolean, meStatus?: number, revokeFails?: boolean, meData?: Record<string, unknown> } = {}) {
   const revokedWith: string[] = []
   const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = String(input)
     if (url.endsWith('/api/desktop/me')) {
       if (options.meFails === true) return Response.json({ success: false, error: 'invalid_token', message: 'invalid token' }, { status: 401 })
-      return Response.json({ success: true, data: ME_DATA })
+      return Response.json({ success: true, data: options.meData ?? ME_DATA })
     }
     if (url.endsWith('/api/desktop/revoke')) {
       if (options.revokeFails === true) return Response.json({ success: false, error: 'boom', message: 'revoke refused' }, { status: 200 })
@@ -61,16 +64,41 @@ describe('console route /api/tako.status', () => {
     expect(tako.fetchImpl).not.toHaveBeenCalled()
   })
 
-  it('reports the masked key and the account behind it; the plaintext never leaves', async () => {
+  it('reports the masked key and the account behind it, quota both raw and in USD; the plaintext never leaves', async () => {
     const { svc } = service({ resolved: { value: KEY, source: 'file' } })
     const body = await (await svc.handleStatus()).json()
     expect(body).toEqual({
       configured: true,
       maskedKey: 'cr_****WXYZ',
       credential: 'TAKO_API_KEY',
-      me: { userName: 'e2e-user', planName: 'E2E Plan', quotaRemain: 1000, quotaUsed: 5 },
+      me: {
+        userName: 'e2e-user',
+        planName: 'E2E Plan',
+        quotaRemain: 1_000_000,
+        quotaUsed: 250_000,
+        quotaRemainUsd: 2,
+        quotaUsedUsd: 0.5,
+      },
     })
     expect(JSON.stringify(body)).not.toContain(KEY)
+  })
+
+  it('converts quota at the rate the site documents: 500,000 points = $1, exact for small answers too', async () => {
+    expect(QUOTA_PER_UNIT).toBe(500_000)
+    const tako = takoFetch({ meData: { user: { id: '7', name: 'e2e-user' }, quota: { remain: 125_000, used: 25_000 } } })
+    const { svc } = service({ resolved: { value: KEY, source: 'file' }, fetch: tako.fetchImpl })
+    const body = await (await svc.handleStatus()).json()
+    expect(body.me).toEqual({ userName: 'e2e-user', quotaRemain: 125_000, quotaUsed: 25_000, quotaRemainUsd: 0.25, quotaUsedUsd: 0.05 })
+    const tiny = takoFetch({ meData: { quota: { remain: 1, used: 0 } } })
+    const { svc: tinySvc } = service({ resolved: { value: KEY, source: 'file' }, fetch: tiny.fetchImpl })
+    expect((await (await tinySvc.handleStatus()).json()).me).toEqual({ quotaRemain: 1, quotaUsed: 0, quotaRemainUsd: 0.000_002, quotaUsedUsd: 0 })
+  })
+
+  it('adds no USD fields when /api/desktop/me answers without quota numbers', async () => {
+    const tako = takoFetch({ meData: { user: { id: '7', name: 'e2e-user' }, plan: { name: 'E2E Plan' } } })
+    const { svc } = service({ resolved: { value: KEY, source: 'file' }, fetch: tako.fetchImpl })
+    const body = await (await svc.handleStatus()).json()
+    expect(body.me).toEqual({ userName: 'e2e-user', planName: 'E2E Plan' })
   })
 
   it('caches the whoami answer per key: one fetch within the TTL, refetch after it or on a new key', async () => {

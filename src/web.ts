@@ -218,8 +218,27 @@ export function emptyCatalogState(): CatalogState {
   return { models: [], lastSyncAt: null, nextSyncAt: null }
 }
 
-/** The account fields the console page shows (`/api/desktop/me` view). */
-export type ConsoleIdentity = Pick<TakoIdentity, 'userName' | 'planName' | 'quotaRemain' | 'quotaUsed'>
+/**
+ * Tako's quota unit, exactly as the site itself converts: its public status
+ * (`GET /api/status`, no key) answers `quota_per_unit: 500000` together with
+ * `quota_display_type: 'USD'`, and the official docs page
+ * <https://tako.shiroha.tech/docs/account/balance> spells out
+ * 「500000 内部额度 = 1 美元」 — 500,000 internal points = 1 USD — with the
+ * console displaying that division. The `*Usd` fields below are it; the raw
+ * points stay alongside them.
+ */
+export const QUOTA_PER_UNIT = 500_000
+
+/**
+ * The account fields the console page shows: the raw `/api/desktop/me` view
+ * plus its USD conversion at the site's own rate.
+ */
+export type ConsoleIdentity = Pick<TakoIdentity, 'userName' | 'planName' | 'quotaRemain' | 'quotaUsed'> & {
+  /** `quotaRemain / QUOTA_PER_UNIT`; present exactly when {@link TakoIdentity.quotaRemain} is. */
+  quotaRemainUsd?: number
+  /** `quotaUsed / QUOTA_PER_UNIT`; present exactly when {@link TakoIdentity.quotaUsed} is. */
+  quotaUsedUsd?: number
+}
 
 /** How long a `whoami` answer stays fresh, so opening the panel does not hit Tako each time. */
 export const STATUS_CACHE_MS = 45_000
@@ -317,12 +336,21 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
   return { handleStatus, handleLogout, handleCatalog }
 }
 
-/** The `/api/desktop/me` fields the console shows; nothing else is forwarded. */
+/**
+ * The `/api/desktop/me` fields the console shows, plus the USD conversion of
+ * the quota points at the site's documented rate; nothing else is forwarded.
+ */
 function identityOf(identity: TakoIdentity): ConsoleIdentity {
   const picked: ConsoleIdentity = {}
   if (identity.userName !== undefined) picked.userName = identity.userName
   if (identity.planName !== undefined) picked.planName = identity.planName
-  if (identity.quotaRemain !== undefined) picked.quotaRemain = identity.quotaRemain
-  if (identity.quotaUsed !== undefined) picked.quotaUsed = identity.quotaUsed
+  if (identity.quotaRemain !== undefined) {
+    picked.quotaRemain = identity.quotaRemain
+    picked.quotaRemainUsd = identity.quotaRemain / QUOTA_PER_UNIT
+  }
+  if (identity.quotaUsed !== undefined) {
+    picked.quotaUsed = identity.quotaUsed
+    picked.quotaUsedUsd = identity.quotaUsed / QUOTA_PER_UNIT
+  }
   return picked
 }
