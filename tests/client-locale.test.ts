@@ -28,6 +28,7 @@ const EXPECTED_KEYS = [
   'quotaCard', 'quotaRemain', 'quotaUsed', 'quotaNeedsLogin', 'quotaUnavailable',
   'catalogCard', 'catalogModel', 'catalogContext', 'catalogVision', 'yes', 'no', 'catalogDefault', 'catalogEmpty',
   'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry',
+  'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'copy', 'copied', 'updateFailed',
 ]
 
 let row: ModuleRow | undefined

@@ -10,7 +10,7 @@
  * registers the full page `tako-console` in the `main` slot, and adds the
  * `sidebar.panellist` entry that opens it (same id, like the official plugin
  * manager panel). The panel talks to the plugin's host routes
- * (`api/tako.status|logout|catalog`) with relative fetches.
+ * (`api/tako.status|logout|catalog|update`) with relative fetches.
  *
  * All visible texts go through the dsh client's official i18n: `apply`
  * registers this namespace's zh/en dictionaries with the host's `ctx.locale`
@@ -32,6 +32,9 @@ window.__ModuleLoader__.load({
     const STATUS_ROUTE = 'api/tako.status'
     const LOGOUT_ROUTE = 'api/tako.logout'
     const CATALOG_ROUTE = 'api/tako.catalog'
+    const UPDATE_ROUTE = 'api/tako.update'
+    /** The command the update card offers: re-running the install upgrades the plugin. */
+    const UPGRADE_COMMAND = 'dsh plugin --profile web add dsh-tako'
     const PI_AI_NS = 'llm-pi-ai'
     const PROVIDER = 'tako'
     const PANEL_ID = 'tako-console'
@@ -88,6 +91,14 @@ window.__ModuleLoader__.load({
         refreshOnlyAtStartup: '只在启动时刷新',
         loadFailed: '加载失败',
         retry: '重试',
+        // update card
+        updateCard: '更新',
+        updateAvailable: '有新版本',
+        updateCommand: '升级命令（升级后重启 dsh 生效）:',
+        upToDate: '已是最新版本 {version}',
+        copy: '复制',
+        copied: '已复制',
+        updateFailed: '检查更新失败',
       },
       en: {
         signIn: 'Sign in to Tako with the browser',
@@ -134,6 +145,14 @@ window.__ModuleLoader__.load({
         refreshOnlyAtStartup: 'refreshed at startup only',
         loadFailed: 'Could not load',
         retry: 'Retry',
+        // update card
+        updateCard: 'Update',
+        updateAvailable: 'Update available:',
+        updateCommand: 'Upgrade command (restart dsh after upgrading):',
+        upToDate: 'Up to date: {version}',
+        copy: 'Copy',
+        copied: 'Copied',
+        updateFailed: 'Could not check for updates',
       },
     }
 
@@ -152,6 +171,7 @@ window.__ModuleLoader__.load({
       if (template === undefined) return key
       if (params === undefined || params === null) return template
       return template.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match)
+    }
     }
     /**
      * The namespace-bound translator used outside components (the sidebar
@@ -387,6 +407,73 @@ window.__ModuleLoader__.load({
       return Card({ name: 'account', title: t('accountCard'), children })
     }
 
+    /**
+     * The update card: the plugin cannot hot-update itself, so this compares
+     * the installed version with npm's latest (host route, cached server-side)
+     * and, when behind, offers the upgrade command with a copy button. It
+     * loads on its own and renders while pending, so it never blocks the
+     * other cards.
+     */
+    function UpdateCard(props) {
+      const t = props.t ?? fallbackT
+      const [update, setUpdate] = useState(undefined)
+      const [updateError, setUpdateError] = useState(undefined)
+      const [copied, setCopied] = useState(false)
+      const alive = useRef(true)
+      const commandText = useRef(undefined)
+      useEffect(() => () => { alive.current = false }, [])
+      useEffect(() => {
+        void (async () => {
+          try {
+            const next = await call('GET', UPDATE_ROUTE)
+            if (!alive.current) return
+            setUpdate(next)
+            setUpdateError(undefined)
+          } catch (error) {
+            if (alive.current) setUpdateError(String(error && error.message || error))
+          }
+        })()
+      }, [])
+
+      const copyCommand = async () => {
+        try {
+          await navigator.clipboard.writeText(UPGRADE_COMMAND)
+          setCopied(true)
+          return
+        } catch {}
+        // Not a secure context or the clipboard is blocked: select the text, so a manual copy still works.
+        const node = commandText.current
+        const selection = node === undefined || node === null ? null : window.getSelection()
+        if (selection === null || selection === undefined) return
+        const range = document.createRange()
+        range.selectNodeContents(node)
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+
+      const children = []
+      if (update === undefined) {
+        children.push(h('div', { key: 'x', role: 'status', style: muted }, updateError === undefined ? '…' : t('updateFailed')))
+      } else if (update.checkError !== undefined) {
+        children.push(h('div', { key: 'x', role: 'status', style: muted, title: String(update.checkError) }, t('updateFailed')))
+      } else if (update.upToDate) {
+        children.push(h('div', { key: 'x', role: 'status', style: muted }, t('upToDate', { version: update.current })))
+      } else {
+        children.push(h('div', { key: 'new', style: rowStyle },
+          h('span', null, t('updateAvailable')),
+          h('b', { style: mono }, update.latest)))
+        children.push(h('div', { key: 'hint', style: { ...muted, fontSize: '0.85em' } }, t('updateCommand')))
+        children.push(h('div', { key: 'cmd', style: rowStyle },
+          h('code', {
+            ref: commandText,
+            'data-testid': 'dsh-tako-upgrade-command',
+            style: { ...mono, whiteSpace: 'nowrap', overflowX: 'auto', padding: '4px 10px', border: '0.5px solid var(--dsw-alias-border-l2)', borderRadius: 'var(--dsw-radius-sm)', background: 'var(--dsw-alias-interactive-bg-hover)' },
+          }, UPGRADE_COMMAND),
+          h('button', { type: 'button', 'data-testid': 'dsh-tako-console-copy-upgrade', onClick: copyCommand, style: { ...buttonStyle, padding: '4px 10px' } }, copied ? t('copied') : t('copy'))))
+      }
+      return Card({ name: 'update', title: t('updateCard'), children })
+    }
+
     function QuotaCard(props) {
       const status = props.status
       const t = props.t ?? fallbackT
@@ -517,6 +604,7 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, style: quietButton }, t('retry'))))
       }
       children.push(AccountCard({ status, login, busyLogout, onLogout: logout, logoutNote, t }))
+      children.push(h(UpdateCard, { key: 'update', t }))
       children.push(QuotaCard({ status, t }))
       children.push(CatalogCard({ catalog, error: catalogError, t }))
       return h('div', {

@@ -707,7 +707,7 @@ await testCase('m', 'Web UI: client bundle served for the Models page; /api/tako
   }
 })
 
-await testCase('n', 'console routes: /api/tako.status + /api/tako.catalog + logout against the mock', async detail => {
+await testCase('n', 'console routes: /api/tako.status + /api/tako.catalog + /api/tako.update + logout against the mock', async detail => {
   const home = newHome('web-console')
   await pluginCmd(home, 'web', 'add', tgz)
   setPluginConfig(home, 'web', pluginConfig)
@@ -728,6 +728,13 @@ await testCase('n', 'console routes: /api/tako.status + /api/tako.catalog + logo
     const expected = await expectedModels()
     check(detail, JSON.stringify(catalog.models.map(model => model.id)) === JSON.stringify(expected.map(model => model.id)), `catalog lists the ${catalog.models.length} synced models in catalog order`)
     check(detail, typeof catalog.lastSyncAt === 'number' && catalog.nextSyncAt - catalog.lastSyncAt === 30 * 60_000, `catalog lastSyncAt -> nextSyncAt = ${catalog.nextSyncAt - catalog.lastSyncAt}ms (refreshIntervalMs default)`)
+    // Update route: the packed tarball's own version, then npm's verdict (or a graceful error when npm is unreachable).
+    const packedVersion = JSON.parse(readFileSync(join(work, 'tgz-extract/package/package.json'), 'utf8')).version
+    const upd = await api('GET', 'api/tako.update')
+    check(detail, upd.current === packedVersion, `update current=${JSON.stringify(upd.current)} equals the packed version ${packedVersion}`)
+    check(detail, (upd.upToDate === true && typeof upd.latest === 'string') || typeof upd.checkError === 'string', `update verdict -> ${JSON.stringify(upd)}`)
+    const updAgain = await api('GET', 'api/tako.update')
+    check(detail, JSON.stringify(updAgain) === JSON.stringify(upd), `a second update read answers the same -> ${JSON.stringify(updAgain)}`)
     // Sign in through the login route, then read the account back through the console status.
     const started = await api('POST', 'api/tako.login', { action: 'start' })
     check(detail, started.status === 'pending', `login start -> ${started.status}`)

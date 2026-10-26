@@ -21,7 +21,7 @@ import type { CatalogState } from './web.ts'
 
 export * from './catalog.ts'
 export { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
-export { LOGIN_ROUTE } from './web.ts'
+export { LOGIN_ROUTE, UPDATE_ROUTE } from './web.ts'
 export type { CatalogState } from './web.ts'
 
 /** Cordis plugin name. */
@@ -269,7 +269,7 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
 /**
  * Cordis entry: keep `providers.tako` in sync for the plugin's lifetime, and,
  * in a profile with the Web connection, serve the Models-page sign-in route
- * and the Tako console panel's status, logout and catalog routes.
+ * and the Tako console panel's status, logout, catalog and update routes.
  */
 export function apply(ctx: Context, config: Config): void {
   const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }

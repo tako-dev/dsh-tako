@@ -1,0 +1,139 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it, vi } from 'vitest'
+import { createUpdateService, pluginVersion, UPDATE_CACHE_MS, UPDATE_ERROR_CACHE_MS, UPDATE_ROUTE, type UpdateServiceOptions } from '../src/web.ts'
+
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: string }
+
+/**
+ * A fake npm registry answering the dist-tags document. The state can change
+ * between calls, so a test can let a check fail and then let it recover.
+ */
+function registryFetch(initial: { latest?: unknown, body?: unknown, status?: number, raw?: boolean, fail?: boolean, hang?: boolean } = {}) {
+  const state = { ...initial }
+  const urls: string[] = []
+  const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    urls.push(String(input instanceof Request ? input.url : input))
+    if (state.hang === true) {
+      return await new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal
+        if (signal === null || signal === undefined || signal.aborted) throw new Error('already aborted')
+        signal.addEventListener('abort', () => { reject(signal.reason) })
+      })
+    }
+    if (state.fail === true) throw new TypeError('fetch failed')
+    if (state.raw === true) return new Response('<not json>', { status: state.status ?? 200, headers: { 'content-type': 'application/json' } })
+    return Response.json(state.body ?? { latest: state.latest }, { status: state.status ?? 200 })
+  }) as unknown as typeof fetch
+  return { fetchImpl, urls, set: (patch: Partial<typeof state>) => { Object.assign(state, patch) } }
+}
+
+function service(overrides: Partial<UpdateServiceOptions> & { registry?: ReturnType<typeof registryFetch> } = {}) {
+  const { registry, ...rest } = overrides
+  let clock = 1_000
+  const logger = { info: vi.fn(), warn: vi.fn() }
+  const svc = createUpdateService({
+    logger,
+    currentVersion: '0.3.0',
+    fetch: (registry ?? registryFetch()).fetchImpl,
+    now: () => clock,
+    ...rest,
+  })
+  return { svc, logger, advance: (ms: number) => { clock += ms } }
+}
+
+describe('console route /api/tako.update', () => {
+  it('is registered under /api/tako.update', () => {
+    expect(UPDATE_ROUTE).toBe('/api/tako.update')
+  })
+
+  it('asks the official registry dist-tags — never a configured mirror — and reports a newer latest', async () => {
+    const registry = registryFetch({ latest: '0.4.0' })
+    const { svc, logger } = service({ registry })
+    const response = await svc.handleUpdate()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ current: '0.3.0', latest: '0.4.0', upToDate: false })
+    // The official registry is hardcoded: only the dist-tags document is fetched, not the packument.
+    expect(registry.urls).toEqual(['https://registry.npmjs.org/-/package/dsh-tako/dist-tags'])
+    expect(logger.info).toHaveBeenCalled()
+  })
+
+  it('reads an equal or older registry latest as up to date', async () => {
+    const equal = service({ registry: registryFetch({ latest: '0.3.0' }) })
+    expect(await (await equal.svc.handleUpdate()).json()).toEqual({ current: '0.3.0', latest: '0.3.0', upToDate: true })
+    const older = service({ registry: registryFetch({ latest: '0.2.9' }) })
+    expect(await (await older.svc.handleUpdate()).json()).toEqual({ current: '0.3.0', latest: '0.2.9', upToDate: true })
+  })
+
+  it('compares x.y.z numerically, not lexicographically', async () => {
+    const minor = service({ registry: registryFetch({ latest: '0.9.0' }), currentVersion: '0.10.0' })
+    expect(await (await minor.svc.handleUpdate()).json()).toMatchObject({ latest: '0.9.0', upToDate: true }) // lexicographic would call 0.10.0 "older" than 0.9.0
+    const patch = service({ registry: registryFetch({ latest: '0.3.10' }), currentVersion: '0.3.9' })
+    expect(await (await patch.svc.handleUpdate()).json()).toMatchObject({ latest: '0.3.10', upToDate: false }) // lexicographic would call 0.3.9 newer than 0.3.10
+  })
+
+  it('answers {current, checkError} with HTTP 200 — never 500 — when the registry is unreachable, unhealthy, or answers garbage', async () => {
+    const registries = [
+      registryFetch({ fail: true }),
+      registryFetch({ status: 500 }),
+      registryFetch({ status: 404, body: { error: 'not found' } }),
+      registryFetch({ body: {} }),
+      registryFetch({ body: { latest: '' } }),
+      registryFetch({ raw: true }),
+    ]
+    for (const registry of registries) {
+      const { svc, logger } = service({ registry })
+      const response = await svc.handleUpdate()
+      const body = await response.json() as Record<string, unknown>
+      expect(response.status, JSON.stringify(registry.urls)).toBe(200)
+      expect(body.current).toBe('0.3.0')
+      expect(typeof body.checkError).toBe('string')
+      expect(body.checkError as string).not.toBe('')
+      expect(body.latest).toBeUndefined()
+      expect(body.upToDate).toBeUndefined()
+      expect(logger.warn).toHaveBeenCalled()
+    }
+  })
+
+  it('gives up on a hanging registry after the timeout', async () => {
+    const { svc } = service({ registry: registryFetch({ hang: true }), timeoutMs: 25 })
+    const response = await svc.handleUpdate()
+    expect(response.status).toBe(200)
+    const body = await response.json() as Record<string, unknown>
+    expect(body.current).toBe('0.3.0')
+    expect(typeof body.checkError).toBe('string')
+  })
+
+  it('caches the answer for an hour: repeated opens hit the registry once', async () => {
+    const registry = registryFetch({ latest: '0.4.0' })
+    const { svc, advance } = service({ registry })
+    const first = await (await svc.handleUpdate()).json()
+    await svc.handleUpdate()
+    await svc.handleUpdate()
+    expect(registry.fetchImpl).toHaveBeenCalledTimes(1)
+    advance(UPDATE_CACHE_MS - 1)
+    await svc.handleUpdate()
+    expect(registry.fetchImpl).toHaveBeenCalledTimes(1) // still inside the TTL
+    advance(2)
+    expect(await (await svc.handleUpdate()).json()).toEqual(first)
+    expect(registry.fetchImpl).toHaveBeenCalledTimes(2) // TTL over: one fresh check
+  })
+
+  it('caches a failure only briefly, so a blip neither hammers the registry nor sticks for an hour', async () => {
+    const registry = registryFetch({ fail: true })
+    const { svc, advance } = service({ registry })
+    await svc.handleUpdate()
+    await svc.handleUpdate()
+    expect(registry.fetchImpl).toHaveBeenCalledTimes(1)
+    advance(UPDATE_ERROR_CACHE_MS - 1)
+    await svc.handleUpdate()
+    expect(registry.fetchImpl).toHaveBeenCalledTimes(1) // still inside the short error TTL
+    advance(2)
+    registry.set({ fail: false, latest: '0.4.0' })
+    expect(await (await svc.handleUpdate()).json()).toEqual({ current: '0.3.0', latest: '0.4.0', upToDate: false })
+    expect(registry.fetchImpl).toHaveBeenCalledTimes(2) // the check recovered
+  })
+
+  it('pluginVersion() reads the package.json that ships beside lib/', () => {
+    expect(pluginVersion()).toBe(manifest.version)
+  })
+})
