@@ -96,6 +96,8 @@ npx dsh-tako logout                   # 在 Tako 吊销这个 key，并从 dsh �
 
 面板数据来自插件注册的三个路由：`GET /api/tako.status`、`POST /api/tako.logout`、`GET /api/tako.catalog`，和 Web 界面同源、走 dsh 的浏览器登录围栏。目录尚未同步时模型卡显示空态而不是报错。
 
+界面语言跟随 dsh 客户端的语言设置：控制台三张卡、「设置 → 模型」登录卡片和侧栏名称的全部文案走 dsh 官方的 i18n 体系，在「设置 → 通用 → 语言」切换时即时变化。插件的词典注册在自己的 `dsh-tako` 命名空间；宿主还没有这套体系时（更老的 dsh），自动回退为按页面语言取中英文案，行为与旧版本一致。
+
 #### dsh 在远程服务器上
 
 Tako 授权后会把浏览器跳回 `http://127.0.0.1:<端口>/tako/callback`，也就是**运行浏览器的那台机器**的回环地址。dsh 在远程机器上、浏览器在本地时这一步到不了。可选做法：
@@ -257,6 +259,8 @@ The `web` profile's sidebar gains a Tako icon ("Tako Console") opening a page wi
 - **Model catalog**: what the plugin currently writes to `providers.tako` (after `include` / `exclude` / `pinned` / `overrides`) — model, context window, image input — with a countdown to the next directory refresh computed locally from `nextSyncAt` (no server polling).
 
 The panel reads three routes the plugin registers on the Web connection: `GET /api/tako.status`, `POST /api/tako.logout`, `GET /api/tako.catalog`, same origin and behind dsh's browser authentication fence. Before the first sync the catalog card shows an empty state instead of an error.
+
+The UI language follows the dsh client's language setting: every text on the three cards, the Settings → Models sign-in card, and the sidebar entry goes through dsh's official i18n and switches live with Settings → General → Language. The plugin's dictionaries are registered under its own `dsh-tako` namespace; on hosts without that system (older dsh) the texts fall back to picking Chinese or English from the page language, exactly as before.
 
 **Remote dsh**: Tako redirects the browser to `127.0.0.1:<port>` on the machine running the browser. When dsh runs on a remote host, either paste a key (Settings → Models or `TAKO_API_KEY`), or forward a fixed port: `ssh -L 53682:127.0.0.1:53682 user@remote`, then on the remote host `npx dsh-tako login --no-open --port 53682` and open the printed URL locally. The Web button only completes when the page is opened on the dsh host itself; on a remote address the card says so.
 
