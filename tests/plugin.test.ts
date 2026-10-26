@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Config as PluginConfig } from '../src/index.ts'
 import { apply, canonicalJson, checkCredential, Config, FALLBACK_MODELS, MISSING_KEY_HINT, normalizeOrigin, PI_AI_NS, routeProfile, start } from '../src/index.ts'
+import type { CatalogState } from '../src/web.ts'
 
 const fixtureText = readFileSync(new URL('./fixtures/pricing-2026-10-25.json', import.meta.url), 'utf8')
 
@@ -163,6 +164,24 @@ describe('sync', () => {
     await until(() => fake.mutate.mock.calls.length === 1)
     expect((fake.user().tako as { models: unknown }).models).toEqual(FALLBACK_MODELS)
     expect(fake.logger.warn).toHaveBeenCalledWith('Tako model directory refresh failed: %s', 'fetch failed')
+  })
+
+  it('records the synced catalog (and the fallback seed) for the console route', async () => {
+    const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+    const fake = fakeCtx()
+    stops.push(start(fake.ctx, config({ refreshIntervalMs: 30 * 60_000 }), { catalog, fetch: okFetch() }))
+    await until(() => fake.mutate.mock.calls.length === 1)
+    expect(catalog.models.length).toBe(35)
+    expect(catalog.lastSyncAt).toBeLessThanOrEqual(Date.now())
+    expect(catalog.nextSyncAt).toBeGreaterThan(catalog.lastSyncAt!)
+    expect(catalog.nextSyncAt! - catalog.lastSyncAt!).toBe(30 * 60_000)
+    // A failing directory with no stored route seeds the fallback and records it.
+    const seeded: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+    const down = fakeCtx()
+    stops.push(start(down.ctx, config(), { catalog: seeded, fetch: failFetch() }))
+    await until(() => down.mutate.mock.calls.length === 1)
+    expect(seeded.models).toEqual(FALLBACK_MODELS)
+    expect(seeded.nextSyncAt).toBeNull() // refreshIntervalMs 0 -> startup-only
   })
 
   it('keeps an existing route when the directory is down', async () => {

@@ -17,10 +17,12 @@ import type { CatalogOptions, TakoModel, TakoModelOverride, TakoPricingResponse 
 import { buildCatalog } from './catalog.ts'
 import { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
 import { applyWeb } from './web.ts'
+import type { CatalogState } from './web.ts'
 
 export * from './catalog.ts'
 export { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
 export { LOGIN_ROUTE } from './web.ts'
+export type { CatalogState } from './web.ts'
 
 /** Cordis plugin name. */
 export const name = 'dsh-tako'
@@ -150,6 +152,8 @@ export async function checkCredential(ctx: Context, config: Config): Promise<boo
 
 /** Optional seams for tests; production uses the global `fetch` and timers. */
 export interface SyncDeps {
+  /** Catalog state updated after each successful sync (the console route reads it). */
+  catalog?: CatalogState
   fetch?: typeof fetch
   /** Delay before re-checking for the `llm-pi-ai` section when it is not active yet. */
   sectionRetryMs?: number
@@ -196,6 +200,14 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
     logger.info('Tako route updated with %d models', models.length)
   }
 
+  /** Keep the console route's view of the catalog current after each sync. */
+  const record = (models: readonly TakoModel[]): void => {
+    if (deps.catalog === undefined) return
+    deps.catalog.models = models.map(model => ({ ...model }))
+    deps.catalog.lastSyncAt = Date.now()
+    deps.catalog.nextSyncAt = config.refreshIntervalMs > 0 ? deps.catalog.lastSyncAt + config.refreshIntervalMs : null
+  }
+
   const sync = async (attempt = 0): Promise<void> => {
     const signal = controller.signal
     let models: TakoModel[] | undefined
@@ -226,11 +238,15 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
           return
         }
         await write(section, models)
+        record(models)
         return
       }
       logger.warn('Tako model directory refresh failed: %s', fetchError instanceof Error ? fetchError.message : String(fetchError))
       // Keep the last stored list; only seed a route that does not exist yet.
-      if (section.value?.providers?.[PROVIDER] === undefined) await write(section, FALLBACK_MODELS)
+      if (section.value?.providers?.[PROVIDER] === undefined) {
+        await write(section, FALLBACK_MODELS)
+        record(FALLBACK_MODELS)
+      }
     } catch (error: unknown) {
       if (signal.aborted) return
       logger.warn('writing the Tako route failed: %s', error instanceof Error ? error.message : String(error))
@@ -252,9 +268,11 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
 
 /**
  * Cordis entry: keep `providers.tako` in sync for the plugin's lifetime, and,
- * in a profile with the Web connection, serve the Models-page sign-in route.
+ * in a profile with the Web connection, serve the Models-page sign-in route
+ * and the Tako console panel's status, logout and catalog routes.
  */
 export function apply(ctx: Context, config: Config): void {
-  ctx.effect(() => start(ctx, config))
-  applyWeb(ctx, config)
+  const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+  ctx.effect(() => start(ctx, config, { catalog }))
+  applyWeb(ctx, config, { catalog: () => catalog })
 }
