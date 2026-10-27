@@ -15,11 +15,13 @@ import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { CatalogOptions, TakoModel, TakoModelOverride, TakoPricingResponse } from './catalog.ts'
 import { buildCatalog, DEFAULT_REASONING_EFFORTS } from './catalog.ts'
+import { applySearch } from './search.ts'
 import { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
 import { applyWeb } from './web.ts'
 import type { CatalogState } from './web.ts'
 
 export * from './catalog.ts'
+export { applySearch, TAKO_SEARCH_PROVIDER_ID } from './search.ts'
 export { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
 export { LOGIN_ROUTE, UPDATE_ROUTE } from './web.ts'
 export type { CatalogState } from './web.ts'
@@ -274,9 +276,12 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
  * Cordis entry: keep `providers.tako` in sync for the plugin's lifetime, and,
  * in a profile with the Web connection, serve the Models-page sign-in route
  * and the Tako console panel's status, logout, catalog and update routes.
+ * A profile that also mounts `web` registers Tako as a search provider and
+ * pins it over the DeepSeek-official default when a Tako key is configured.
  */
 export function apply(ctx: Context, config: Config): void {
   const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
   ctx.effect(() => start(ctx, config, { catalog }))
   applyWeb(ctx, config, { catalog: () => catalog })
+  applySearch(ctx, config)
 }

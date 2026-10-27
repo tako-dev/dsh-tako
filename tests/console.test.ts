@@ -157,6 +157,23 @@ describe('console route /api/tako.logout', () => {
     expect(unset).toHaveBeenCalledExactlyOnceWith('TAKO_API_KEY')
   })
 
+  it('notifies onCredentialChange after unsetting a file-source key', async () => {
+    const onCredentialChange = vi.fn()
+    const { svc, unset } = service({ resolved: { value: KEY, source: 'file' }, onCredentialChange })
+    await svc.handleLogout()
+    expect(unset).toHaveBeenCalledExactlyOnceWith('TAKO_API_KEY')
+    expect(onCredentialChange).toHaveBeenCalledTimes(1)
+    expect(unset.mock.invocationCallOrder[0]!).toBeLessThan(onCredentialChange.mock.invocationCallOrder[0]!)
+  })
+
+  it('does not notify onCredentialChange for an env-sourced key', async () => {
+    const onCredentialChange = vi.fn()
+    const { svc, unset } = service({ resolved: { value: KEY, source: 'env' }, onCredentialChange })
+    await svc.handleLogout()
+    expect(unset).not.toHaveBeenCalled()
+    expect(onCredentialChange).not.toHaveBeenCalled()
+  })
+
   it('still removes the credential when the revoke call fails, and says so', async () => {
     const tako = takoFetch({ revokeFails: true })
     const { svc, unset, logger } = service({ resolved: { value: KEY, source: 'file' }, fetch: tako.fetchImpl })

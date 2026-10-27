@@ -272,6 +272,7 @@ describe('sync', () => {
       apply(fake.ctx, config())
       await until(() => fake.mutate.mock.calls.length === 1)
       expect(fake.inject).toHaveBeenCalledWith(['connection', 'credentials'], expect.any(Function))
+      expect(fake.inject).toHaveBeenCalledWith(['web', 'credentials'], expect.any(Function))
     } finally {
       globalThis.fetch = original
       fake.dispose()

@@ -19,6 +19,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { TakoModel } from './catalog.ts'
 import type { BrowserLoginHandle, BrowserLoginOptions, TakoIdentity } from './login.ts'
 import { defaultDeviceName, fetchMe, fetchUserQuota, maskKey, revokeKey, startBrowserLogin, TakoLoginError, type TakoPlanQuota } from './login.ts'
+import { refreshTakoSearchPin } from './search.ts'
 import { normalizeOrigin } from './shared.ts'
 import { createUpdateService, profileFromPluginPath, type PluginManagerLike } from './upgrade.ts'
 
@@ -81,6 +82,8 @@ export interface LoginServiceOptions {
   startLogin?: (options: BrowserLoginOptions) => Promise<BrowserLoginHandle>
   timeoutMs?: number
   fetch?: typeof fetch
+  /** After a key is stored, so search can pin the Tako provider. */
+  onCredentialChange?: () => void
 }
 
 const json = (body: unknown, status = 200): Response => Response.json(body, { status, headers: { 'cache-control': 'no-store' } })
@@ -104,6 +107,7 @@ export function createLoginService(options: LoginServiceOptions): { handle: (req
       deviceName: defaultDeviceName(),
       onGrant: async grant => {
         await credentials.set(options.apiKeyEnv as never, grant.key)
+        options.onCredentialChange?.()
       },
     }
     if (options.timeoutMs !== undefined) loginOptions.timeoutMs = options.timeoutMs
@@ -177,11 +181,17 @@ function pluginManagerOf(ctx: Context): PluginManagerLike | undefined {
 export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: string }, web: { catalog: () => CatalogState } = { catalog: () => emptyCatalogState() }): void {
   ctx.inject(['connection', 'credentials'], inner => {
     const connection = (inner as unknown as { connection: ConnectionLike }).connection
+    const onCredentialChange = (): void => {
+      void refreshTakoSearchPin(ctx, config).catch((error: unknown) => {
+        inner.logger.warn('could not refresh Tako search provider pin: %s', error instanceof Error ? error.message : String(error))
+      })
+    }
     const service = createLoginService({
       baseURL: config.baseURL,
       apiKeyEnv: config.apiKeyEnv,
       credentials: () => (inner as unknown as { credentials?: CredentialSetter }).credentials,
       logger: inner.logger,
+      onCredentialChange,
     })
     const consoleService = createConsoleService({
       baseURL: config.baseURL,
@@ -189,6 +199,7 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
       credentials: () => (inner as unknown as { credentials?: CredentialSetter & CredentialStore }).credentials,
       catalog: web.catalog,
       logger: inner.logger,
+      onCredentialChange,
     })
     const updateService = createUpdateService({
       logger: inner.logger,
@@ -293,6 +304,8 @@ export interface ConsoleServiceOptions {
   fetch?: typeof fetch
   statusCacheMs?: number
   now?: () => number
+  /** After a file-source key is unset, so search can restore the bundle default. */
+  onCredentialChange?: () => void
 }
 
 interface StatusCache {
@@ -380,6 +393,7 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
       options.logger.warn('Tako console: %s', warning)
     }
     await credentials.unset(options.apiKeyEnv)
+    options.onCredentialChange?.()
     return revoked
       ? json({ ok: true, action: 'revoked' })
       : json({ ok: true, action: 'removed', warning })

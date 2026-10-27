@@ -54,6 +54,17 @@ describe('Models-page sign-in route', () => {
     expect(logger.info).toHaveBeenCalled()
   })
 
+  it('notifies onCredentialChange after the key is stored', async () => {
+    const onCredentialChange = vi.fn()
+    const { svc, login, set } = service({ onCredentialChange })
+    await svc.handle(request('POST'))
+    await login.pending[0]!.resolve({ key: KEY, userName: 'alice' })
+    await tick()
+    expect(set).toHaveBeenCalledExactlyOnceWith('TAKO_API_KEY', KEY)
+    expect(onCredentialChange).toHaveBeenCalledTimes(1)
+    expect(set.mock.invocationCallOrder[0]!).toBeLessThan(onCredentialChange.mock.invocationCallOrder[0]!)
+  })
+
   it('reports errors with their code', async () => {
     const { svc, login, set } = service()
     const started = await (await svc.handle(request('POST', {}))).json() as { id: string }
