@@ -104,6 +104,27 @@ export async function startMockTako({ pricingFile }) {
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: true, data: { key, token_id: state.keys.get(key).id, name, user: { name: 'e2e-user' }, plan: { name: 'E2E Plan' } } }))
         return
       }
+      if (req.method === 'POST' && url.pathname === '/apiStats/api/get-key-id') {
+        const key = String(body?.apiKey ?? '')
+        const token = state.keys.get(key)
+        if (token === undefined) {
+          res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: false, error: 'Invalid key' }))
+          return
+        }
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ success: true, data: { id: '7' } }))
+        return
+      }
+      if (req.method === 'POST' && url.pathname === '/apiStats/api/user-quota') {
+        if (String(body?.apiId ?? '') !== '7') {
+          res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'apiId required' }))
+          return
+        }
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+          plan: { window_cost_limit: 200, window_minutes: 300, weekly_cost_limit: 930 },
+          usage: { windowCost: 12, weeklyCost: 80 },
+        }))
+        return
+      }
       if (req.method === 'GET' && url.pathname === '/api/desktop/me') {
         const token = state.keys.get(bearer(req))
         if (token === undefined) { res.writeHead(401, { 'content-type': 'application/json' }).end(JSON.stringify({ success: false, error: 'invalid_token', message: 'invalid token' })); return }

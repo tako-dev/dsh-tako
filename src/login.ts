@@ -303,7 +303,9 @@ export async function fetchUserQuota(origin: string, key: string, fetchImpl: typ
   catch { idBody = undefined }
   const id = nested(idBody?.data, 'id')
   if (idBody?.success !== true || (typeof id !== 'string' && typeof id !== 'number')) {
-    const reason = idBody?.error ?? idBody?.message ?? `HTTP ${idResponse.status}`
+    const reason = typeof idBody?.error === 'string' ? idBody.error
+      : typeof idBody?.message === 'string' ? idBody.message
+      : `HTTP ${idResponse.status}`
     throw new TakoLoginError('request-failed', `key-id failed: ${reason}`)
   }
   const quotaResponse = await fetchImpl(`${origin}/apiStats/api/user-quota`, {
