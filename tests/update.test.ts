@@ -1,9 +1,9 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { createUpdateService, pluginVersion, UPDATE_CACHE_MS, UPDATE_ERROR_CACHE_MS, UPDATE_ROUTE, type UpdateServiceOptions } from '../src/web.ts'
-import { NPM_REGISTRY, profileFromPluginPath, type SpawnAddRequest, type UpgradeResult } from '../src/upgrade.ts'
+import { desktopHostCli, locateDesktopHostCli, NPM_REGISTRY, profileFromPluginPath, type SpawnAddRequest, type UpgradeResult } from '../src/upgrade.ts'
 
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: string }
 
@@ -339,6 +339,125 @@ describe('POST /api/tako.update', () => {
     const secondArgs = spawnAdd.mock.calls.at(1)?.at(0)?.args.join(' ') ?? ''
     expect(firstArgs).toContain('--config.minimum-release-age=0')
     expect(secondArgs).not.toContain('minimum-release-age')
+  })
+
+  it('spawns desktop-host CLI from the host index.js sibling under Electron and does not call locateDsh', async () => {
+    const lib = join(mkdtempSync(join(tmpdir(), 'dsh-tako-host-')), 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib')
+    mkdirSync(lib, { recursive: true })
+    const indexJs = join(lib, 'index.js')
+    const cliJs = join(lib, 'cli.js')
+    writeFileSync(indexJs, '')
+    writeFileSync(cliJs, '')
+    const spawnAdd = vi.fn(async (_request: SpawnAddRequest) => ({ status: 0, stdout: '', stderr: '' }))
+    const locateDsh = vi.fn(() => ({ packageJson: '/opt/dsh/package.json', version: '1.0.0' }))
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      spawnAdd,
+      locateDsh,
+      execPath: '/Applications/DSH Tako.app/Contents/MacOS/DSH Tako',
+      electron: true,
+      argv: ['electron', indexJs, '/missing-runtime'],
+      env: {},
+      profile: () => ({ name: 'desktop' }),
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, skipped: false, via: 'cli', pendingRestart: true })
+    expect(locateDsh).not.toHaveBeenCalled()
+    expect(spawnAdd).toHaveBeenCalledTimes(1)
+    const spawned = spawnAdd.mock.calls.at(0)?.at(0)
+    expect(spawned).toBeDefined()
+    expect(spawned!.args[0]).toBe('--expose-internals')
+    expect(spawned!.args[1]).toBe(cliJs)
+    expect(spawned!.args.slice(2)).toEqual([
+      'plugin', '--profile', 'desktop', 'add',
+      '--registry=https://registry.npmjs.org/',
+      '--config.minimum-release-age=0',
+      'dsh-tako@0.4.0',
+    ])
+    expect(spawned!.args.some(arg => arg.includes('lib/bin.js'))).toBe(false)
+    expect(spawned!.env.ELECTRON_RUN_AS_NODE).toBe('1')
+  })
+
+  it('spawns desktop-host CLI from DSH_DESKTOP_DSH_DIR and does not call locateDsh', async () => {
+    const dshDir = mkdtempSync(join(tmpdir(), 'dsh-tako-dsh-dir-'))
+    const cliJs = desktopHostCli(dshDir)
+    mkdirSync(dirname(cliJs), { recursive: true })
+    writeFileSync(cliJs, '')
+    const spawnAdd = vi.fn(async (_request: SpawnAddRequest) => ({ status: 0, stdout: '', stderr: '' }))
+    const locateDsh = vi.fn(() => ({ packageJson: '/opt/dsh/package.json', version: '1.0.0' }))
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      spawnAdd,
+      locateDsh,
+      execPath: '/Applications/DSH Tako.app/Contents/MacOS/DSH Tako',
+      electron: true,
+      argv: ['electron'],
+      env: { DSH_DESKTOP_DSH_DIR: dshDir },
+      profile: () => ({ name: 'desktop' }),
+    })
+    const response = await svc.handleInstall()
+    expect(await response.json()).toMatchObject({ ok: true, via: 'cli' })
+    expect(locateDsh).not.toHaveBeenCalled()
+    const spawned = spawnAdd.mock.calls.at(0)?.at(0)
+    expect(spawned).toBeDefined()
+    expect(spawned!.args[0]).toBe('--expose-internals')
+    expect(spawned!.args[1]).toBe(cliJs)
+    expect(spawned!.args.slice(2, 6)).toEqual(['plugin', '--profile', 'desktop', 'add'])
+    expect(spawned!.args.some(arg => arg.includes('lib/bin.js'))).toBe(false)
+    expect(spawned!.env.ELECTRON_RUN_AS_NODE).toBe('1')
+  })
+
+  it('mentions desktop-host / DSH Tako when Electron cannot find the host CLI, and never spawns dsh/lib/bin.js', async () => {
+    const spawnAdd = vi.fn()
+    const locateDsh = vi.fn(() => ({ packageJson: '/opt/dsh/package.json', version: '1.0.0' }))
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      spawnAdd,
+      locateDsh,
+      electron: true,
+      argv: ['electron', '/no-such-host/index.js', '/no-such-runtime'],
+      env: {},
+      profile: () => ({ name: 'desktop' }),
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    const body = await response.json() as Record<string, unknown>
+    expect(body).toMatchObject({ ok: false, current: '0.3.0', latest: '0.4.0' })
+    const error = String(body.error)
+    expect(error).toMatch(/desktop-host/i)
+    expect(error).toMatch(/DSH Tako/)
+    expect(error).not.toContain('npm i -g @deepseek-ai/dsh')
+    expect(locateDsh).not.toHaveBeenCalled()
+    expect(spawnAdd).not.toHaveBeenCalled()
+  })
+})
+
+describe('locateDesktopHostCli', () => {
+  it('returns the first existing candidate: env dir, index.js sibling, then argv runtime dir', () => {
+    const dshDir = mkdtempSync(join(tmpdir(), 'dsh-tako-locate-env-'))
+    const envCli = desktopHostCli(dshDir)
+    mkdirSync(dirname(envCli), { recursive: true })
+    writeFileSync(envCli, '')
+
+    const hostLib = mkdtempSync(join(tmpdir(), 'dsh-tako-locate-host-'))
+    writeFileSync(join(hostLib, 'index.js'), '')
+    writeFileSync(join(hostLib, 'cli.js'), '')
+    const siblingCli = join(hostLib, 'cli.js')
+
+    const runtime = mkdtempSync(join(tmpdir(), 'dsh-tako-locate-runtime-'))
+    const runtimeCli = desktopHostCli(runtime)
+    mkdirSync(dirname(runtimeCli), { recursive: true })
+    writeFileSync(runtimeCli, '')
+
+    const argv = ['electron', join(hostLib, 'index.js'), runtime]
+    expect(desktopHostCli(dshDir)).toBe(envCli)
+    expect(locateDesktopHostCli({ DSH_DESKTOP_DSH_DIR: dshDir }, argv)).toBe(envCli)
+    expect(locateDesktopHostCli({ DSH_DESKTOP_DSH_DIR: '' }, argv)).toBe(siblingCli)
+    expect(locateDesktopHostCli({}, argv)).toBe(siblingCli)
+    expect(locateDesktopHostCli({}, ['electron', '/missing/index.js', runtime])).toBe(runtimeCli)
+    expect(locateDesktopHostCli({}, ['electron', '/missing/index.js', '/missing-runtime'])).toBeUndefined()
+    expect(locateDesktopHostCli({}, ['electron'])).toBeUndefined()
   })
 })
 

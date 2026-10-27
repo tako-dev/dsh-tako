@@ -6,9 +6,10 @@
  * Installation prefers the host `pluginManager.installBundle` service for a
  * first install. When `dsh-tako` is already in the profile, HMR hosts refuse
  * `installBundle` with `already-installed`; then we spawn `dsh plugin add`,
- * which is pnpm add in the profile directory (in-place upgrade). Electron
- * sets `ELECTRON_RUN_AS_NODE` so the desktop host CLI can run. Callers tell
- * the user to restart; the running plugin cannot hot-replace itself.
+ * which is pnpm add in the profile directory (in-place upgrade). Desktop
+ * Electron locates `dsh-desktop-host/lib/cli.js` (never `dsh/lib/bin.js`) and
+ * sets `ELECTRON_RUN_AS_NODE`. Official dsh still spawns `lib/bin.js`. Callers
+ * tell the user to restart; the running plugin cannot hot-replace itself.
  * @module dsh-tako/upgrade
  */
 
@@ -153,6 +154,10 @@ export interface RunUpgradeInput {
   timeoutMs?: number
   /** `--dsh` / `$DSH_TAKO_DSH` for {@link locateDsh}. */
   dsh?: string
+  /** Plugin-host `process.argv`; used to find desktop-host `cli.js`. */
+  argv?: readonly string[]
+  /** Electron host (DSH Tako). Default: `process.versions.electron` is set. */
+  electron?: boolean
 }
 
 export type UpgradeResult =
@@ -185,6 +190,29 @@ function pluginAddArgs(profile: string, latest: string, withAgeFlag: boolean): s
   if (withAgeFlag) flags.push(AGE_FLAG)
   return ['plugin', '--profile', profile, 'add', ...flags, `${PACKAGE_NAME}@${latest}`]
 }
+
+/** Packaged Host CLI. Do not spawn `dsh/lib/bin.js` from Electron. */
+export function desktopHostCli(dshDir: string): string {
+  return join(dshDir, 'node_modules', '@deepseek-ai', 'dsh-desktop-host', 'lib', 'cli.js')
+}
+
+/**
+ * Locate `dsh-desktop-host/lib/cli.js` from `$DSH_DESKTOP_DSH_DIR`, the host
+ * `index.js` sibling, or the runtime dir at `argv[2]`.
+ */
+export function locateDesktopHostCli(env: NodeJS.ProcessEnv = process.env, argv: readonly string[] = process.argv): string | undefined {
+  const candidates: string[] = []
+  const dshDir = env.DSH_DESKTOP_DSH_DIR
+  if (typeof dshDir === 'string' && dshDir !== '') candidates.push(desktopHostCli(dshDir))
+  if (typeof argv[1] === 'string') candidates.push(join(dirname(argv[1]), 'cli.js'))
+  if (typeof argv[2] === 'string') candidates.push(desktopHostCli(argv[2]))
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  return undefined
+}
+
+const DESKTOP_HOST_MISSING = 'could not find the DSH Tako desktop-host CLI (dsh-desktop-host/lib/cli.js). Restart DSH Tako, or set DSH_DESKTOP_DSH_DIR to the app runtime directory.'
 
 async function defaultSpawnAdd(request: SpawnAddRequest): Promise<SpawnAddResult> {
   return await new Promise<SpawnAddResult>((resolveSpawn, reject) => {
@@ -233,11 +261,14 @@ function installFailure(result: InstallBundleResult): string {
 /**
  * Install `dsh-tako@<latest>` into the profile. First install uses
  * `pluginManager`; an already-on-disk copy uses `dsh plugin add` (pnpm add).
+ * Desktop Electron spawns `dsh-desktop-host/lib/cli.js`; official dsh spawns
+ * `lib/bin.js`.
  */
 export async function runUpgrade(input: RunUpgradeInput): Promise<UpgradeResult> {
   const spec = `${PACKAGE_NAME}@${input.latest}`
   const env = { ...input.env ?? process.env }
-  if (process.versions.electron !== undefined && env.ELECTRON_RUN_AS_NODE === undefined) {
+  const electron = input.electron ?? (process.versions.electron !== undefined)
+  if (electron && env.ELECTRON_RUN_AS_NODE === undefined) {
     env.ELECTRON_RUN_AS_NODE = '1'
   }
   const readVer = input.readInstalledVersion ?? readInstalledVersion
@@ -266,19 +297,28 @@ export async function runUpgrade(input: RunUpgradeInput): Promise<UpgradeResult>
     }
   }
 
-  let install: DshInstall
-  try {
-    install = (input.locateDsh ?? locateDsh)(input.dsh, env)
-  } catch (error: unknown) {
-    return { ok: false, error: describeError(error) || 'could not find the dsh installation' }
-  }
-  const bin = join(dirname(install.packageJson), 'lib/bin.js')
   const spawnAdd = input.spawnAdd ?? defaultSpawnAdd
   const timeoutMs = input.timeoutMs ?? INSTALL_TIMEOUT_MS
   const execPath = input.execPath ?? process.execPath
+  const hostCli = locateDesktopHostCli(env, input.argv ?? process.argv)
+  let prefix: string[]
+  if (hostCli !== undefined) {
+    env.ELECTRON_RUN_AS_NODE = '1'
+    prefix = ['--expose-internals', hostCli]
+  } else if (electron) {
+    return { ok: false, error: DESKTOP_HOST_MISSING }
+  } else {
+    let install: DshInstall
+    try {
+      install = (input.locateDsh ?? locateDsh)(input.dsh, env)
+    } catch (error: unknown) {
+      return { ok: false, error: describeError(error) || 'could not find the dsh installation' }
+    }
+    prefix = [join(dirname(install.packageJson), 'lib/bin.js')]
+  }
   const runAdd = async (withAgeFlag: boolean): Promise<SpawnAddResult> => spawnAdd({
     execPath,
-    args: [bin, ...pluginAddArgs(input.profile.name, input.latest, withAgeFlag)],
+    args: [...prefix, ...pluginAddArgs(input.profile.name, input.latest, withAgeFlag)],
     env,
     timeoutMs,
   })
@@ -324,6 +364,8 @@ export interface UpdateServiceOptions {
   readInstalledVersion?: (profileDir: string) => string | undefined
   execPath?: string
   env?: NodeJS.ProcessEnv
+  argv?: readonly string[]
+  electron?: boolean
 }
 
 /**
@@ -409,6 +451,8 @@ export function createUpdateService(options: UpdateServiceOptions): { handleUpda
         readInstalledVersion: options.readInstalledVersion,
         execPath: options.execPath,
         env: options.env,
+        argv: options.argv,
+        electron: options.electron,
       })
       if (!result.ok) {
         options.logger.warn('dsh-tako update: install failed: %s', result.error)
