@@ -30,6 +30,24 @@ export interface TakoPricingResponse {
 /** Request modalities DSH's pi-ai routes accept. */
 export type Modality = 'text' | 'image'
 
+/** Reasoning levels the Models picker and composer may offer. */
+export type TakoReasoningLevel = 'off' | 'low' | 'high' | 'max'
+
+/**
+ * Selectable reasoning efforts for one model. `off: null` means the level is
+ * offered and dispatch omits the wire field — Tako rejects an explicit
+ * `reasoning_effort=off` on some routes, including deepseek-v4.1-flash.
+ */
+export type TakoReasoningEfforts = Partial<Record<TakoReasoningLevel, string | null>>
+
+/** Default levels attached to every catalog model Tako does not describe. */
+export const DEFAULT_REASONING_EFFORTS: TakoReasoningEfforts = {
+  off: null,
+  low: 'low',
+  high: 'high',
+  max: 'max',
+}
+
 /** A DSH pi-ai model profile, the shape stored under `providers.<route>.models`. */
 export interface TakoModel {
   id: string
@@ -37,6 +55,7 @@ export interface TakoModel {
   contextWindow?: number
   maxTokens?: number
   input?: Modality[]
+  reasoningEfforts?: false | TakoReasoningEfforts
 }
 
 /** Per-model fields a user may pin over the directory. */
@@ -122,6 +141,7 @@ export function toModel(model: TakoPricingModel): TakoModel {
     ...contextWindow === undefined ? {} : { contextWindow },
     ...maxTokens === undefined ? {} : { maxTokens },
     input: vision ? ['text', 'image'] : ['text'],
+    reasoningEfforts: { ...DEFAULT_REASONING_EFFORTS },
   }
 }
 

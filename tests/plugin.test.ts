@@ -112,8 +112,15 @@ describe('sync', () => {
     stops.push(start(fake.ctx, config(), { fetch: fetchImpl }))
     await until(() => fake.mutate.mock.calls.length === 1)
     expect(fetchImpl).toHaveBeenCalledWith('https://tako.shiroha.tech/api/pricing', expect.anything())
-    const route = fake.user().tako as ReturnType<typeof routeProfile> & { models: { id: string, contextWindow?: number }[] }
-    expect(route).toMatchObject({ displayName: 'Tako', api: 'openai-completions', baseURL: 'https://tako.shiroha.tech/v1', apiKeyEnv: 'TAKO_API_KEY', defaultContextWindow: 128000 })
+    const route = fake.user().tako as ReturnType<typeof routeProfile> & {
+      models: { id: string, contextWindow?: number, reasoningEfforts?: unknown }[]
+    }
+    expect(route).toMatchObject({
+      displayName: 'Tako', api: 'openai-completions', baseURL: 'https://tako.shiroha.tech/v1',
+      apiKeyEnv: 'TAKO_API_KEY', defaultContextWindow: 128000,
+      compat: { thinkingFormat: 'openai', supportsReasoningEffort: true },
+    })
+    expect(route.models.every(model => model.reasoningEfforts !== undefined)).toBe(true)
     expect(route.models).toHaveLength(35)
     expect(route.models.slice(0, 3).map(model => model.id)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto'])
     expect(route.models.find(model => model.id === 'gpt-6-sol')?.contextWindow).toBe(1_050_000)

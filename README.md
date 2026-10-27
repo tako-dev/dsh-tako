@@ -200,7 +200,7 @@ Tako 授权后会把浏览器跳回 `http://127.0.0.1:<端口>/tako/callback`，
 
 ### 限制
 
-- 能力信息只来自 Tako 的公开目录：只识别上下文窗口和图片输入。最大输出 token、推理等级等目录没有给出的能力用 dsh 的默认值，需要时用 `overrides` 修正。
+- 能力信息只来自 Tako 的公开目录：识别上下文窗口和图片输入。公开目录不标推理等级，插件给每个聊天模型自动加上 `off` / `low` / `high` / `max`（`off` 不发 `reasoning_effort`，避免部分路由拒收）。最大输出 token 仍用 dsh 默认值，需要时用 `overrides` 修正。
 - 所有模型都走 OpenAI 兼容的 `openai-completions` 协议。
 - 默认排除 Tako 限定 Claude Code 客户端的模型，因为 Tako 会拒绝来自 dsh 的调用。
 - 依赖 dsh 官方 `@deepseek-ai/dsh-llm-pi-ai` 的设置结构，在 dsh `0.2.1-rc.2` 上验证过；dsh 改动该结构时可能需要更新本插件。

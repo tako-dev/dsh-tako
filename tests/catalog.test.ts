@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { TakoModel, TakoPricingModel, TakoPricingResponse } from '../src/catalog.ts'
-import { buildCatalog, contextFromTags, isChatModel, parseTags, toModel } from '../src/catalog.ts'
+import { buildCatalog, contextFromTags, DEFAULT_REASONING_EFFORTS, isChatModel, parseTags, toModel } from '../src/catalog.ts'
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/pricing-2026-10-25.json', import.meta.url), 'utf8')) as TakoPricingResponse
 const data = fixture.data ?? []
@@ -60,6 +60,13 @@ describe('fixture catalog', () => {
     expect(byId(models, 'hy3')?.input).toEqual(['text'])
   })
 
+  it('attaches selectable reasoning levels to every chat model', () => {
+    expect(models.length).toBeGreaterThan(0)
+    for (const model of models) {
+      expect(model.reasoningEfforts).toEqual(DEFAULT_REASONING_EFFORTS)
+    }
+  })
+
   it('sorts alphabetically without pins', () => {
     expect(ids).toEqual([...ids].sort((a, b) => a.localeCompare(b)))
   })
@@ -111,7 +118,9 @@ describe('catalog options', () => {
 
   it('deduplicates repeated ids', () => {
     const card: TakoPricingModel = { model_name: 'dup', tags: '1M', supported_endpoint_types: ['openai'] }
-    expect(buildCatalog([card, { ...card, tags: '2M' }])).toEqual([{ id: 'dup', name: 'dup', contextWindow: 1_000_000, input: ['text'] }])
+    expect(buildCatalog([card, { ...card, tags: '2M' }])).toEqual([{
+      id: 'dup', name: 'dup', contextWindow: 1_000_000, input: ['text'], reasoningEfforts: DEFAULT_REASONING_EFFORTS,
+    }])
   })
 })
 
@@ -124,7 +133,10 @@ describe('structured fields', () => {
       max_output_tokens: 64_000,
       input_modalities: ['text'],
     })
-    expect(model).toEqual({ id: 'm', name: 'm', contextWindow: 400_000, maxTokens: 64_000, input: ['text'] })
+    expect(model).toEqual({
+      id: 'm', name: 'm', contextWindow: 400_000, maxTokens: 64_000, input: ['text'],
+      reasoningEfforts: DEFAULT_REASONING_EFFORTS,
+    })
     expect(toModel({ model_name: 'v', input_modalities: ['text', 'image'] }).input).toEqual(['text', 'image'])
   })
 

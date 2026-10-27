@@ -14,7 +14,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import type { CatalogOptions, TakoModel, TakoModelOverride, TakoPricingResponse } from './catalog.ts'
-import { buildCatalog } from './catalog.ts'
+import { buildCatalog, DEFAULT_REASONING_EFFORTS } from './catalog.ts'
 import { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
 import { applyWeb } from './web.ts'
 import type { CatalogState } from './web.ts'
@@ -37,8 +37,8 @@ export const PROVIDER = 'tako'
 
 /** Used only when the directory has never been reachable, so the route still appears. */
 export const FALLBACK_MODELS: TakoModel[] = [
-  { id: 'deepseek-v4.1-flash', name: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] },
-  { id: 'deepseek-v4-pro', name: 'deepseek-v4-pro', contextWindow: 1_000_000, input: ['text'] },
+  { id: 'deepseek-v4.1-flash', name: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'], reasoningEfforts: { ...DEFAULT_REASONING_EFFORTS } },
+  { id: 'deepseek-v4-pro', name: 'deepseek-v4-pro', contextWindow: 1_000_000, input: ['text'], reasoningEfforts: { ...DEFAULT_REASONING_EFFORTS } },
 ]
 
 /** Plugin configuration. */
@@ -91,6 +91,10 @@ export function routeProfile(config: Config, models: readonly TakoModel[]): Reco
     baseURL: `${normalizeOrigin(config.baseURL)}/v1`,
     apiKeyEnv: config.apiKeyEnv,
     defaultContextWindow: config.defaultContextWindow,
+    compat: {
+      thinkingFormat: 'openai',
+      supportsReasoningEffort: true,
+    },
     models: models.map(model => ({ ...model })),
   }
 }
