@@ -394,6 +394,7 @@ window.__ModuleLoader__.load({
         '.dsh-tako-body{display:flex;flex-direction:column;gap:10px;margin-top:8px}',
         '.dsh-tako-tentacle{display:block;width:100%;height:10px}',
         '.dsh-tako-stamps{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}',
+        '.dsh-tako-stamps-3{grid-template-columns:repeat(3,minmax(0,1fr))}',
         '.dsh-tako-stamp .n{font-variant-numeric:tabular-nums;font-size:22px;font-weight:500;line-height:28px}',
         '.dsh-tako-stamp .n small{font-size:13px;font-weight:400;color:var(--dsw-alias-label-tertiary)}',
         '.dsh-tako-footer{display:flex;align-items:center;gap:10px;width:100%;padding:6px 2px;border:none;background:transparent;color:inherit;text-align:left;cursor:pointer}',
@@ -615,6 +616,14 @@ window.__ModuleLoader__.load({
       return `${u} / ${fmtUsd(limit)}`
     }
 
+    /** Remaining share of a subscription window, as a compact percent. */
+    function remainingPercent(used, limit) {
+      if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) return '—'
+      const spent = typeof used === 'number' && Number.isFinite(used) ? used : 0
+      const share = Math.max(0, Math.min(1, (limit - spent) / limit))
+      return share.toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 0 })
+    }
+
     function TakoFooter(props) {
       const wide = props.wide === true
       const t = props.t ?? fallbackT
@@ -640,8 +649,10 @@ window.__ModuleLoader__.load({
       if (status === undefined) body = h('span', { className: 'k' }, '…')
       else if (!configured) body = h('span', { className: 'frac dsh-tako-ink' }, t('signIn'))
       else if (onPlan) body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
-        h('span', null, h('span', { className: 'k' }, windowLabel(plan, t) + ' '), h('span', { className: 'frac' }, fracUsd(plan.windowCost, plan.windowCostLimit))),
-        h('span', null, h('span', { className: 'k' }, t('weeklyShort') + ' '), h('span', { className: 'frac' }, fracUsd(plan.weeklyCost, plan.weeklyCostLimit))))
+        h('span', { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
+          h('span', null, h('span', { className: 'k' }, windowLabel(plan, t) + ' '), h('span', { className: 'frac' }, remainingPercent(plan.windowCost, plan.windowCostLimit))),
+          h('span', null, h('span', { className: 'k' }, t('weeklyShort') + ' '), h('span', { className: 'frac' }, remainingPercent(plan.weeklyCost, plan.weeklyCostLimit)))),
+        h('span', null, h('span', { className: 'k' }, t('walletBalance') + ' '), h('span', { className: 'frac dsh-tako-ink' }, remain || '—')))
       else body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
         h('span', { className: 'k' }, t('walletBalance')),
         h('span', { className: 'frac dsh-tako-ink' }, remain || '—'))
@@ -668,17 +679,15 @@ window.__ModuleLoader__.load({
       if (!configured) {
         children.push(h('div', { key: 'x', style: muted }, status === undefined ? '…' : t('quotaNeedsLogin')))
       } else if (onPlan) {
-        const stamp = (key, label, used, limit) => h('div', { key, className: 'dsh-tako-stamp' },
+        const remainUsd = status.me?.quotaRemainUsd
+        const stamp = (key, label, value, hint) => h('div', { key, className: 'dsh-tako-stamp' },
           h('div', { className: 'dsh-tako-kicker' }, label),
-          h('div', { className: 'n', 'data-testid': `dsh-tako-quota-${key}` },
-            fracUsd(used, limit)))
-        children.push(h('div', { key: 'stamps', className: 'dsh-tako-stamps' },
-          stamp('window', windowLabel(plan, t), plan.windowCost, plan.windowCostLimit),
-          stamp('week', t('weeklyShort'), plan.weeklyCost, plan.weeklyCostLimit)))
-        if (typeof status.me?.quotaRemainUsd === 'number') {
-          children.push(h('div', { key: 'wallet', style: { ...muted, fontSize: '12px' } },
-            `${t('walletBalance')} ${fmtUsd(status.me.quotaRemainUsd)}`))
-        }
+          h('div', { className: 'n', 'data-testid': `dsh-tako-quota-${key}` }, value),
+          hint === undefined ? null : h('div', { style: { ...muted, fontSize: '12px' } }, hint))
+        children.push(h('div', { key: 'stamps', className: 'dsh-tako-stamps dsh-tako-stamps-3' },
+          stamp('window', windowLabel(plan, t), remainingPercent(plan.windowCost, plan.windowCostLimit), fracUsd(plan.windowCost, plan.windowCostLimit)),
+          stamp('week', t('weeklyShort'), remainingPercent(plan.weeklyCost, plan.weeklyCostLimit), fracUsd(plan.weeklyCost, plan.weeklyCostLimit)),
+          stamp('remain', t('walletBalance'), typeof remainUsd === 'number' ? fmtUsd(remainUsd) : '—')))
         if (status.planError) {
           children.push(h('div', { key: 'pe', role: 'status', style: { ...muted, fontSize: '12px' } }, status.planError))
         }
