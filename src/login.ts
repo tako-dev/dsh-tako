@@ -263,6 +263,83 @@ export async function fetchMe(origin: string, key: string, fetchImpl: typeof fet
   return identity
 }
 
+/** Subscription windows from `POST /apiStats/api/user-quota`. Amounts are USD. */
+export interface TakoPlanQuota {
+  windowMinutes?: number
+  windowCost?: number
+  windowCostLimit?: number
+  weeklyCost?: number
+  weeklyCostLimit?: number
+  dailyCost?: number
+  dailyCostLimit?: number
+}
+
+function finite(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function pickNum(record: Record<string, unknown> | undefined, ...keys: string[]): number | undefined {
+  if (record === undefined) return undefined
+  for (const key of keys) {
+    const value = finite(record[key])
+    if (value !== undefined) return value
+  }
+  return undefined
+}
+
+/**
+ * Plan 5h/weekly windows. Wallet remain on `/api/desktop/me` is a different
+ * number; this is the subscription quota the site itself shows.
+ */
+export async function fetchUserQuota(origin: string, key: string, fetchImpl: typeof fetch = fetch): Promise<TakoPlanQuota | null> {
+  const idResponse = await fetchImpl(`${origin}/apiStats/api/get-key-id`, {
+    method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ apiKey: key }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  let idBody: Envelope | undefined
+  try { idBody = await idResponse.json() as Envelope }
+  catch { idBody = undefined }
+  const id = nested(idBody?.data, 'id')
+  if (idBody?.success !== true || (typeof id !== 'string' && typeof id !== 'number')) {
+    const reason = idBody?.error ?? idBody?.message ?? `HTTP ${idResponse.status}`
+    throw new TakoLoginError('request-failed', `key-id failed: ${reason}`)
+  }
+  const quotaResponse = await fetchImpl(`${origin}/apiStats/api/user-quota`, {
+    method: 'POST',
+    headers: { accept: 'application/json', 'content-type': 'application/json' },
+    body: JSON.stringify({ apiId: String(id) }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  let raw: Record<string, unknown>
+  try { raw = await quotaResponse.json() as Record<string, unknown> }
+  catch { throw new TakoLoginError('request-failed', `user-quota failed: HTTP ${quotaResponse.status}`) }
+  if (!quotaResponse.ok) throw new TakoLoginError('request-failed', `user-quota failed: HTTP ${quotaResponse.status}`)
+  const plan = isRecord(raw.plan) ? raw.plan : undefined
+  const usage = isRecord(raw.usage) ? raw.usage : undefined
+  const out: TakoPlanQuota = {}
+  const set = (field: keyof TakoPlanQuota, value: number | undefined): void => { if (value !== undefined) out[field] = value }
+  set('windowMinutes', pickNum(plan, 'window_minutes', 'windowMinutes'))
+  set('windowCostLimit', pickNum(plan, 'window_cost_limit', 'windowCostLimit'))
+  set('weeklyCostLimit', pickNum(plan, 'weekly_cost_limit', 'weeklyCostLimit'))
+  set('dailyCostLimit', pickNum(plan, 'daily_cost_limit', 'dailyCostLimit'))
+  set('windowCost', pickNum(usage, 'windowCost', 'window_cost'))
+  set('weeklyCost', pickNum(usage, 'weeklyCost', 'weekly_cost'))
+  set('dailyCost', pickNum(usage, 'dailyCost', 'daily_cost'))
+  return Object.keys(out).length === 0 ? null : out
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** True when the subscription actually has a 5h or weekly window. */
+export function hasPlanQuota(plan: TakoPlanQuota | null | undefined): boolean {
+  if (plan === null || plan === undefined) return false
+  return (plan.windowCostLimit ?? 0) > 0 || (plan.weeklyCostLimit ?? 0) > 0
+}
+
 /** `POST /api/desktop/revoke` with the key as Bearer: deletes that key server-side. */
 export async function revokeKey(origin: string, key: string, fetchImpl: typeof fetch = fetch): Promise<void> {
   const response = await fetchImpl(`${origin}/api/desktop/revoke`, {

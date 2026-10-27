@@ -31,7 +31,7 @@ const EXPECTED_KEYS = [
   'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry',
   'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'copy', 'copied', 'updateFailed',
   'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
-  'footerRemain', 'footerUsed',
+  'footerRemain', 'footerUsed', 'windowHours', 'weeklyShort', 'walletBalance', 'planWindows',
 ]
 
 let row: ModuleRow | undefined

@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { TakoModel } from './catalog.ts'
 import type { BrowserLoginHandle, BrowserLoginOptions, TakoIdentity } from './login.ts'
-import { defaultDeviceName, fetchMe, maskKey, revokeKey, startBrowserLogin, TakoLoginError } from './login.ts'
+import { defaultDeviceName, fetchMe, fetchUserQuota, maskKey, revokeKey, startBrowserLogin, TakoLoginError, type TakoPlanQuota } from './login.ts'
 import { normalizeOrigin } from './shared.ts'
 import { createUpdateService, profileFromPluginPath, type PluginManagerLike } from './upgrade.ts'
 
@@ -278,6 +278,8 @@ export type ConsoleIdentity = Pick<TakoIdentity, 'userName' | 'planName' | 'quot
   quotaUsedUsd?: number
 }
 
+export type { TakoPlanQuota }
+
 /** How long a `whoami` answer stays fresh, so opening the panel does not hit Tako each time. */
 export const STATUS_CACHE_MS = 45_000
 
@@ -298,6 +300,8 @@ interface StatusCache {
   at: number
   me: ConsoleIdentity | null
   meError: string | undefined
+  plan: TakoPlanQuota | null
+  planError: string | undefined
 }
 
 /**
@@ -324,17 +328,32 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     const maskedKey = maskKey(current.value)
     // The key value itself is deliberately dropped here; only the mask leaves.
     if (cache !== undefined && cache.maskedKey === maskedKey && now() - cache.at < cacheMs) {
-      return json({ configured: true, maskedKey, credential: options.apiKeyEnv, me: cache.me, ...(cache.meError === undefined ? {} : { meError: cache.meError }) })
+      return json({
+        configured: true, maskedKey, credential: options.apiKeyEnv, me: cache.me, plan: cache.plan,
+        ...(cache.meError === undefined ? {} : { meError: cache.meError }),
+        ...(cache.planError === undefined ? {} : { planError: cache.planError }),
+      })
     }
     let me: ConsoleIdentity | null = null
     let meError: string | undefined
+    let plan: TakoPlanQuota | null = null
+    let planError: string | undefined
     try {
       me = identityOf(await fetchMe(origin, current.value, options.fetch))
     } catch (error: unknown) {
       meError = error instanceof Error ? error.message : String(error)
     }
-    cache = { maskedKey, at: now(), me, meError }
-    return json({ configured: true, maskedKey, credential: options.apiKeyEnv, me, ...(meError === undefined ? {} : { meError }) })
+    try {
+      plan = await fetchUserQuota(origin, current.value, options.fetch)
+    } catch (error: unknown) {
+      planError = error instanceof Error ? error.message : String(error)
+    }
+    cache = { maskedKey, at: now(), me, meError, plan, planError }
+    return json({
+      configured: true, maskedKey, credential: options.apiKeyEnv, me, plan,
+      ...(meError === undefined ? {} : { meError }),
+      ...(planError === undefined ? {} : { planError }),
+    })
   }
 
   const handleLogout = async (): Promise<Response> => {

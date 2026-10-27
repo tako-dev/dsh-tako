@@ -22,6 +22,15 @@ function takoFetch(options: { meFails?: boolean, meStatus?: number, revokeFails?
       if (options.meFails === true) return Response.json({ success: false, error: 'invalid_token', message: 'invalid token' }, { status: 401 })
       return Response.json({ success: true, data: options.meData ?? ME_DATA })
     }
+    if (url.endsWith('/apiStats/api/get-key-id')) {
+      return Response.json({ success: true, data: { id: '7' } })
+    }
+    if (url.endsWith('/apiStats/api/user-quota')) {
+      return Response.json({
+        plan: { window_cost_limit: 200, window_minutes: 300, weekly_cost_limit: 930 },
+        usage: { windowCost: 12, weeklyCost: 80 },
+      })
+    }
     if (url.endsWith('/api/desktop/revoke')) {
       if (options.revokeFails === true) return Response.json({ success: false, error: 'boom', message: 'revoke refused' }, { status: 200 })
       revokedWith.push(String((init?.headers as Record<string, string>).authorization))
@@ -79,6 +88,10 @@ describe('console route /api/tako.status', () => {
         quotaRemainUsd: 2,
         quotaUsedUsd: 0.5,
       },
+      plan: {
+        windowMinutes: 300, windowCostLimit: 200, weeklyCostLimit: 930,
+        windowCost: 12, weeklyCost: 80,
+      },
     })
     expect(JSON.stringify(body)).not.toContain(KEY)
   })
@@ -89,6 +102,10 @@ describe('console route /api/tako.status', () => {
     const { svc } = service({ resolved: { value: KEY, source: 'file' }, fetch: tako.fetchImpl })
     const body = await (await svc.handleStatus()).json()
     expect(body.me).toEqual({ userName: 'e2e-user', quotaRemain: 125_000, quotaUsed: 25_000, quotaRemainUsd: 0.25, quotaUsedUsd: 0.05 })
+    expect(body.plan).toEqual({
+      windowMinutes: 300, windowCostLimit: 200, weeklyCostLimit: 930,
+      windowCost: 12, weeklyCost: 80,
+    })
     const tiny = takoFetch({ meData: { quota: { remain: 1, used: 0 } } })
     const { svc: tinySvc } = service({ resolved: { value: KEY, source: 'file' }, fetch: tiny.fetchImpl })
     expect((await (await tinySvc.handleStatus()).json()).me).toEqual({ quotaRemain: 1, quotaUsed: 0, quotaRemainUsd: 0.000_002, quotaUsedUsd: 0 })
@@ -99,23 +116,24 @@ describe('console route /api/tako.status', () => {
     const { svc } = service({ resolved: { value: KEY, source: 'file' }, fetch: tako.fetchImpl })
     const body = await (await svc.handleStatus()).json()
     expect(body.me).toEqual({ userName: 'e2e-user', planName: 'E2E Plan' })
+    expect(body.plan.windowCostLimit).toBe(200)
   })
 
   it('caches the whoami answer per key: one fetch within the TTL, refetch after it or on a new key', async () => {
     const { svc, tako, resolve, advance } = service({ resolved: { value: KEY, source: 'file' } })
     await svc.handleStatus()
     await svc.handleStatus()
-    expect(tako.fetchImpl).toHaveBeenCalledTimes(1)
+    expect(tako.fetchImpl).toHaveBeenCalledTimes(3) // me + get-key-id + user-quota
     advance(44_000)
     await svc.handleStatus()
-    expect(tako.fetchImpl).toHaveBeenCalledTimes(1) // still fresh
+    expect(tako.fetchImpl).toHaveBeenCalledTimes(3) // still fresh
     advance(2_000)
     await svc.handleStatus()
-    expect(tako.fetchImpl).toHaveBeenCalledTimes(2) // TTL over
+    expect(tako.fetchImpl).toHaveBeenCalledTimes(6) // TTL over
     resolve.mockResolvedValue({ value: 'cr_0099887766554433210z', source: 'file' })
     advance(1_000)
     const body = await (await svc.handleStatus()).json()
-    expect(tako.fetchImpl).toHaveBeenCalledTimes(3) // a different key bypasses the cache
+    expect(tako.fetchImpl).toHaveBeenCalledTimes(9) // a different key bypasses the cache
     expect(body.maskedKey).toBe('cr_****210z')
   })
 

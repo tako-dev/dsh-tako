@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLoginHandle, TakoGrant } from '../src/login.ts'
 import {
   buildAuthorizeUrl, CALLBACK_PATH, CLIENT_ID, createPkce, createState, defaultDeviceName, exchangeCode, fetchMe,
-  maskKey, parseCallback, renderCallbackPage, revokeKey, s256, sanitizeDeviceName, startBrowserLogin, TakoLoginError,
+  fetchUserQuota, maskKey, parseCallback, renderCallbackPage, revokeKey, s256, sanitizeDeviceName, startBrowserLogin, TakoLoginError,
 } from '../src/login.ts'
 
 const ORIGIN = 'https://tako.test'
@@ -178,6 +178,29 @@ describe('token endpoint', () => {
     ])
     const unauthorized = vi.fn(async () => jsonResponse({ success: false, error: 'invalid_token', message: 'invalid token' }, 401)) as unknown as typeof fetch
     await expect(fetchMe(ORIGIN, KEY, unauthorized)).rejects.toThrow('whoami failed: invalid_token (invalid token)')
+  })
+
+  it('reads 5h and weekly windows from user-quota, not the wallet remain on /me', async () => {
+    const impl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/apiStats/api/get-key-id')) {
+        expect(init?.method).toBe('POST')
+        expect(JSON.parse(String(init?.body)).apiKey).toBe(KEY)
+        return jsonResponse({ success: true, data: { id: '7' } })
+      }
+      if (url.endsWith('/apiStats/api/user-quota')) {
+        expect(JSON.parse(String(init?.body)).apiId).toBe('7')
+        return jsonResponse({
+          plan: { window_cost_limit: 200, window_minutes: 300, weekly_cost_limit: 930 },
+          usage: { windowCost: 12.5, weeklyCost: 80 },
+        })
+      }
+      throw new Error(url)
+    }) as unknown as typeof fetch
+    expect(await fetchUserQuota(ORIGIN, KEY, impl)).toEqual({
+      windowMinutes: 300, windowCostLimit: 200, weeklyCostLimit: 930,
+      windowCost: 12.5, weeklyCost: 80,
+    })
   })
 })
 

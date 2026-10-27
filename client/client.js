@@ -109,6 +109,10 @@ window.__ModuleLoader__.load({
         updateInstallFailed: '更新失败',
         footerRemain: '剩余',
         footerUsed: '已用',
+        windowHours: '{hours}h',
+        weeklyShort: '本周',
+        walletBalance: '钱包',
+        planWindows: '套餐额度',
       },
       en: {
         signIn: 'Sign in to Tako with the browser',
@@ -173,6 +177,10 @@ window.__ModuleLoader__.load({
         updateInstallFailed: 'Update failed',
         footerRemain: 'Left',
         footerUsed: 'Used',
+        windowHours: '{hours}h',
+        weeklyShort: 'Week',
+        walletBalance: 'Wallet',
+        planWindows: 'Plan windows',
       },
     }
 
@@ -332,47 +340,68 @@ window.__ModuleLoader__.load({
         'data-testid': 'dsh-tako-mark',
         style: { display: 'block', flex: 'none', borderRadius: 8 },
       },
-        h('rect', { width: 24, height: 24, rx: 8, fill: '#F26D5B' }),
+        h('rect', { width: 24, height: 24, rx: 6, fill: '#c45c3e' }),
         h('path', {
-          fill: '#fff',
+          fill: '#f4eee6',
           d: 'M6.75 11.25C6.75 8.35 9.17 6 12 6s5.25 2.35 5.25 5.25v2.1c0 .58-.47 1.05-1.05 1.05h-.3v2.1c0 .62-.5 1.12-1.12 1.12-.62 0-1.12-.5-1.12-1.12v-1.1h-1.32v1.1c0 .62-.5 1.12-1.12 1.12-.62 0-1.12-.5-1.12-1.12v-1.1h-1.32v1.1c0 .62-.5 1.12-1.12 1.12-.62 0-1.12-.5-1.12-1.12v-2.1h-.3c-.58 0-1.05-.47-1.05-1.05v-2.1Z',
         }),
-        h('circle', { cx: 10, cy: 11, r: 0.9, fill: '#F26D5B' }),
-        h('circle', { cx: 14, cy: 11, r: 0.9, fill: '#F26D5B' }))
+        h('circle', { cx: 10, cy: 11, r: 0.9, fill: '#c45c3e' }),
+        h('circle', { cx: 14, cy: 11, r: 0.9, fill: '#c45c3e' }))
     }
 
     function TakoPanelIcon(props) {
       return TakoMark(props.size || 18)
     }
 
-    const mono = { fontFamily: 'var(--ds-font-family-code, ui-monospace, monospace)', fontSize: '0.9em' }
+    const CLAY = '#c45c3e'
+    const BONE = '#ddd4c6'
+    const mono = { fontFamily: 'ui-monospace, "IBM Plex Mono", monospace', fontSize: '0.9em' }
     const rowStyle = { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }
     const buttonStyle = {
-      font: 'inherit', padding: '4px 12px', borderRadius: '6px', border: '1px solid currentColor',
-      background: 'transparent', color: 'inherit', cursor: 'pointer',
+      font: 'inherit', padding: '2px 0', border: 'none', borderBottom: `1px solid ${CLAY}`,
+      borderRadius: 0, background: 'transparent', color: 'inherit', cursor: 'pointer',
     }
     const quietButton = {
-      font: 'inherit', padding: '4px 8px', border: 'none', background: 'transparent',
+      font: 'inherit', padding: '2px 0', border: 'none', background: 'transparent',
       color: 'var(--dsw-alias-label-secondary)', textDecoration: 'underline', cursor: 'pointer',
     }
     const muted = { color: 'var(--dsw-alias-label-tertiary)' }
 
+    function Tentacle() {
+      return h('svg', { className: 'dsh-tako-tentacle', viewBox: '0 0 320 8', fill: 'none', 'aria-hidden': true },
+        h('path', { d: 'M0 4 C40 8 80 0 120 4 S200 8 240 3 S280 0 320 5', stroke: CLAY, strokeWidth: '1.2', strokeLinecap: 'round' }))
+    }
+
     function Card(props) {
-      return h('section', {
-        'data-dsh-tako-card': props.name,
-        style: {
-          border: '0.5px solid var(--dsw-alias-border-l2)',
-          borderRadius: 'var(--dsw-radius-lg)',
-          background: 'var(--dsw-alias-bg-layer-1)',
-          padding: '14px 18px 16px',
-          marginBottom: '14px',
-          display: 'flex', flexDirection: 'column', gap: '10px',
-        },
-      },
-        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' } },
-          h('h2', { style: { margin: 0, fontSize: '15px', fontWeight: 500, lineHeight: '22px' } }, props.title),
-          props.extra === undefined ? null : h('div', { style: { ...muted, fontSize: '12px' } }, props.extra)),
-        props.children)
+      return h('section', { 'data-dsh-tako-card': props.name, className: 'dsh-tako-section' },
+        h('div', { className: 'dsh-tako-kicker' },
+          props.title,
+          props.extra === undefined ? null : h('span', { className: 'dsh-tako-extra' }, props.extra)),
+        h('div', { className: 'dsh-tako-body' }, props.children))
+    }
+
+    function ensureTakoTheme() {
+      if (typeof document.getElementById !== 'function') return
+      if (document.getElementById('dsh-tako-theme') !== null) return
+      const style = document.createElement('style')
+      style.id = 'dsh-tako-theme'
+      style.textContent = [
+        '.dsh-tako-sheet{display:flex;flex-direction:column;gap:22px;max-width:720px;margin:0 auto;padding:28px 24px 56px}',
+        '.dsh-tako-head{display:flex;align-items:center;gap:12px}',
+        '.dsh-tako-head h1{margin:0;font-size:22px;font-weight:500;letter-spacing:0.04em}',
+        '.dsh-tako-kicker{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary)}',
+        '.dsh-tako-extra{letter-spacing:0;text-transform:none;font-size:12px}',
+        '.dsh-tako-body{display:flex;flex-direction:column;gap:10px;margin-top:8px}',
+        '.dsh-tako-tentacle{display:block;width:100%;height:10px}',
+        '.dsh-tako-stamps{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}',
+        '.dsh-tako-stamp .n{font-variant-numeric:tabular-nums;font-size:22px;font-weight:500;line-height:28px}',
+        '.dsh-tako-stamp .n small{font-size:13px;font-weight:400;color:var(--dsw-alias-label-tertiary)}',
+        '.dsh-tako-footer{display:flex;align-items:center;gap:10px;width:100%;padding:6px 2px;border:none;background:transparent;color:inherit;text-align:left;cursor:pointer}',
+        '.dsh-tako-footer .frac{font-variant-numeric:tabular-nums;font-size:13px;font-weight:500}',
+        '.dsh-tako-footer .k{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary)}',
+        '.dsh-tako-ink{color:' + CLAY + '}',
+      ].join('')
+      document.head.appendChild(style)
     }
 
     const fmtNumber = value => (typeof value === 'number' ? value.toLocaleString('en-US') : '—')
@@ -542,20 +571,7 @@ window.__ModuleLoader__.load({
       return Card({ name: 'update', title: t('updateCard'), children })
     }
 
-    /**
-     * The site's own palette for the quota bar: Tako's stylesheet defines
-     * `--primary: #3ea4ec` for light and `#0e72bc` under `.dark` (verified on
-     * https://tako.shiroha.tech). dsh signals dark with `body[data-ds-dark-theme]`,
-     * so a tiny class beats an inline style here: it follows theme switches live.
-     */
-    const ensureQuotaStyle = () => {
-      if (document.getElementById('dsh-tako-quota-style') !== null) return
-      const style = document.createElement('style')
-      style.id = 'dsh-tako-quota-style'
-      style.textContent = '.dsh-tako-quota-bar{background:#3ea4ec}'
-        + 'body[data-ds-dark-theme] .dsh-tako-quota-bar{background:#0e72bc}'
-      document.head.appendChild(style)
-    }
+    const ensureQuotaStyle = ensureTakoTheme
 
     /**
      * Money the way the site's console prints it: USD with the narrow symbol,
@@ -581,6 +597,24 @@ window.__ModuleLoader__.load({
       }
     }
 
+    function hasPlanQuota(plan) {
+      if (!plan) return false
+      return (plan.windowCostLimit || 0) > 0 || (plan.weeklyCostLimit || 0) > 0
+    }
+
+    function windowLabel(plan, t) {
+      const mins = plan && plan.windowMinutes > 0 ? plan.windowMinutes : 300
+      const hours = mins / 60
+      const shown = Number.isInteger(hours) ? String(hours) : String(Math.round(hours * 10) / 10)
+      return t('windowHours', { hours: shown })
+    }
+
+    function fracUsd(used, limit) {
+      const u = typeof used === 'number' ? fmtUsd(used) : '—'
+      if (typeof limit !== 'number' || limit <= 0) return u
+      return `${u} / ${fmtUsd(limit)}`
+    }
+
     function TakoFooter(props) {
       const wide = props.wide === true
       const t = props.t ?? fallbackT
@@ -588,6 +622,7 @@ window.__ModuleLoader__.load({
       const alive = useRef(true)
       useEffect(() => () => { alive.current = false }, [])
       useEffect(() => {
+        ensureTakoTheme()
         void (async () => {
           try {
             const next = await call('GET', STATUS_ROUTE)
@@ -598,42 +633,27 @@ window.__ModuleLoader__.load({
         })()
       }, [])
       const configured = status !== undefined && status.configured === true
-      const me = configured ? status.me : undefined
-      const planName = typeof me?.planName === 'string' && me.planName !== '' ? me.planName : undefined
-      const remain = typeof me?.quotaRemainUsd === 'number' ? fmtUsd(me.quotaRemainUsd) : undefined
-      const used = typeof me?.quotaUsedUsd === 'number' ? fmtUsd(me.quotaUsedUsd) : undefined
-      const onPlan = planName !== undefined
-      const metric = (label, value, accent) => h('span', { style: { display: 'flex', minWidth: 0, flexDirection: 'column', gap: 1 } },
-        h('span', { style: { fontSize: 10, color: 'var(--dsw-alias-label-tertiary)', letterSpacing: '0.04em' } }, label),
-        h('span', { style: { fontSize: accent ? 15 : 15, fontWeight: 600, lineHeight: '20px', color: accent ? '#F26D5B' : 'var(--dsw-alias-label-primary)', fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value || '—'))
+      const plan = configured ? status.plan : undefined
+      const onPlan = hasPlanQuota(plan)
+      const remain = configured && typeof status.me?.quotaRemainUsd === 'number' ? fmtUsd(status.me.quotaRemainUsd) : undefined
       let body
-      if (status === undefined) body = h('span', { style: { color: 'var(--dsw-alias-label-tertiary)', fontSize: 12 } }, '…')
-      else if (!configured) body = h('span', { style: { color: '#F26D5B', fontSize: 12, fontWeight: 510, marginTop: 2 } }, t('signIn'))
-      else if (onPlan) body = h('span', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8, marginTop: 4 } },
-        metric(t('footerRemain'), remain, true),
-        metric(t('footerUsed'), used, false))
-      else body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 1, marginTop: 4 } },
-        h('span', { style: { fontSize: 10, color: 'var(--dsw-alias-label-tertiary)' } }, t('quotaRemain')),
-        h('span', { style: { fontSize: 18, fontWeight: 600, color: '#F26D5B', fontVariantNumeric: 'tabular-nums' } }, remain || '—'))
+      if (status === undefined) body = h('span', { className: 'k' }, '…')
+      else if (!configured) body = h('span', { className: 'frac dsh-tako-ink' }, t('signIn'))
+      else if (onPlan) body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
+        h('span', null, h('span', { className: 'k' }, windowLabel(plan, t) + ' '), h('span', { className: 'frac' }, fracUsd(plan.windowCost, plan.windowCostLimit))),
+        h('span', null, h('span', { className: 'k' }, t('weeklyShort') + ' '), h('span', { className: 'frac' }, fracUsd(plan.weeklyCost, plan.weeklyCostLimit))))
+      else body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
+        h('span', { className: 'k' }, t('walletBalance')),
+        h('span', { className: 'frac dsh-tako-ink' }, remain || '—'))
       return h('button', {
         type: 'button',
+        className: 'dsh-tako-footer',
         'data-testid': 'dsh-tako-footer',
         'data-tako-quota': !configured ? 'empty' : onPlan ? 'plan' : 'balance',
         onClick: () => { openTakoConsole(t) },
-        style: {
-          display: 'flex', alignItems: 'center', gap: 9, width: '100%',
-          minHeight: configured ? 82 : 52, padding: '8px 10px',
-          border: 'none', borderRadius: 12, textAlign: 'left', cursor: 'pointer',
-          background: 'transparent', color: 'inherit',
-          boxShadow: 'inset 3px 0 0 #F26D5B',
-        },
       },
-        h('span', { 'aria-hidden': true, style: { flex: 'none' } }, TakoMark(wide ? 24 : 20)),
-        wide ? h('span', { style: { display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 } },
-          h('span', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } },
-            h('span', { style: { fontSize: 13, fontWeight: 600 } }, 'Tako'),
-            onPlan ? h('span', { style: { flex: 'none', padding: '0 6px', borderRadius: 999, border: '0.5px solid rgb(242 109 91 / 45%)', background: 'rgb(242 109 91 / 16%)', color: '#F26D5B', fontSize: 10, fontWeight: 600, lineHeight: '16px' } }, t('plan')) : null),
-          body) : null)
+        h('span', { 'aria-hidden': true, style: { flex: 'none' } }, TakoMark(wide ? 22 : 18)),
+        wide ? h('span', { style: { display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 } }, body) : null)
     }
     /** A share (0-1) as a percent, mirroring the site's two-digit cap. */
     const fmtPercent = share => share.toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 2 })
@@ -643,46 +663,35 @@ window.__ModuleLoader__.load({
       const t = props.t ?? fallbackT
       const children = []
       const configured = status !== undefined && status.configured === true
+      const plan = configured ? status.plan : undefined
+      const onPlan = hasPlanQuota(plan)
       if (!configured) {
         children.push(h('div', { key: 'x', style: muted }, status === undefined ? '…' : t('quotaNeedsLogin')))
+      } else if (onPlan) {
+        const stamp = (key, label, used, limit) => h('div', { key, className: 'dsh-tako-stamp' },
+          h('div', { className: 'dsh-tako-kicker' }, label),
+          h('div', { className: 'n', 'data-testid': `dsh-tako-quota-${key}` },
+            fracUsd(used, limit)))
+        children.push(h('div', { key: 'stamps', className: 'dsh-tako-stamps' },
+          stamp('window', windowLabel(plan, t), plan.windowCost, plan.windowCostLimit),
+          stamp('week', t('weeklyShort'), plan.weeklyCost, plan.weeklyCostLimit)))
+        if (typeof status.me?.quotaRemainUsd === 'number') {
+          children.push(h('div', { key: 'wallet', style: { ...muted, fontSize: '12px' } },
+            `${t('walletBalance')} ${fmtUsd(status.me.quotaRemainUsd)}`))
+        }
+        if (status.planError) {
+          children.push(h('div', { key: 'pe', role: 'status', style: { ...muted, fontSize: '12px' } }, status.planError))
+        }
       } else if (status.me === null || status.me === undefined) {
-        children.push(h('div', { key: 'x', style: muted }, t('quotaUnavailable')))
+        children.push(h('div', { key: 'x', style: muted }, status.planError || t('quotaUnavailable')))
       } else {
-        ensureQuotaStyle()
-        const me = status.me
-        const remain = me.quotaRemain
-        const used = me.quotaUsed
-        const remainUsd = typeof me.quotaRemainUsd === 'number' ? me.quotaRemainUsd : undefined
-        const usedUsd = typeof me.quotaUsedUsd === 'number' ? me.quotaUsedUsd : undefined
-        const total = typeof remain === 'number' && typeof used === 'number' ? remain + used : undefined
-        const share = total !== undefined && total > 0 ? used / total : undefined
-        // The site's quota-card hierarchy: a small label, the big value, and
-        // the raw points as a second line. USD first — that is how the Tako
-        // console prices quota (quota_display_type: USD) — points as fallback.
-        const stat = (key, label, usd, points) => h('div', { key, style: { flex: '1 1 140px', minWidth: 0 } },
-          h('div', { style: { ...muted, fontSize: '12px', lineHeight: '16px' } }, label),
-          h('div', { 'data-testid': `dsh-tako-quota-${key}`, style: { ...mono, fontSize: '22px', fontWeight: 600, lineHeight: '30px' } },
-            usd !== undefined ? fmtUsd(usd) : typeof points === 'number' ? `${fmtNumber(points)} ${t('quotaPoints')}` : '—'),
-          usd !== undefined && typeof points === 'number'
-            ? h('div', { style: { ...muted, ...mono, fontSize: '12px', lineHeight: '16px' } }, `${fmtNumber(points)} ${t('quotaPoints')}`)
-            : null)
-        children.push(h('div', { key: 'stats', style: { display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '2px' } },
-          stat('remain', t('quotaRemain'), remainUsd, remain),
-          stat('used', t('quotaUsed'), usedUsd, used)))
-        if (share !== undefined) {
-          children.push(h('div', {
-            key: 'bar', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': total, 'aria-valuenow': used,
-            style: { height: '6px', borderRadius: '3px', background: 'var(--dsw-alias-interactive-bg-hover)', overflow: 'hidden' },
-          },
-            h('div', { className: 'dsh-tako-quota-bar', style: { width: `${Math.min(100, share * 100)}%`, height: '100%' } })))
-          children.push(h('div', { key: 'share', style: { ...muted, fontSize: '12px', lineHeight: '16px' } }, t('quotaUsedShare', { percent: fmtPercent(share) })))
-        }
-        if (remain !== undefined || used !== undefined) {
-          children.push(h('div', { key: 'note', style: { ...muted, fontSize: '12px', lineHeight: '16px' } },
-            remainUsd !== undefined ? t('quotaNoteUsd') : t('quotaNoteUnknown')))
-        }
+        const remainUsd = status.me.quotaRemainUsd
+        children.push(h('div', { key: 'wallet', className: 'dsh-tako-stamp' },
+          h('div', { className: 'dsh-tako-kicker' }, t('walletBalance')),
+          h('div', { className: 'n dsh-tako-ink', 'data-testid': 'dsh-tako-quota-remain' },
+            typeof remainUsd === 'number' ? fmtUsd(remainUsd) : '—')))
       }
-      return Card({ name: 'quota', title: t('quotaCard'), children })
+      return Card({ name: 'quota', title: onPlan ? t('planWindows') : t('quotaCard'), children })
     }
 
     function CatalogCard(props) {
@@ -771,12 +780,17 @@ window.__ModuleLoader__.load({
         }
       }
 
+      ensureTakoTheme()
       const children = [
-        h('div', { key: 'head', style: { display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', margin: '4px 0 18px' } },
-          h('h1', { style: { margin: 0, fontSize: '20px', fontWeight: 500, lineHeight: '28px' } }, t('consoleTitle')),
+        h('header', { key: 'head', className: 'dsh-tako-head' },
+          TakoMark(28),
+          h('div', null,
+            h('div', { className: 'dsh-tako-kicker' }, 'Tako'),
+            h('h1', null, t('consoleTitle'))),
           status !== undefined && status.configured && status.maskedKey
-            ? h('span', { 'data-testid': 'dsh-tako-console-key', style: { ...mono, fontSize: '0.85em', color: 'var(--dsw-alias-label-secondary)', border: '0.5px solid var(--dsw-alias-border-l2)', borderRadius: 'var(--dsw-radius-sm)', padding: '2px 8px' } }, status.maskedKey)
+            ? h('span', { 'data-testid': 'dsh-tako-console-key', style: { ...mono, marginLeft: 'auto', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, status.maskedKey)
             : null),
+        Tentacle(),
       ]
       if (statusError !== undefined) {
         children.push(h('div', { key: 'err', role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: '0.9em', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
@@ -784,14 +798,17 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, style: quietButton }, t('retry'))))
       }
       children.push(AccountCard({ status, login, busyLogout, onLogout: logout, logoutNote, t }))
-      children.push(h(UpdateCard, { key: 'update', t }))
+      children.push(Tentacle())
       children.push(QuotaCard({ status, t }))
+      children.push(Tentacle())
       children.push(CatalogCard({ catalog, error: catalogError, t }))
+      children.push(Tentacle())
+      children.push(h(UpdateCard, { key: 'update', t }))
       return h('div', {
         'data-testid': 'dsh-tako-console-page',
-        style: { height: '100%', minHeight: 0, overflowY: 'auto', background: 'var(--dsw-alias-bg-base)', fontSize: '14px', lineHeight: '22px' },
+        style: { height: '100%', minHeight: 0, overflowY: 'auto', fontSize: '14px', lineHeight: '22px' },
       },
-        h('div', { style: { maxWidth: '860px', margin: '0 auto', padding: '28px 24px 48px' } }, children))
+        h('div', { className: 'dsh-tako-sheet' }, children))
     }
 
     return {
