@@ -24,13 +24,14 @@ type ModuleRow = { id: string, factory: (require: (spec: string) => unknown) => 
 /** The keys of the pre-i18n inline dictionary — one must not go missing in a migration. */
 const EXPECTED_KEYS = [
   'signIn', 'signInAgain', 'cancel', 'waiting', 'openLink', 'success', 'failed', 'denied', 'timeout', 'remote',
-  'panel', 'consoleTitle', 'accountCard', 'signedIn', 'signedOut', 'account', 'plan', 'unknown', 'whoamiFailed',
+  'panel', 'consoleTitle', 'accountCard', 'signedIn', 'signedOut', 'signedOutLead', 'account', 'plan', 'unknown', 'whoamiFailed',
   'signOut', 'signOutWorking', 'logoutRevoked', 'logoutRemoved', 'logoutNone', 'logoutExternal',
   'quotaCard', 'quotaRemain', 'quotaUsed', 'quotaPoints', 'quotaUsedShare', 'quotaNoteUsd', 'quotaNoteUnknown',
   'quotaNeedsLogin', 'quotaUnavailable',
-  'catalogCard', 'catalogModel', 'catalogContext', 'catalogVision', 'yes', 'no', 'catalogDefault', 'catalogEmpty',
+  'catalogCard', 'catalogModel', 'catalogContext', 'catalogVision', 'visionBadge', 'yes', 'no', 'catalogDefault', 'catalogEmpty',
+  'catalogMore', 'catalogLess',
   'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry',
-  'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'copy', 'copied', 'updateFailed',
+  'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'pluginVersion', 'copy', 'copied', 'updateFailed',
   'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
   'footerRemain', 'footerUsed', 'windowHours', 'weeklyShort', 'walletBalance', 'planWindows',
 ]
@@ -156,21 +157,60 @@ function findText(node: unknown, needle: string): string | undefined {
 
 /** Deep-search an element tree for the first node whose data-testid matches. */
 function findByTestId(node: unknown, testId: string): Element | undefined {
+  return findByAttr(node, 'data-testid', testId)
+}
+
+/** Deep-search an element tree for the first node with a matching attribute. */
+function findByAttr(node: unknown, attr: string, value: string): Element | undefined {
   if (Array.isArray(node)) {
     for (const child of node) {
-      const found = findByTestId(child, testId)
+      const found = findByAttr(child, attr, value)
       if (found !== undefined) return found
     }
     return undefined
   }
   if (node === null || typeof node !== 'object') return undefined
   const el = node as Element
-  if (el.props?.['data-testid'] === testId) return el
+  if (el.props?.[attr] === value) return el
   for (const child of el.children ?? []) {
-    const found = findByTestId(child, testId)
+    const found = findByAttr(child, attr, value)
     if (found !== undefined) return found
   }
   return undefined
+}
+
+function findByTag(node: unknown, tag: string): Element | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findByTag(child, tag)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  if (node === null || typeof node !== 'object') return undefined
+  const el = node as Element
+  if (el.tag === tag) return el
+  for (const child of el.children ?? []) {
+    const found = findByTag(child, tag)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
+function collectModels(node: unknown): string[] {
+  const ids: string[] = []
+  const walk = (item: unknown) => {
+    if (Array.isArray(item)) {
+      item.forEach(walk)
+      return
+    }
+    if (item === null || typeof item !== 'object') return
+    const el = item as Element
+    if (typeof el.props?.['data-model'] === 'string') ids.push(el.props['data-model'] as string)
+    for (const child of el.children ?? []) walk(child)
+  }
+  walk(node)
+  return ids
 }
 
 describe('client i18n: registration', () => {
@@ -259,27 +299,103 @@ describe('client i18n: fallback without the locale service', () => {
     const page = entries.find(entry => entry.slot === 'main')!.component
     const catalog = { models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] }], nextSyncAt: Date.now() + 5 * 60_000 }
     // useState order in TakoConsolePage: status, statusError, catalog, catalogError,
-    // busyLogout, logoutNote, then useTakoLogin's login state.
+    // busyLogout, logoutNote, then useTakoLogin's login state. CatalogCard's
+    // expand flag is the next hook (the recording stub inlines function
+    // components); omitted here so it defaults to false.
     hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }]
     try {
       // No `t` seat (an older host renders the entry without one): inline fallback.
       setDocumentLang('zh-CN')
       let rendered = render(page, {}) as Element
-      expect(findText(rendered, '控制台')).toBe('Tako 控制台')
-      expect(findText(rendered, '模型目录')).toBe('模型目录')
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
+      expect(findText(rendered, 'Tako 控制台')).toBeUndefined()
+      expect(findText(rendered, '登录状态')).toBeUndefined()
+      expect(findText(rendered, '模型目录')).toBeUndefined()
+      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), '模型')).toBe('模型')
       expect(findText(rendered, '分钟后刷新')).toBe('约 5 分钟后刷新')
+      expect(findText(rendered, '1M')).toBe('1M')
+      expect(findText(rendered, '图')).toBe('图')
+      expect(findByTestId(rendered, 'dsh-tako-catalog-more')).toBeUndefined()
       setDocumentLang('en')
       rendered = render(page, {}) as Element
-      expect(findText(rendered, 'Console')).toBe('Tako Console')
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
+      expect(findText(rendered, 'Tako Console')).toBeUndefined()
+      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), 'Models')).toBe('Models')
       expect(findText(rendered, 'min')).toBe('refreshes in ~5 min')
+      expect(findText(rendered, 'img')).toBe('img')
       // With the seat, props.t wins regardless of the document language.
       face.setActive('en')
       rendered = render(page, { t: face.bind() }) as Element
-      expect(findText(rendered, 'Console')).toBe('Tako Console')
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
+      expect(findText(rendered, 'Tako Console')).toBeUndefined()
+      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), 'Models')).toBe('Models')
       face.setActive('zh')
       rendered = render(page, { t: face.bind() }) as Element
-      expect(findText(rendered, '控制台')).toBe('Tako 控制台')
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
+      expect(findText(rendered, 'Tako 控制台')).toBeUndefined()
+      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), '模型')).toBe('模型')
       expect(findText(rendered, '分钟后刷新')).toBe('约 5 分钟后刷新')
+
+      hookStates = [{ configured: false }, undefined, catalog, undefined, false, undefined, { status: 'idle' }]
+      rendered = render(page, { t: face.bind() }) as Element
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
+      expect(findText(rendered, '钥匙走')).toBe('登录后，额度、模型和搜索会跟这把钥匙走')
+      expect(findByTestId(rendered, 'dsh-tako-console-sign-in')).toBeDefined()
+      expect(findText(rendered, '需要登录后查看')).toBe('需要登录后查看')
+
+      hookStates = [{
+        configured: true,
+        maskedKey: 'cr_****abcd',
+        me: { userName: 'Ada', planName: 'Pro' },
+      }, undefined, catalog, undefined, false, undefined, { status: 'idle' }]
+      rendered = render(page, { t: face.bind() }) as Element
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Ada')
+      expect(findByTestId(rendered, 'dsh-tako-console-key')?.children[0]).toBe('cr_****abcd')
+      expect(findText(rendered, 'Pro')).toBe('Pro')
+      expect(findByTestId(rendered, 'dsh-tako-console-sign-out')).toBeDefined()
+      expect(findText(rendered, '登录状态')).toBeUndefined()
+    } finally {
+      hookStates = []
+    }
+  })
+
+  it('shows the first 3 catalog models and hides the rest until expanded', async () => {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const face = localeService()
+    const { ctx, entries, runInjections } = stubCtx({ locale: face })
+    plugin.apply(ctx)
+    runInjections()
+    const page = entries.find(entry => entry.slot === 'main')!.component
+    const catalog = {
+      models: [
+        { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] },
+        { id: 'deepseek-v4-pro', contextWindow: 1_050_000 },
+        { id: 'tako-auto', contextWindow: 272_000 },
+        { id: 'other-model' },
+      ],
+      nextSyncAt: Date.now() + 5 * 60_000,
+    }
+    // CatalogCard's useState is consumed next after TakoConsolePage's 7 hooks
+    // because the recording React stub runs function components inline.
+    // [status, statusError, catalog, catalogError, busyLogout, logoutNote, login, catalogOpen]
+    hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }, false]
+    try {
+      face.setActive('zh')
+      let rendered = render(page, { t: face.bind() }) as Element
+      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto'])
+      expect(findByAttr(rendered, 'data-model', 'other-model')).toBeUndefined()
+      expect(findText(rendered, '1M')).toBe('1M')
+      expect(findText(rendered, '1.05M')).toBe('1.05M')
+      expect(findText(rendered, '272K')).toBe('272K')
+      const more = findByTestId(rendered, 'dsh-tako-catalog-more')
+      expect(findText(more, '其余')).toBe('其余 1 个')
+
+      hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }, true]
+      rendered = render(page, { t: face.bind() }) as Element
+      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto', 'other-model'])
+      expect(findText(findByAttr(rendered, 'data-model', 'other-model'), '—')).toBe('—')
+      expect(findText(findByTestId(rendered, 'dsh-tako-catalog-more'), '收起')).toBe('收起')
     } finally {
       hookStates = []
     }

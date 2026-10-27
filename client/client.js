@@ -59,10 +59,11 @@ window.__ModuleLoader__.load({
         remote: '当前页面不是从 dsh 所在机器的本机地址打开的：登录完成后 Tako 会跳回 dsh 主机的 127.0.0.1，浏览器在另一台机器上时这一步到不了。请改为粘贴 API key，或在 dsh 主机上运行 dsh-tako login --no-open --port <端口> 并用 ssh -L 转发。',
         // console panel
         panel: 'Tako 控制台',
-        consoleTitle: 'Tako 控制台',
+        consoleTitle: 'Tako',
         accountCard: '登录状态',
         signedIn: '已登录',
         signedOut: '未登录',
+        signedOutLead: '登录后，额度、模型和搜索会跟这把钥匙走',
         account: '账号',
         plan: '套餐',
         unknown: '未知',
@@ -82,14 +83,17 @@ window.__ModuleLoader__.load({
         quotaNoteUnknown: '单位是 Tako 额度点数；美元换算未知',
         quotaNeedsLogin: '需要登录后查看',
         quotaUnavailable: '暂时拿不到额度信息',
-        catalogCard: '模型目录',
+        catalogCard: '模型',
         catalogModel: '模型',
         catalogContext: '上下文窗口',
         catalogVision: '图片输入',
+        visionBadge: '图',
         yes: '支持',
         no: '不支持',
         catalogDefault: '默认',
         catalogEmpty: '目录尚未同步；插件会在启动后拉取 Tako 的公开目录',
+        catalogMore: '其余 {count} 个',
+        catalogLess: '收起',
         refreshIn: '约 {minutes} 分钟后刷新',
         refreshSoon: '即将刷新',
         refreshOnlyAtStartup: '只在启动时刷新',
@@ -100,6 +104,7 @@ window.__ModuleLoader__.load({
         updateAvailable: '有新版本',
         updateCommand: '升级命令（升级后重启 dsh 生效）:',
         upToDate: '已是最新版本 {version}',
+        pluginVersion: '插件 {version}',
         copy: '复制',
         copied: '已复制',
         updateFailed: '检查更新失败',
@@ -127,10 +132,11 @@ window.__ModuleLoader__.load({
         remote: 'This page is not opened from the dsh host itself: Tako redirects back to 127.0.0.1 on the dsh host, which a browser on another machine cannot reach. Paste an API key instead, or run dsh-tako login --no-open --port <port> on the host and forward it with ssh -L.',
         // console panel
         panel: 'Tako Console',
-        consoleTitle: 'Tako Console',
+        consoleTitle: 'Tako',
         accountCard: 'Sign-in status',
         signedIn: 'Signed in',
         signedOut: 'Not signed in',
+        signedOutLead: 'Sign in and quota, models, and search follow this key',
         account: 'Account',
         plan: 'Plan',
         unknown: 'unknown',
@@ -150,14 +156,17 @@ window.__ModuleLoader__.load({
         quotaNoteUnknown: 'Shown in Tako quota points; the USD conversion is unknown',
         quotaNeedsLogin: 'Sign in to see your quota',
         quotaUnavailable: 'Quota information is unavailable',
-        catalogCard: 'Model catalog',
+        catalogCard: 'Models',
         catalogModel: 'Model',
         catalogContext: 'Context window',
         catalogVision: 'Image input',
+        visionBadge: 'img',
         yes: 'Yes',
         no: 'No',
         catalogDefault: 'default',
         catalogEmpty: 'The catalog has not synced yet; the plugin fetches Tako\'s public directory after startup',
+        catalogMore: '{count} more',
+        catalogLess: 'Show less',
         refreshIn: 'refreshes in ~{minutes} min',
         refreshSoon: 'refreshing soon',
         refreshOnlyAtStartup: 'refreshed at startup only',
@@ -168,6 +177,7 @@ window.__ModuleLoader__.load({
         updateAvailable: 'Update available:',
         updateCommand: 'Upgrade command (restart dsh after upgrading):',
         upToDate: 'Up to date: {version}',
+        pluginVersion: 'Plugin {version}',
         copy: 'Copy',
         copied: 'Copied',
         updateFailed: 'Could not check for updates',
@@ -373,10 +383,13 @@ window.__ModuleLoader__.load({
     }
 
     function Card(props) {
-      return h('section', { 'data-dsh-tako-card': props.name, className: 'dsh-tako-section' },
-        h('div', { className: 'dsh-tako-kicker' },
+      const kicker = props.title === undefined && props.extra === undefined
+        ? null
+        : h('div', { className: 'dsh-tako-kicker' },
           props.title,
-          props.extra === undefined ? null : h('span', { className: 'dsh-tako-extra' }, props.extra)),
+          props.extra === undefined ? null : h('span', { className: 'dsh-tako-extra' }, props.extra))
+      return h('section', { 'data-dsh-tako-card': props.name, className: 'dsh-tako-section' },
+        kicker,
         h('div', { className: 'dsh-tako-body' }, props.children))
     }
 
@@ -387,8 +400,9 @@ window.__ModuleLoader__.load({
       style.id = 'dsh-tako-theme'
       style.textContent = [
         '.dsh-tako-sheet{display:flex;flex-direction:column;gap:22px;max-width:720px;margin:0 auto;padding:28px 24px 56px}',
-        '.dsh-tako-head{display:flex;align-items:center;gap:12px}',
+        '.dsh-tako-head{display:flex;align-items:flex-start;gap:12px}',
         '.dsh-tako-head h1{margin:0;font-size:22px;font-weight:500;letter-spacing:0.04em}',
+        '.dsh-tako-sub{font-size:13px;color:var(--dsw-alias-label-tertiary)}',
         '.dsh-tako-kicker{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary)}',
         '.dsh-tako-extra{letter-spacing:0;text-transform:none;font-size:12px}',
         '.dsh-tako-body{display:flex;flex-direction:column;gap:10px;margin-top:8px}',
@@ -397,6 +411,8 @@ window.__ModuleLoader__.load({
         '.dsh-tako-stamps-3{grid-template-columns:repeat(3,minmax(0,1fr))}',
         '.dsh-tako-stamp .n{font-variant-numeric:tabular-nums;font-size:22px;font-weight:500;line-height:28px}',
         '.dsh-tako-stamp .n small{font-size:13px;font-weight:400;color:var(--dsw-alias-label-tertiary)}',
+        '.dsh-tako-model{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-bottom:0.5px solid var(--dsw-alias-border-l2)}',
+        '.dsh-tako-badge{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:' + CLAY + '}',
         '.dsh-tako-footer{display:flex;align-items:center;gap:10px;width:100%;padding:6px 2px;border:none;background:transparent;color:inherit;text-align:left;cursor:pointer}',
         '.dsh-tako-footer .frac{font-variant-numeric:tabular-nums;font-size:13px;font-weight:500}',
         '.dsh-tako-footer .k{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary)}',
@@ -408,7 +424,14 @@ window.__ModuleLoader__.load({
       document.head.appendChild(style)
     }
 
-    const fmtNumber = value => (typeof value === 'number' ? value.toLocaleString('en-US') : '—')
+    /** Compact context windows: 1_000_000 → 1M, 1_050_000 → 1.05M, 272_000 → 272K. */
+    const compactContext = value => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+      const scaled = (n, suffix) => `${Math.round(n * 100) / 100}${suffix}`
+      if (Math.abs(value) >= 1_000_000) return scaled(value / 1_000_000, 'M')
+      if (Math.abs(value) >= 1_000) return scaled(value / 1_000, 'K')
+      return value.toLocaleString()
+    }
 
     /** "refreshes in ~x min", counted down locally from nextSyncAt; no server polling. */
     function Countdown(props) {
@@ -429,24 +452,24 @@ window.__ModuleLoader__.load({
       const status = props.status
       const login = props.login
       const t = props.t ?? fallbackT
-      const children = []
       const configured = status !== undefined && status.configured === true
-      const detail = (key, label, value) => h('div', { key, style: rowStyle },
-        h('span', { style: { ...muted, minWidth: '3.5em' } }, label),
-        value)
-      if (status === undefined) {
-        children.push(h('div', { key: 'loading', style: muted }, '…'))
-      } else {
-        children.push(h('div', { key: 'state', style: rowStyle },
-          h('span', { style: muted }, configured ? t('signedIn') : t('signedOut')),
-          configured ? h('span', { style: { ...mono, color: 'var(--dsw-alias-label-secondary)', border: '0.5px solid var(--dsw-alias-border-l2)', borderRadius: 'var(--dsw-radius-sm)', padding: '1px 6px' } }, status.maskedKey || '') : null))
-        if (configured && status.me !== null && status.me !== undefined) {
-          children.push(detail('account', t('account'), h('span', { style: mono }, status.me.userName || t('unknown'))))
-          children.push(detail('plan', t('plan'), h('span', { style: mono }, status.me.planName || t('unknown'))))
-        }
-        if (configured && status.meError !== undefined) {
-          children.push(h('div', { key: 'meerr', role: 'status', style: { fontSize: '0.85em', color: 'var(--dsw-alias-state-warn-primary)', overflowWrap: 'anywhere' } }, `${t('whoamiFailed')}: ${status.meError}`))
-        }
+      const userName = configured && status.me && status.me.userName ? status.me.userName : t('consoleTitle')
+      const planName = configured && status.me && status.me.planName ? status.me.planName : undefined
+      const maskedKey = configured && status.maskedKey ? status.maskedKey : undefined
+      const body = [h('h1', { key: 'h' }, userName)]
+      if (status !== undefined && !configured) {
+        body.push(h('div', { key: 'lead', className: 'dsh-tako-sub' }, t('signedOutLead')))
+      } else if (planName !== undefined || maskedKey !== undefined) {
+        const keySpan = maskedKey === undefined
+          ? null
+          : h('span', { key: 'key', 'data-testid': 'dsh-tako-console-key', style: mono }, maskedKey)
+        body.push(h('div', { key: 'sub', className: 'dsh-tako-sub' },
+          planName === undefined ? null : planName,
+          planName !== undefined && keySpan !== null ? ' · ' : null,
+          keySpan))
+      }
+      if (configured && status.meError !== undefined) {
+        body.push(h('div', { key: 'meerr', role: 'status', style: { fontSize: '0.85em', color: 'var(--dsw-alias-state-warn-primary)', overflowWrap: 'anywhere' } }, `${t('whoamiFailed')}: ${status.meError}`))
       }
       const actions = []
       if (status !== undefined && !configured) {
@@ -456,13 +479,15 @@ window.__ModuleLoader__.load({
         actions.push(h('button', { key: 'out', type: 'button', 'data-testid': 'dsh-tako-console-sign-out', disabled: props.busyLogout, onClick: props.onLogout, style: { ...buttonStyle, color: 'var(--dsw-alias-state-error-primary)' } }, props.busyLogout ? t('signOutWorking') : t('signOut')))
       }
       if (login.busy) actions.push(h('button', { key: 'cancel', type: 'button', onClick: login.cancel, style: quietButton }, t('cancel')))
-      if (actions.length > 0) children.push(h('div', { key: 'actions', style: rowStyle }, actions))
+      if (actions.length > 0) body.push(h('div', { key: 'actions', style: rowStyle }, actions))
       const progress = LoginProgress({ state: login.state, t })
-      if (progress !== null) children.push(progress)
+      if (progress !== null) body.push(progress)
       if (props.logoutNote !== undefined) {
-        children.push(h('div', { key: 'note', role: 'status', style: { fontSize: '0.85em', overflowWrap: 'anywhere' } }, props.logoutNote))
+        body.push(h('div', { key: 'note', role: 'status', style: { fontSize: '0.85em', overflowWrap: 'anywhere' } }, props.logoutNote))
       }
-      return Card({ name: 'account', title: t('accountCard'), children })
+      return h('header', { className: 'dsh-tako-head', 'data-dsh-tako-card': 'account' },
+        TakoMark(28),
+        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 } }, ...body))
     }
 
     /**
@@ -547,7 +572,7 @@ window.__ModuleLoader__.load({
       } else if (showInstalled) {
         children.push(h('div', { key: 'done', role: 'status', style: { fontSize: '0.85em', color: 'var(--dsw-alias-state-success-primary)' } }, t('updateInstalled', { version: installedVersion })))
       } else if (showUpToDate) {
-        children.push(h('div', { key: 'x', role: 'status', style: muted }, t('upToDate', { version: update.current })))
+        children.push(h('div', { key: 'x', role: 'status', className: 'dsh-tako-sub' }, t('pluginVersion', { version: update.current })))
       } else {
         children.push(h('div', { key: 'new', style: rowStyle },
           h('span', null, t('updateAvailable')),
@@ -572,7 +597,7 @@ window.__ModuleLoader__.load({
           }, UPGRADE_COMMAND),
           h('button', { type: 'button', 'data-testid': 'dsh-tako-console-copy-upgrade', onClick: copyCommand, style: { ...buttonStyle, padding: '4px 10px' } }, copied ? t('copied') : t('copy'))))
       }
-      return Card({ name: 'update', title: t('updateCard'), children })
+      return Card({ name: 'update', children })
     }
 
     const ensureQuotaStyle = ensureTakoTheme
@@ -726,30 +751,39 @@ window.__ModuleLoader__.load({
           h('div', { className: 'n dsh-tako-ink', 'data-testid': 'dsh-tako-quota-remain' },
             typeof remainUsd === 'number' ? fmtUsd(remainUsd) : '—')))
       }
-      return Card({ name: 'quota', title: onPlan ? t('planWindows') : t('quotaCard'), children })
+      return Card({ name: 'quota', children })
     }
 
     function CatalogCard(props) {
       const catalog = props.catalog
       const t = props.t ?? fallbackT
+      const [open, setOpen] = useState(false)
       const children = []
       if (catalog === undefined) {
         children.push(h('div', { key: 'x', style: muted }, props.error === undefined ? '…' : `${t('loadFailed')}: ${props.error}`))
       } else if (catalog.models === undefined || catalog.models.length === 0) {
         children.push(h('div', { key: 'x', style: muted }, t('catalogEmpty')))
       } else {
-        const head = { padding: '6px 10px', textAlign: 'left', color: 'var(--dsw-alias-label-tertiary)', fontWeight: 400, fontSize: '12px', borderBottom: '0.5px solid var(--dsw-alias-border-l2)', whiteSpace: 'nowrap' }
-        const cell = { padding: '6px 10px', borderBottom: '0.5px solid var(--dsw-alias-border-l2)', overflowWrap: 'anywhere' }
-        children.push(h('div', { key: 'table', style: { overflowX: 'auto' } },
-          h('table', { style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px' } },
-            h('thead', null, h('tr', null,
-              h('th', { style: head }, t('catalogModel')),
-              h('th', { style: head }, t('catalogContext')),
-              h('th', { style: head }, t('catalogVision')))),
-            h('tbody', null, catalog.models.map(model => h('tr', { key: model.id, 'data-model': model.id },
-              h('td', { style: { ...cell, ...mono } }, model.id),
-              h('td', { style: cell }, model.contextWindow === undefined ? `— (${t('catalogDefault')})` : fmtNumber(model.contextWindow)),
-              h('td', { style: cell }, (model.input || []).includes('image') ? t('yes') : t('no'))))))))
+        const models = catalog.models
+        const hidden = Math.max(0, models.length - 3)
+        const shown = open || hidden === 0 ? models : models.slice(0, 3)
+        for (const model of shown) {
+          const vision = (model.input || []).includes('image')
+          children.push(h('div', { key: model.id, className: 'dsh-tako-model', 'data-model': model.id },
+            h('span', { style: mono }, model.id),
+            h('span', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', flex: 'none' } },
+              h('span', { style: muted }, compactContext(model.contextWindow)),
+              vision ? h('span', { className: 'dsh-tako-badge' }, t('visionBadge')) : null)))
+        }
+        if (hidden > 0) {
+          children.push(h('button', {
+            key: 'more',
+            type: 'button',
+            'data-testid': 'dsh-tako-catalog-more',
+            onClick: () => setOpen(value => !value),
+            style: { ...quietButton, alignSelf: 'flex-start' },
+          }, open ? t('catalogLess') : t('catalogMore', { count: hidden })))
+        }
       }
       return Card({
         name: 'catalog',
@@ -817,14 +851,7 @@ window.__ModuleLoader__.load({
 
       ensureTakoTheme()
       const children = [
-        h('header', { key: 'head', className: 'dsh-tako-head' },
-          TakoMark(28),
-          h('div', null,
-            h('div', { className: 'dsh-tako-kicker' }, 'Tako'),
-            h('h1', null, t('consoleTitle'))),
-          status !== undefined && status.configured && status.maskedKey
-            ? h('span', { 'data-testid': 'dsh-tako-console-key', style: { ...mono, marginLeft: 'auto', fontSize: '12px', color: 'var(--dsw-alias-label-tertiary)' } }, status.maskedKey)
-            : null),
+        AccountCard({ status, login, busyLogout, onLogout: logout, logoutNote, t }),
         Tentacle(),
       ]
       if (statusError !== undefined) {
@@ -832,12 +859,8 @@ window.__ModuleLoader__.load({
           `${t('loadFailed')}: ${statusError}`,
           h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, style: quietButton }, t('retry'))))
       }
-      children.push(AccountCard({ status, login, busyLogout, onLogout: logout, logoutNote, t }))
-      children.push(Tentacle())
       children.push(QuotaCard({ status, t }))
-      children.push(Tentacle())
-      children.push(CatalogCard({ catalog, error: catalogError, t }))
-      children.push(Tentacle())
+      children.push(h(CatalogCard, { catalog, error: catalogError, t }))
       children.push(h(UpdateCard, { key: 'update', t }))
       return h('div', {
         'data-testid': 'dsh-tako-console-page',
