@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="88" viewBox="0 0 360 88" role="img" aria-labelledby="title">
+  <title id="title">Tako sidebar: 5h and weekly remaining bars plus wallet</title>
+  <rect width="360" height="88" rx="12" fill="#1c1c1c"/>
+  <rect x="8" y="18" width="52" height="52" rx="12" fill="#c45c3e"/>
+  <path fill="#f4eee6" d="M17.5 40.2c0-5.8 4.8-10.5 10.5-10.5s10.5 4.7 10.5 10.5v4.2c0 1.2-.9 2.1-2.1 2.1h-.6v4.2c0 1.2-1 2.2-2.2 2.2s-2.2-1-2.2-2.2v-2.2h-2.7v2.2c0 1.2-1 2.2-2.2 2.2s-2.2-1-2.2-2.2v-2.2h-2.7v2.2c0 1.2-1 2.2-2.2 2.2s-2.2-1-2.2-2.2v-4.2h-.6c-1.2 0-2.1-.9-2.1-2.1v-4.2z"/>
+  <circle cx="24.5" cy="40" r="1.6" fill="#c45c3e"/>
+  <circle cx="31.5" cy="40" r="1.6" fill="#c45c3e"/>
+  <text x="72" y="28" fill="#9a9388" font-family="ui-sans-serif,system-ui" font-size="10" letter-spacing="1.4">5H</text>
+  <text x="108" y="28" fill="#e8e4dc" font-family="ui-sans-serif,system-ui" font-size="13">94%</text>
+  <rect x="72" y="34" width="110" height="5" rx="2.5" fill="#2a2a2a"/>
+  <rect x="72" y="34" width="103" height="5" rx="2.5" fill="#c45c3e"/>
+  <text x="198" y="28" fill="#9a9388" font-family="ui-sans-serif,system-ui" font-size="10" letter-spacing="1.4">WEEK</text>
+  <text x="248" y="28" fill="#e8e4dc" font-family="ui-sans-serif,system-ui" font-size="13">91%</text>
+  <rect x="198" y="34" width="140" height="5" rx="2.5" fill="#2a2a2a"/>
+  <rect x="198" y="34" width="127" height="5" rx="2.5" fill="#c45c3e"/>
+  <text x="72" y="68" fill="#9a9388" font-family="ui-sans-serif,system-ui" font-size="10" letter-spacing="1.4">WALLET</text>
+  <text x="128" y="68" fill="#c45c3e" font-family="ui-sans-serif,system-ui" font-size="16">$12.40</text>
+</svg>

@@ -2,6 +2,8 @@
 
 [中文](#中文) | [English](#english)
 
+![Sidebar quota: remaining 5h and weekly bars plus wallet](docs/images/quota-footer.svg)
+
 ## 中文
 
 让官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) CLI（`@deepseek-ai/dsh`）直接使用 [Tako](https://tako.shiroha.tech) 的模型，并带上正确的上下文窗口和图片输入能力。装一个插件即可，不需要手写 provider 配置。
@@ -12,7 +14,7 @@
 - 只保留可以走 OpenAI 兼容接口聊天的模型：去掉生图、语音、搜索等非聊天模型、`jev-*`，以及 Tako 限定只能在 Claude Code 里用的模型。
 - 上下文窗口取自目录的结构化字段；没有时取 `272K`、`1M`、`1.05M` 这类精确的容量标签（`31B` 这种参数量标签会被忽略）；都没有就用 `defaultContextWindow`。带 `Vision` 标签的模型声明支持图片输入。
 - 把结果写成一个 OpenAI 兼容 provider：官方 `llm-pi-ai` 插件配置里的 `providers.tako`。之后请求、流式输出、重试、凭据都走 dsh 官方代码路径，插件本身不实现任何模型适配器。
-- 在 Web 界面侧边栏加一个「Tako 控制台」面板，随时看登录状态、账号余额和当前生效的模型目录，详见下面的 [Tako 控制台](#tako-控制台)。
+- 在 Web 界面侧边栏加一个带触手小章鱼的「Tako 控制台」，以及底部额度条（有套餐显示 5h / 周剩余进度条 + 钱包余额）。详见 [Tako 控制台](#tako-控制台)。
 
 ### 安装
 
@@ -99,11 +101,11 @@ npx dsh-tako update                   # 把最新 dsh-tako 装进 profile，装�
 
 ### Tako 控制台
 
-`web` profile 的左侧栏多一个 Tako 图标（「Tako 控制台」），点开是一页四张卡：
+`web` profile 左侧栏是带触手的小章鱼（「Tako 控制台」），底部 footer 显示额度。点开控制台：
 
 - **登录状态**：是否已保存 key、掩码后的 key（`cr_****` + 末 4 位，明文永不下发到页面）、Tako 账号与套餐。未登录时按钮是「通过浏览器登录 Tako」；已登录时是「重新登录」和「退出」——「退出」先在 Tako 吊销这个 key（失败不阻断），再从 dsh 凭据里删除，语义与 `dsh-tako logout` 相同；key 来自环境变量时不吊销也不删除。
 - **更新**：对比本机版本和 npm 官方源的最新版本；落后时点「立即更新」真正安装（装完需重启 dsh），下面仍保留升级命令可复制作退路；已是最新时显示当前版本号，检查失败时只显示灰字提示。检查结果缓存 1 小时，见上面的[更新](#更新)一节。
-- **余额 / 额度**：与 Tako 官网控制台同一套口径。剩余额度、已用额度两个大数字按美元显示，原始额度点数作为第二行小字（`/api/desktop/me` 的点数按官网换算 500,000 点 = $1，服务端补发 `quotaRemainUsd` / `quotaUsedUsd`，点数字段保留），下面是已用占比进度条（进度条填色用 Tako 官网主色）与换算说明小字。未登录显示「需要登录后查看」；临时取不到（例如 Tako 不可达）会在登录状态卡里显示原因，整页不报错。账号信息在插件内存里缓存 45 秒，不会每开一次页面就打一次 Tako。
+- **套餐 / 钱包**：有套餐时显示 **5h 窗口**和**周额度**的剩余百分比进度条（`user-quota`，和官网套餐页同一套，已经是美元）。钱包剩余是单独一列（`/api/desktop/me` 点数 / 500000 = $1）。两套数不要混。没套餐才只显示钱包。侧栏 footer 同一套数据，点击打开控制台。
 - **模型目录**：插件当前写入 `providers.tako` 的模型（`include` / `exclude` / `pinned` / `overrides` 过滤后的结果），列出模型名、上下文窗口、是否支持图片输入；右上角显示距下次目录刷新的倒计时（按 `nextSyncAt` 在浏览器本地倒数，不轮询服务端）。
 
 面板数据来自插件注册的四个路由：`GET /api/tako.status`、`POST /api/tako.logout`、`GET /api/tako.catalog`、`GET /api/tako.update`（POST 安装最新版），和 Web 界面同源、走 dsh 的浏览器登录围栏。目录尚未同步时模型卡显示空态而不是报错。
@@ -235,7 +237,7 @@ CI（`.github/workflows/ci.yml`）在 push 到 `main` 和 PR 时用 Node 22 / 24
 
 `dsh-tako` adds [Tako](https://tako.shiroha.tech) models to the official DeepSeek Harness CLI (`@deepseek-ai/dsh`) with correct context windows and image input.
 
-It reads Tako's public model directory (`GET /api/pricing`, no key needed), keeps chat models only (drops image/speech/search models, `jev-*`, and Claude-Code-only models), sizes each model from structured fields or exact size tags (`272K`, `1M`, `1.05M`), and writes the result as an OpenAI-compatible provider at `providers.tako` in the official `llm-pi-ai` plugin's settings. Requests, streaming, retries and credentials all stay on dsh's own code path. It writes only when the value changes, and refreshes every 30 minutes by default.
+It reads Tako's public model directory (`GET /api/pricing`, no key needed), keeps chat models only (drops image/speech/search models, `jev-*`, and Claude-Code-only models), sizes each model from structured fields or exact size tags (`272K`, `1M`, `1.05M`), and writes the result as an OpenAI-compatible provider at `providers.tako` in the official `llm-pi-ai` plugin's settings. Requests, streaming, retries and credentials all stay on dsh's own code path. It writes only when the value changes, and refreshes every 30 minutes by default. The sidebar octopus opens the Tako console; the footer shows remaining 5h/weekly bars plus wallet.
 
 ```sh
 npm i -g @deepseek-ai/dsh
@@ -275,11 +277,11 @@ Tako names the token `tako-connect@<device name>` and replaces an older token wi
 
 ### Tako console
 
-The `web` profile's sidebar gains a Tako icon ("Tako Console") opening a page with four cards:
+The `web` profile's sidebar uses the tentacled octopus icon ("Tako Console"). The footer shows quota. The console page:
 
 - **Sign-in status**: whether a key is stored, the masked key (`cr_****` plus the last four characters; the plaintext never reaches the page), and the Tako account and plan. Signed out, the button reads "Sign in to Tako with the browser"; signed in, "Sign in again" and "Sign out" — sign-out revokes the key on Tako first (a failure does not block) and then removes it from dsh credentials, the same semantics as `dsh-tako logout`; a key that comes from an environment variable is neither revoked nor deleted.
 - **Update**: the installed version against npm's latest; when behind, **Update now** actually installs it (restart dsh to load it) and the upgrade command stays as a copy-able fallback; when current the installed version, and only a gray note when the check fails. The answer is cached for an hour; see [Updating](#updating) above.
-- **Quota**: the same numbers the Tako console shows. Remaining and used quota as two big USD figures, with the raw quota points from `/api/desktop/me` as a small second line (the plugin's status route divides at the site's own rate — 500,000 points = $1 — adding `quotaRemainUsd` / `quotaUsedUsd` while keeping the raw points), then the usage-share bar (filled with the Tako site's primary color) and the conversion note. Signed out it says to sign in first; when Tako is unreachable the reason shows on the sign-in card and the page still renders. The account answer is cached in the plugin's memory for 45 seconds, so opening the panel does not hit Tako every time.
+- **Plan / wallet**: with a plan, remaining **5h** and **weekly** bars (`user-quota`, same as the Tako plan page, already USD). Wallet remainder is a separate stamp (`/api/desktop/me` points / 500000 = $1). Do not mix the two. Without a plan, only the wallet is shown. The sidebar footer uses the same data; clicking it opens the console.
 - **Model catalog**: what the plugin currently writes to `providers.tako` (after `include` / `exclude` / `pinned` / `overrides`) — model, context window, image input — with a countdown to the next directory refresh computed locally from `nextSyncAt` (no server polling).
 
 The panel reads four routes the plugin registers on the Web connection: `GET /api/tako.status`, `POST /api/tako.logout`, `GET /api/tako.catalog`, `GET /api/tako.update` (POST installs the latest), same origin and behind dsh's browser authentication fence. Before the first sync the catalog card shows an empty state instead of an error.
