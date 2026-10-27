@@ -401,6 +401,9 @@ window.__ModuleLoader__.load({
         '.dsh-tako-footer .frac{font-variant-numeric:tabular-nums;font-size:13px;font-weight:500}',
         '.dsh-tako-footer .k{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary)}',
         '.dsh-tako-ink{color:' + CLAY + '}',
+        '.dsh-tako-bar{height:6px;border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);overflow:hidden}',
+        '.dsh-tako-bar>i{display:block;height:100%;background:' + CLAY + ';border-radius:inherit}',
+        '.dsh-tako-footer-bar{height:4px;width:100%;margin-top:3px}',
       ].join('')
       document.head.appendChild(style)
     }
@@ -616,12 +619,28 @@ window.__ModuleLoader__.load({
       return `${u} / ${fmtUsd(limit)}`
     }
 
+    function remainingShare(used, limit) {
+      if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) return undefined
+      const spent = typeof used === 'number' && Number.isFinite(used) ? used : 0
+      return Math.max(0, Math.min(1, (limit - spent) / limit))
+    }
+
     /** Remaining share of a subscription window, as a compact percent. */
     function remainingPercent(used, limit) {
-      if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) return '—'
-      const spent = typeof used === 'number' && Number.isFinite(used) ? used : 0
-      const share = Math.max(0, Math.min(1, (limit - spent) / limit))
+      const share = remainingShare(used, limit)
+      if (share === undefined) return '—'
       return share.toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 0 })
+    }
+
+    function QuotaBar(used, limit, extraClass) {
+      const share = remainingShare(used, limit)
+      if (share === undefined) return null
+      const percent = Math.round(share * 100)
+      return h('div', {
+        className: extraClass === undefined ? 'dsh-tako-bar' : `dsh-tako-bar ${extraClass}`,
+        role: 'progressbar',
+        'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': percent,
+      }, h('i', { style: { width: `${percent}%` } }))
     }
 
     function TakoFooter(props) {
@@ -648,10 +667,16 @@ window.__ModuleLoader__.load({
       let body
       if (status === undefined) body = h('span', { className: 'k' }, '…')
       else if (!configured) body = h('span', { className: 'frac dsh-tako-ink' }, t('signIn'))
-      else if (onPlan) body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
-        h('span', { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } },
-          h('span', null, h('span', { className: 'k' }, windowLabel(plan, t) + ' '), h('span', { className: 'frac' }, remainingPercent(plan.windowCost, plan.windowCostLimit))),
-          h('span', null, h('span', { className: 'k' }, t('weeklyShort') + ' '), h('span', { className: 'frac' }, remainingPercent(plan.weeklyCost, plan.weeklyCostLimit)))),
+      else if (onPlan) body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 } },
+        h('span', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 10 } },
+          h('span', { style: { minWidth: 0 } },
+            h('span', { className: 'k' }, windowLabel(plan, t) + ' '),
+            h('span', { className: 'frac' }, remainingPercent(plan.windowCost, plan.windowCostLimit)),
+            QuotaBar(plan.windowCost, plan.windowCostLimit, 'dsh-tako-footer-bar')),
+          h('span', { style: { minWidth: 0 } },
+            h('span', { className: 'k' }, t('weeklyShort') + ' '),
+            h('span', { className: 'frac' }, remainingPercent(plan.weeklyCost, plan.weeklyCostLimit)),
+            QuotaBar(plan.weeklyCost, plan.weeklyCostLimit, 'dsh-tako-footer-bar'))),
         h('span', null, h('span', { className: 'k' }, t('walletBalance') + ' '), h('span', { className: 'frac dsh-tako-ink' }, remain || '—')))
       else body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2 } },
         h('span', { className: 'k' }, t('walletBalance')),
@@ -680,13 +705,14 @@ window.__ModuleLoader__.load({
         children.push(h('div', { key: 'x', style: muted }, status === undefined ? '…' : t('quotaNeedsLogin')))
       } else if (onPlan) {
         const remainUsd = status.me?.quotaRemainUsd
-        const stamp = (key, label, value, hint) => h('div', { key, className: 'dsh-tako-stamp' },
+        const stamp = (key, label, value, hint, used, limit) => h('div', { key, className: 'dsh-tako-stamp' },
           h('div', { className: 'dsh-tako-kicker' }, label),
           h('div', { className: 'n', 'data-testid': `dsh-tako-quota-${key}` }, value),
+          used === undefined ? null : QuotaBar(used, limit),
           hint === undefined ? null : h('div', { style: { ...muted, fontSize: '12px' } }, hint))
         children.push(h('div', { key: 'stamps', className: 'dsh-tako-stamps dsh-tako-stamps-3' },
-          stamp('window', windowLabel(plan, t), remainingPercent(plan.windowCost, plan.windowCostLimit), fracUsd(plan.windowCost, plan.windowCostLimit)),
-          stamp('week', t('weeklyShort'), remainingPercent(plan.weeklyCost, plan.weeklyCostLimit), fracUsd(plan.weeklyCost, plan.weeklyCostLimit)),
+          stamp('window', windowLabel(plan, t), remainingPercent(plan.windowCost, plan.windowCostLimit), fracUsd(plan.windowCost, plan.windowCostLimit), plan.windowCost, plan.windowCostLimit),
+          stamp('week', t('weeklyShort'), remainingPercent(plan.weeklyCost, plan.weeklyCostLimit), fracUsd(plan.weeklyCost, plan.weeklyCostLimit), plan.weeklyCost, plan.weeklyCostLimit),
           stamp('remain', t('walletBalance'), typeof remainUsd === 'number' ? fmtUsd(remainUsd) : '—')))
         if (status.planError) {
           children.push(h('div', { key: 'pe', role: 'status', style: { ...muted, fontSize: '12px' } }, status.planError))
