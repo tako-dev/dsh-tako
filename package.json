@@ -1,6 +1,6 @@
 {
   "name": "dsh-tako",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Tako models for the official DeepSeek Harness (dsh): live model list with context windows, plus browser sign-in",
   "type": "module",
   "main": "lib/index.js",
@@ -11,6 +11,7 @@
       "default": "./lib/index.js"
     },
     "./client": "./client/client.js",
+    "./icon": "./client/icon.png",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
@@ -45,6 +46,7 @@
     "url": "git+https://github.com/tako-dev/dsh-tako.git"
   },
   "homepage": "https://github.com/tako-dev/dsh-tako#readme",
+  "icon": "./client/icon.png",
   "license": "MIT",
   "engines": {
     "node": ">=22"

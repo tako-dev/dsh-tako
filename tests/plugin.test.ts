@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import type { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Config as PluginConfig } from '../src/index.ts'
@@ -306,5 +306,22 @@ describe('missing-key hint', () => {
     broken.describeCredential.mockRejectedValueOnce(new Error('boom'))
     expect(await checkCredential(broken.ctx, config())).toBeUndefined()
     expect(broken.logger.warn).not.toHaveBeenCalled()
+  })
+})
+
+describe('package icon', () => {
+  it('points icon and exports["./icon"] at a small PNG on disk', () => {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      icon?: string
+      exports?: Record<string, unknown>
+    }
+    expect(pkg.icon).toBe('./client/icon.png')
+    expect(pkg.exports?.['./icon']).toBe('./client/icon.png')
+    const icon = new URL('../client/icon.png', import.meta.url)
+    expect(existsSync(icon)).toBe(true)
+    const size = statSync(icon).size
+    expect(size).toBeGreaterThan(0)
+    expect(size, 'market index').toBeLessThan(32 * 1024)
+    expect(size, 'readPluginMeta').toBeLessThan(256 * 1024)
   })
 })

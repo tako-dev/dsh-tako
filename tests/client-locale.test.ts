@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 /**
@@ -153,6 +154,25 @@ function findText(node: unknown, needle: string): string | undefined {
   return undefined
 }
 
+/** Deep-search an element tree for the first node whose data-testid matches. */
+function findByTestId(node: unknown, testId: string): Element | undefined {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findByTestId(child, testId)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  if (node === null || typeof node !== 'object') return undefined
+  const el = node as Element
+  if (el.props?.['data-testid'] === testId) return el
+  for (const child of el.children ?? []) {
+    const found = findByTestId(child, testId)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
 describe('client i18n: registration', () => {
   it('registers the complete zh/en dictionary under the dsh-tako namespace', async () => {
     await loadModuleRow()
@@ -260,6 +280,34 @@ describe('client i18n: fallback without the locale service', () => {
       rendered = render(page, { t: face.bind() }) as Element
       expect(findText(rendered, '控制台')).toBe('Tako 控制台')
       expect(findText(rendered, '分钟后刷新')).toBe('约 5 分钟后刷新')
+    } finally {
+      hookStates = []
+    }
+  })
+})
+
+describe('client TakoMark', () => {
+  it('inlines the PNG as a data URL and never uses import.meta', () => {
+    const source = readFileSync(new URL('../client/client.js', import.meta.url), 'utf8')
+    expect(source).not.toContain('import.meta')
+    const match = source.match(/const TAKO_MARK_URL = '(data:image\/png;base64,([A-Za-z0-9+/=]+))'/)
+    expect(match).not.toBeNull()
+    const png = readFileSync(new URL('../client/icon.png', import.meta.url))
+    expect(Buffer.from(match![2]!, 'base64').equals(png)).toBe(true)
+  })
+
+  it('renders dsh-tako-mark as an img whose src is the inlined PNG data URL', async () => {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    const page = entries.find(entry => entry.slot === 'main')!.component
+    hookStates = [undefined, undefined, undefined, undefined, false, undefined, { status: 'idle' }]
+    try {
+      const mark = findByTestId(render(page, {}), 'dsh-tako-mark')
+      expect(mark?.tag).toBe('img')
+      expect(String(mark?.props?.src)).toMatch(/^data:image\/png;base64,/)
     } finally {
       hookStates = []
     }
