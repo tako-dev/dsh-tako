@@ -206,6 +206,44 @@ describe('POST /api/tako.update', () => {
     expect(spawnAdd).not.toHaveBeenCalled()
   })
 
+  it('falls back to dsh plugin add when the package is already on disk', async () => {
+    const installBundle = vi.fn(async () => ({ application: 'failed', error: { code: 'already-installed' } }))
+    const spawnAdd = vi.fn(async (_request: SpawnAddRequest) => ({ status: 0, stdout: '', stderr: '' }))
+    const locateDsh = vi.fn(() => ({ packageJson: '/opt/dsh/package.json', version: '1.0.0' }))
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      pluginManager: () => ({ installBundle }),
+      spawnAdd,
+      locateDsh,
+      execPath: '/usr/bin/node',
+      profile: () => ({ name: 'desktop', dir: '/tmp/profile' }),
+      readInstalledVersion: () => '0.3.0',
+    })
+    const response = await svc.handleInstall()
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ ok: true, skipped: false, via: 'cli', pendingRestart: true })
+    expect(installBundle).not.toHaveBeenCalled()
+    expect(spawnAdd).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to dsh plugin add when installBundle reports already-installed', async () => {
+    const installBundle = vi.fn(async () => ({ application: 'failed', error: { code: 'already-installed', diagnostic: 'dsh-tako is already installed' } }))
+    const spawnAdd = vi.fn(async (_request: SpawnAddRequest) => ({ status: 0, stdout: '', stderr: '' }))
+    const locateDsh = vi.fn(() => ({ packageJson: '/opt/dsh/package.json', version: '1.0.0' }))
+    const { svc } = service({
+      registry: registryFetch({ latest: '0.4.0' }),
+      pluginManager: () => ({ installBundle }),
+      spawnAdd,
+      locateDsh,
+      execPath: '/usr/bin/node',
+      profile: () => ({ name: 'web' }),
+    })
+    const response = await svc.handleInstall()
+    expect(await response.json()).toMatchObject({ ok: true, via: 'cli' })
+    expect(installBundle).toHaveBeenCalledOnce()
+    expect(spawnAdd).toHaveBeenCalledTimes(1)
+  })
+
   it('spawns dsh plugin add when there is no pluginManager', async () => {
     const spawnAdd = vi.fn(async (_request: SpawnAddRequest) => ({ status: 0, stdout: '', stderr: '' }))
     const locateDsh = vi.fn(() => ({ packageJson: '/opt/dsh/package.json', version: '1.0.0' }))

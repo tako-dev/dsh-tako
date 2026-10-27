@@ -3,11 +3,12 @@
  * into a dsh profile. Shared by the console route and `dsh-tako update`.
  *
  * The check always reads the official registry (never a configured mirror).
- * Installation prefers the host `pluginManager.installBundle` service — the
- * same pnpm path the official plugin page uses — and only spawns
- * `dsh plugin add` when that service is absent. A failed service call is
- * returned to the caller; it does not fall back to the CLI. Self-updates
- * cannot hot-replace the running plugin, so callers tell the user to restart.
+ * Installation prefers the host `pluginManager.installBundle` service for a
+ * first install. When `dsh-tako` is already in the profile, HMR hosts refuse
+ * `installBundle` with `already-installed`; then we spawn `dsh plugin add`,
+ * which is pnpm add in the profile directory (in-place upgrade). Electron
+ * sets `ELECTRON_RUN_AS_NODE` so the desktop host CLI can run. Callers tell
+ * the user to restart; the running plugin cannot hot-replace itself.
  * @module dsh-tako/upgrade
  */
 
@@ -212,6 +213,14 @@ async function defaultSpawnAdd(request: SpawnAddRequest): Promise<SpawnAddResult
   })
 }
 
+function isAlreadyInstalled(error: string, result?: InstallBundleResult): boolean {
+  const record = result?.error
+  if (record !== null && typeof record === 'object' && (record as { code?: unknown }).code === 'already-installed') {
+    return true
+  }
+  return /already[- ]installed/i.test(error)
+}
+
 function installFailure(result: InstallBundleResult): string {
   const parts: string[] = []
   const message = describeError(result.error)
@@ -222,30 +231,39 @@ function installFailure(result: InstallBundleResult): string {
 }
 
 /**
- * Install `dsh-tako@<latest>` into the profile. Prefers `pluginManager`;
- * spawns `dsh plugin add` only when that service is missing.
+ * Install `dsh-tako@<latest>` into the profile. First install uses
+ * `pluginManager`; an already-on-disk copy uses `dsh plugin add` (pnpm add).
  */
 export async function runUpgrade(input: RunUpgradeInput): Promise<UpgradeResult> {
   const spec = `${PACKAGE_NAME}@${input.latest}`
-  const env = input.env ?? process.env
-  if (input.pluginManager !== undefined) {
-    let result: InstallBundleResult
+  const env = { ...input.env ?? process.env }
+  if (process.versions.electron !== undefined && env.ELECTRON_RUN_AS_NODE === undefined) {
+    env.ELECTRON_RUN_AS_NODE = '1'
+  }
+  const readVer = input.readInstalledVersion ?? readInstalledVersion
+  const alreadyOnDisk = input.profile.dir !== undefined && readVer(input.profile.dir) !== undefined
+  if (input.pluginManager !== undefined && !alreadyOnDisk) {
+    let result: InstallBundleResult | undefined
     try {
       result = await input.pluginManager.installBundle(spec, { registry: NPM_REGISTRY })
     } catch (error: unknown) {
-      return { ok: false, error: describeError(error) || 'install failed' }
+      const message = describeError(error) || 'install failed'
+      if (!isAlreadyInstalled(message, { error })) return { ok: false, error: message }
     }
-    if (result.application === 'failed' || result.error) {
-      return { ok: false, error: installFailure(result) }
+    if (result !== undefined && result.application !== 'failed' && result.error === undefined) {
+      const installed: UpgradeResult = {
+        ok: true,
+        via: 'plugin-manager',
+        application: result.application === 'applied' ? 'applied' : 'restart-required',
+        installed: result.version ?? input.latest,
+      }
+      if (typeof result.restartReason === 'string' && result.restartReason !== '') installed.restartReason = result.restartReason
+      return installed
     }
-    const installed: UpgradeResult = {
-      ok: true,
-      via: 'plugin-manager',
-      application: result.application === 'applied' ? 'applied' : 'restart-required',
-      installed: result.version ?? input.latest,
+    if (result !== undefined && (result.application === 'failed' || result.error)) {
+      const message = installFailure(result)
+      if (!isAlreadyInstalled(message, result)) return { ok: false, error: message }
     }
-    if (typeof result.restartReason === 'string' && result.restartReason !== '') installed.restartReason = result.restartReason
-    return installed
   }
 
   let install: DshInstall
@@ -279,7 +297,6 @@ export async function runUpgrade(input: RunUpgradeInput): Promise<UpgradeResult>
     const text = [spawned.stderr, spawned.stdout].filter(part => part.trim() !== '').join('\n')
     return { ok: false, error: tail(text) || `dsh plugin add exited ${String(spawned.status)}` }
   }
-  const readVer = input.readInstalledVersion ?? readInstalledVersion
   const installed = input.profile.dir !== undefined ? readVer(input.profile.dir) : undefined
   return { ok: true, via: 'cli', application: 'restart-required', installed: installed ?? input.latest }
 }
