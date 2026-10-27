@@ -107,6 +107,8 @@ window.__ModuleLoader__.load({
         updating: '正在更新…',
         updateInstalled: '已安装 {version}，请重启 dsh 后生效',
         updateInstallFailed: '更新失败',
+        footerRemain: '剩余',
+        footerUsed: '已用',
       },
       en: {
         signIn: 'Sign in to Tako with the browser',
@@ -169,6 +171,8 @@ window.__ModuleLoader__.load({
         updating: 'Updating…',
         updateInstalled: 'Installed {version}. Restart dsh to load it.',
         updateInstallFailed: 'Update failed',
+        footerRemain: 'Left',
+        footerUsed: 'Used',
       },
     }
 
@@ -322,17 +326,23 @@ window.__ModuleLoader__.load({
 
     // ---------------------------------------------------------------- console panel
 
-    /** A simple "T" with a curled tentacle tail, at the size the sidebar asks for. */
-    function TakoPanelIcon(props) {
-      const size = props.size || 18
-      const color = props.active ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-secondary)'
+    function TakoMark(size) {
       return h('svg', {
         width: size, height: size, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true,
-        style: { display: 'block', flex: 'none', color },
+        'data-testid': 'dsh-tako-mark',
+        style: { display: 'block', flex: 'none', borderRadius: 8 },
       },
-        h('path', { d: 'M5.5 5h13', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round' }),
-        h('path', { d: 'M12 5v11.5a2.5 2.5 0 0 0 2.5 2.5h1.5', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round' }),
-      )
+        h('rect', { width: 24, height: 24, rx: 8, fill: '#F26D5B' }),
+        h('path', {
+          fill: '#fff',
+          d: 'M12 6.2c-2.2 0-4 1.7-4 3.9 0 .4.1.8.2 1.1-.9.4-1.5 1.2-1.5 2.2 0 1.1.8 2 1.9 2.2-.2.4-.3.8-.3 1.2 0 1.6 1.6 2.8 3.7 2.8s3.7-1.2 3.7-2.8c0-.4-.1-.8-.3-1.2 1.1-.2 1.9-1.1 1.9-2.2 0-1-.6-1.8-1.5-2.2.1-.3.2-.7.2-1.1 0-2.2-1.8-3.9-4-3.9Z',
+        }),
+        h('circle', { cx: 10, cy: 11, r: 0.9, fill: '#F26D5B' }),
+        h('circle', { cx: 14, cy: 11, r: 0.9, fill: '#F26D5B' }))
+    }
+
+    function TakoPanelIcon(props) {
+      return TakoMark(props.size || 18)
     }
 
     const mono = { fontFamily: 'var(--ds-font-family-code, ui-monospace, monospace)', fontSize: '0.9em' }
@@ -559,6 +569,72 @@ window.__ModuleLoader__.load({
       const shown = value !== 0 && Math.abs(value) < floor ? (value > 0 ? floor : -floor) : value
       return shown.toLocaleString(undefined, { style: 'currency', currency: 'USD', currencyDisplay: 'narrowSymbol', minimumFractionDigits: 0, maximumFractionDigits: digits })
     }
+
+    function openTakoConsole(t) {
+      const label = t('panel')
+      const buttons = document.querySelectorAll('nav button[aria-label]')
+      for (const button of buttons) {
+        if (button.getAttribute('aria-label') === label) {
+          button.click()
+          return
+        }
+      }
+    }
+
+    function TakoFooter(props) {
+      const wide = props.wide === true
+      const t = props.t ?? fallbackT
+      const [status, setStatus] = useState(undefined)
+      const alive = useRef(true)
+      useEffect(() => () => { alive.current = false }, [])
+      useEffect(() => {
+        void (async () => {
+          try {
+            const next = await call('GET', STATUS_ROUTE)
+            if (alive.current) setStatus(next)
+          } catch {
+            if (alive.current) setStatus({ configured: false })
+          }
+        })()
+      }, [])
+      const configured = status !== undefined && status.configured === true
+      const me = configured ? status.me : undefined
+      const planName = typeof me?.planName === 'string' && me.planName !== '' ? me.planName : undefined
+      const remain = typeof me?.quotaRemainUsd === 'number' ? fmtUsd(me.quotaRemainUsd) : undefined
+      const used = typeof me?.quotaUsedUsd === 'number' ? fmtUsd(me.quotaUsedUsd) : undefined
+      const onPlan = planName !== undefined
+      const metric = (label, value, accent) => h('span', { style: { display: 'flex', minWidth: 0, flexDirection: 'column', gap: 1 } },
+        h('span', { style: { fontSize: 10, color: 'var(--dsw-alias-label-tertiary)', letterSpacing: '0.04em' } }, label),
+        h('span', { style: { fontSize: accent ? 15 : 15, fontWeight: 600, lineHeight: '20px', color: accent ? '#F26D5B' : 'var(--dsw-alias-label-primary)', fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, value || '—'))
+      let body
+      if (status === undefined) body = h('span', { style: { color: 'var(--dsw-alias-label-tertiary)', fontSize: 12 } }, '…')
+      else if (!configured) body = h('span', { style: { color: '#F26D5B', fontSize: 12, fontWeight: 510, marginTop: 2 } }, t('signIn'))
+      else if (onPlan) body = h('span', { style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8, marginTop: 4 } },
+        metric(t('footerRemain'), remain, true),
+        metric(t('footerUsed'), used, false))
+      else body = h('span', { style: { display: 'flex', flexDirection: 'column', gap: 1, marginTop: 4 } },
+        h('span', { style: { fontSize: 10, color: 'var(--dsw-alias-label-tertiary)' } }, t('quotaRemain')),
+        h('span', { style: { fontSize: 18, fontWeight: 600, color: '#F26D5B', fontVariantNumeric: 'tabular-nums' } }, remain || '—'))
+      return h('button', {
+        type: 'button',
+        'data-testid': 'dsh-tako-footer',
+        'data-tako-quota': !configured ? 'empty' : onPlan ? 'plan' : 'balance',
+        onClick: () => { openTakoConsole(t) },
+        style: {
+          display: 'flex', alignItems: 'center', gap: 9, width: '100%',
+          minHeight: configured ? 82 : 52, padding: '8px 10px',
+          border: 'none', borderRadius: 12, textAlign: 'left', cursor: 'pointer',
+          background: 'transparent', color: 'inherit',
+          boxShadow: 'inset 3px 0 0 #F26D5B',
+        },
+      },
+        h('span', { 'aria-hidden': true, style: { flex: 'none' } }, TakoMark(wide ? 24 : 20)),
+        wide ? h('span', { style: { display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 } },
+          h('span', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } },
+            h('span', { style: { fontSize: 13, fontWeight: 600 } }, 'Tako'),
+            onPlan ? h('span', { style: { flex: 'none', padding: '0 6px', borderRadius: 999, border: '0.5px solid rgb(242 109 91 / 45%)', background: 'rgb(242 109 91 / 16%)', color: '#F26D5B', fontSize: 10, fontWeight: 600, lineHeight: '16px' } }, t('plan')) : null),
+          body) : null)
+    }
     /** A share (0-1) as a percent, mirroring the site's two-digit cap. */
     const fmtPercent = share => share.toLocaleString(undefined, { style: 'percent', maximumFractionDigits: 2 })
 
@@ -768,6 +844,12 @@ window.__ModuleLoader__.load({
           label: () => boundT('panel'),
           locale: NS,
         }, TakoPanelIcon))
+        ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+          name: 'sidebar.footer.action',
+          id: 'dsh-tako-quota',
+          order: 10,
+          locale: NS,
+        }, TakoFooter))
       },
     }
   },

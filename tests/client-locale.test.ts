@@ -31,6 +31,7 @@ const EXPECTED_KEYS = [
   'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry',
   'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'copy', 'copied', 'updateFailed',
   'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
+  'footerRemain', 'footerUsed',
 ]
 
 let row: ModuleRow | undefined
@@ -182,7 +183,7 @@ describe('client i18n: registration', () => {
     const { ctx, entries, runInjections } = stubCtx({ locale: face })
     plugin.apply(ctx)
     runInjections()
-    expect(entries.map(entry => entry.slot).sort()).toEqual(['main', 'settings.models.provider-card', 'sidebar.panellist'])
+    expect(entries.map(entry => entry.slot).sort()).toEqual(['main', 'settings.models.provider-card', 'sidebar.footer.action', 'sidebar.panellist'])
     for (const entry of entries) expect(entry.options.locale).toBe('dsh-tako')
     const label = entries.find(entry => entry.slot === 'sidebar.panellist')!.options.label as () => string
     face.setActive('zh')
