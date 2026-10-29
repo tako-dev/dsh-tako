@@ -16,13 +16,38 @@ import z from '@deepseek-ai/schemastery'
 import type { CatalogOptions, TakoModel, TakoModelOverride, TakoPricingResponse } from './catalog.ts'
 import { buildCatalog, DEFAULT_REASONING_EFFORTS } from './catalog.ts'
 import { applySearch } from './search.ts'
+import { applyTakoSkills } from './skills.ts'
 import { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
+import { applyTakoTools } from './tako-tools.ts'
 import { applyWeb } from './web.ts'
 import type { CatalogState } from './web.ts'
 
 export * from './catalog.ts'
 export { applySearch, TAKO_SEARCH_PROVIDER_ID } from './search.ts'
 export { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
+export {
+  applyTakoSkills,
+  TAKO_DECIDE_SKILL,
+  TAKO_IMAGE_EDIT_SKILL,
+  TAKO_IMAGE_GENERATE_SKILL,
+  TAKO_SEARCH_SKILL,
+  TAKO_SKILL_NAMES,
+  TAKO_SKILLS,
+  TAKO_SPEECH_SKILL,
+} from './skills.ts'
+export {
+  applyTakoTools,
+  DEFAULT_ASR_MODEL,
+  DEFAULT_DECIDE_MODEL,
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_TTS_MODEL,
+  TAKO_DECIDE_TOOL,
+  TAKO_IMAGE_EDIT_TOOL,
+  TAKO_IMAGE_GENERATE_TOOL,
+  TAKO_SPEECH_TRANSCRIBE_TOOL,
+  TAKO_SPEECH_TTS_TOOL,
+  TAKO_TOOL_NAMES,
+} from './tako-tools.ts'
 export { LOGIN_ROUTE, UPDATE_ROUTE } from './web.ts'
 export type { CatalogState } from './web.ts'
 
@@ -278,10 +303,14 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
  * and the Tako console panel's status, logout, catalog and update routes.
  * A profile that also mounts `web` registers Tako as a search provider and
  * pins it over the DeepSeek-official default when a Tako key is configured.
+ * Official profiles that mount `skills` / `tools` also register Tako runtime
+ * skills and image/decide/speech tools on the same key.
  */
 export function apply(ctx: Context, config: Config): void {
   const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
   ctx.effect(() => start(ctx, config, { catalog }))
   applyWeb(ctx, config, { catalog: () => catalog })
   applySearch(ctx, config)
+  applyTakoSkills(ctx)
+  applyTakoTools(ctx, config)
 }
