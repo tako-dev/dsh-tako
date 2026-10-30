@@ -216,7 +216,15 @@ window.__ModuleLoader__.load({
      * are registered, the inline fallback until then.
      */
     let boundT = fallbackT
+    // Desktop serves the workbench at dsh-app://app, so hostname is "app", not
+    // 127.0.0.1. The host is still this machine; the preload marks that profile.
     const loopback = () => ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(window.location.hostname)
+      || window.__DSH_TAKO_PROFILE__ === true
+    // A relative "api/..." URL misses the host when the page path is nested.
+    const hostPath = route => route.charAt(0) === '/' ? route : `/${route}`
+    const notifyCredential = () => {
+      try { window.dispatchEvent(new Event('dsh-tako-credential')) } catch {}
+    }
 
     async function call(method, route, body) {
       const init = { method, headers: { accept: 'application/json' }, cache: 'no-store' }
@@ -224,7 +232,7 @@ window.__ModuleLoader__.load({
         init.headers['content-type'] = 'application/json'
         init.body = JSON.stringify(body)
       }
-      const response = await fetch(route, init)
+      const response = await fetch(hostPath(route), init)
       let data
       try { data = await response.json() } catch { data = undefined }
       if (data === undefined) throw new Error(`HTTP ${response.status}`)
@@ -250,10 +258,12 @@ window.__ModuleLoader__.load({
         timer.current = setTimeout(async () => {
           if (!alive.current) return
           try {
-            const next = await fetch(`${ROUTE}?id=${encodeURIComponent(id)}`, { cache: 'no-store' }).then(r => r.json())
+            const next = await fetch(`${hostPath(ROUTE)}?id=${encodeURIComponent(id)}`, { cache: 'no-store' }).then(r => r.json())
             if (!alive.current) return
             if (next.status === 'pending') { setState(next); poll(id); return }
-            setState(next.status === 'idle' ? { status: 'error', code: 'failed', message: 'sign-in no longer pending' } : next)
+            const settled = next.status === 'idle' ? { status: 'error', code: 'failed', message: 'sign-in no longer pending' } : next
+            setState(settled)
+            if (settled.status === 'success') notifyCredential()
           } catch (error) {
             if (alive.current) setState({ status: 'error', code: 'failed', message: String(error && error.message || error) })
           }
@@ -274,6 +284,9 @@ window.__ModuleLoader__.load({
           if (tab) {
             try { tab.opener = null } catch {}
             tab.location.href = started.url
+          } else if (typeof started.url === 'string' && started.url !== '') {
+            // Desktop denies about:blank, then opens http(s) in the system browser.
+            window.open(started.url, '_blank')
           }
           setState(started)
           poll(started.id)
@@ -676,14 +689,22 @@ window.__ModuleLoader__.load({
       useEffect(() => () => { alive.current = false }, [])
       useEffect(() => {
         ensureTakoTheme()
-        void (async () => {
+        const load = async () => {
           try {
             const next = await call('GET', STATUS_ROUTE)
             if (alive.current) setStatus(next)
           } catch {
             if (alive.current) setStatus({ configured: false })
           }
-        })()
+        }
+        const onCredential = () => { void load() }
+        void load()
+        window.addEventListener('dsh-tako-credential', onCredential)
+        window.addEventListener('focus', onCredential)
+        return () => {
+          window.removeEventListener('dsh-tako-credential', onCredential)
+          window.removeEventListener('focus', onCredential)
+        }
       }, [])
       const configured = status !== undefined && status.configured === true
       const plan = configured ? status.plan : undefined
@@ -842,6 +863,7 @@ window.__ModuleLoader__.load({
           else if (result.action === 'external') setLogoutNote(t('logoutExternal'))
           else setLogoutNote(t('logoutNone'))
           await loadStatus()
+          notifyCredential()
         } catch (error) {
           if (alive.current) setLogoutNote(`${t('failed')}: ${String(error && error.message || error)}`)
         } finally {
