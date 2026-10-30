@@ -230,6 +230,32 @@ describe('client i18n: registration', () => {
     }
   })
 
+  it('treats the desktop workbench as a local host so plugin login is not marked remote', async () => {
+    await loadModuleRow()
+    const win = globalThis.window as unknown as { location: { hostname: string }, __DSH_TAKO_PROFILE__?: boolean }
+    const previous = win.location.hostname
+    win.location.hostname = 'app'
+    win.__DSH_TAKO_PROFILE__ = true
+    hookStates = [{ status: 'pending', id: '1', url: 'https://tako.example/app/authorize' }]
+    try {
+      const { plugin } = materialize()
+      const { ctx, entries, runInjections } = stubCtx()
+      plugin.apply(ctx)
+      runInjections()
+      const SignIn = entries.find(entry => entry.slot === 'settings.models.provider-card')!.component
+      const { render } = materialize()
+      const local = render(SignIn, { provider: { provider: 'tako' }, keyConfigured: false, t: (key: string) => key })
+      expect(findText(local, 'remote')).toBeUndefined()
+      delete win.__DSH_TAKO_PROFILE__
+      const remote = render(SignIn, { provider: { provider: 'tako' }, keyConfigured: false, t: (key: string) => key })
+      expect(findText(remote, 'remote')).toBe('remote')
+    } finally {
+      win.location.hostname = previous
+      delete win.__DSH_TAKO_PROFILE__
+      hookStates = []
+    }
+  })
+
   it('keeps activation gated on slots only — no hard locale dependency', async () => {
     await loadModuleRow()
     const { plugin } = materialize()
