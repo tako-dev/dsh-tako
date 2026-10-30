@@ -1,0 +1,30 @@
+name: Bug
+description: 插件坏了。机器人会回复并尝试修复发版。
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个仓库的 issue 由机器人处理。它用维护者账号回复，评论带 `bot` 标记。
+
+        收到后会回复「收到，会改。」能修的会直接改并发版，并在这条 issue 里更新状态。不要贴 API key 或密码。桌面应用的问题请开到 [dsh-tako-desktop](https://github.com/tako-dev/dsh-tako-desktop/issues)。
+
+        Issues here are handled by a bot posting as the maintainer (`bot` mark). Desktop app bugs belong in dsh-tako-desktop. Do not paste API keys.
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 插件版本
+      placeholder: 0.5.13
+  - type: input
+    id: email
+    attributes:
+      label: 邮箱（可选）
+      description: 发版后机器人会发到这个地址。不填就只在 issue 里更新。
+      placeholder: you@example.com
