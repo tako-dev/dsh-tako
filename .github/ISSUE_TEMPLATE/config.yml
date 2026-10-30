@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 公告 / Issue bot
+    url: https://github.com/tako-dev/dsh-tako/issues?q=is%3Aissue+label%3Abot+is%3Aopen
+    about: 新 issue 会由机器人用维护者账号回复「收到，会改。」，能修的会改并发版。不要贴 API key。

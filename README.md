@@ -8,6 +8,8 @@
 
 让官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) CLI（`@deepseek-ai/dsh`）直接使用 [Tako](https://tako.shiroha.tech) 的模型，并带上正确的上下文窗口和图片输入能力。装一个插件即可，不需要手写 provider 配置。
 
+> **Issue 由机器人处理。** 它用维护者账号回复，评论带 `bot` 标记。收到后会说「收到，会改。」，能修的会改并发版。不要贴 API key。桌面应用的问题请开到 [dsh-tako-desktop](https://github.com/tako-dev/dsh-tako-desktop/issues)。[开一个 issue](https://github.com/tako-dev/dsh-tako/issues/new/choose)。
+
 ### 它做了什么
 
 - 启动时读取 Tako 公开的模型目录 `GET https://tako.shiroha.tech/api/pricing`（不需要 API key），之后按间隔刷新（默认 30 分钟）。
@@ -236,6 +238,8 @@ CI（`.github/workflows/ci.yml`）在 push 到 `main` 和 PR 时用 Node 22 / 24
 ## English
 
 `dsh-tako` adds [Tako](https://tako.shiroha.tech) models to the official DeepSeek Harness CLI (`@deepseek-ai/dsh`) with correct context windows and image input.
+
+> **Issues are handled by a bot.** It replies as the maintainer, with a `bot` mark, then tries to fix and release. Desktop app bugs belong in [dsh-tako-desktop](https://github.com/tako-dev/dsh-tako-desktop/issues). Do not paste API keys. [Open an issue](https://github.com/tako-dev/dsh-tako/issues/new/choose).
 
 It reads Tako's public model directory (`GET /api/pricing`, no key needed), keeps chat models only (drops image/speech/search models, `jev-*`, and Claude-Code-only models), sizes each model from structured fields or exact size tags (`272K`, `1M`, `1.05M`), and writes the result as an OpenAI-compatible provider at `providers.tako` in the official `llm-pi-ai` plugin's settings. Requests, streaming, retries and credentials all stay on dsh's own code path. It writes only when the value changes, and refreshes every 30 minutes by default. The sidebar octopus opens the Tako console; the footer shows remaining 5h/weekly bars plus wallet.
 

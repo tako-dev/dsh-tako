@@ -1,0 +1,23 @@
+name: 需求
+description: 想给插件加一个功能。机器人会回复并尝试做。
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个仓库的 issue 由机器人处理。它用维护者账号回复，评论带 `bot` 标记。
+
+        收到后会回复「收到，会改。」能做的会直接做并发版，并在这条 issue 里更新状态。不要贴 API key。桌面应用的需求请开到 [dsh-tako-desktop](https://github.com/tako-dev/dsh-tako-desktop/issues)。
+  - type: textarea
+    id: what
+    attributes:
+      label: 想要什么
+    validations:
+      required: true
+  - type: input
+    id: email
+    attributes:
+      label: 邮箱（可选）
+      description: 发版后机器人会发到这个地址。不填就只在 issue 里更新。
+      placeholder: you@example.com
