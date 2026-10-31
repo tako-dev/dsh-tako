@@ -137,6 +137,28 @@ describe('console route /api/tako.status', () => {
     expect(body.maskedKey).toBe('cr_****210z')
   })
 
+  it('refetches when different credentials share the same visible mask', async () => {
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      const auth = new Headers(init?.headers).get('authorization')
+      if (url.endsWith('/api/desktop/me')) return Response.json({ success: true,
+        data: { user: { name: auth?.includes('account-a') ? 'account-a' : 'account-b' } } })
+      if (url.endsWith('/apiStats/api/get-key-id')) return Response.json({ success: true, data: { id: 'fixture-user' } })
+      return Response.json({})
+    }) as unknown as typeof fetch
+    const { svc, resolve } = service({ resolved: { value: 'cr_fixture-account-a-SAME', source: 'file' }, fetch: fetchImpl })
+    expect((await (await svc.handleStatus()).json()).me.userName).toBe('account-a')
+    resolve.mockResolvedValue({ value: 'cr_fixture-account-b-SAME', source: 'file' })
+    const body = await (await svc.handleStatus()).json()
+    expect(body.me.userName).toBe('account-b')
+    expect(body.maskedKey).toBe('cr_****SAME')
+    expect(fetchImpl).toHaveBeenCalledTimes(6)
+    expect(Object.keys(body).sort()).toEqual(['configured', 'credential', 'maskedKey', 'me', 'plan'])
+    expect(JSON.stringify(body)).not.toContain('fixture-account')
+    await svc.handleStatus()
+    expect(fetchImpl).toHaveBeenCalledTimes(6)
+  })
+
   it('keeps the page usable when whoami fails: configured with me:null and meError, HTTP 200', async () => {
     const tako = takoFetch({ meFails: true })
     const { svc } = service({ resolved: { value: KEY, source: 'file' }, fetch: tako.fetchImpl })
