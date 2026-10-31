@@ -14,6 +14,7 @@
  * @module dsh-tako/web
  */
 
+import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type { TakoModel } from './catalog.ts'
@@ -309,7 +310,7 @@ export interface ConsoleServiceOptions {
 }
 
 interface StatusCache {
-  maskedKey: string
+  fingerprint: string
   at: number
   me: ConsoleIdentity | null
   meError: string | undefined
@@ -339,8 +340,9 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     }
     if (current === undefined) return json({ configured: false })
     const maskedKey = maskKey(current.value)
-    // The key value itself is deliberately dropped here; only the mask leaves.
-    if (cache !== undefined && cache.maskedKey === maskedKey && now() - cache.at < cacheMs) {
+    const fingerprint = createHash('sha256').update(current.value).digest('hex')
+    // A display mask is not an account identity. Neither the key nor its fingerprint leaves the host.
+    if (cache !== undefined && cache.fingerprint === fingerprint && now() - cache.at < cacheMs) {
       return json({
         configured: true, maskedKey, credential: options.apiKeyEnv, me: cache.me, plan: cache.plan,
         ...(cache.meError === undefined ? {} : { meError: cache.meError }),
@@ -361,7 +363,7 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     } catch (error: unknown) {
       planError = error instanceof Error ? error.message : String(error)
     }
-    cache = { maskedKey, at: now(), me, meError, plan, planError }
+    cache = { fingerprint, at: now(), me, meError, plan, planError }
     return json({
       configured: true, maskedKey, credential: options.apiKeyEnv, me, plan,
       ...(meError === undefined ? {} : { meError }),
