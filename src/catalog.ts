@@ -40,7 +40,7 @@ export type TakoReasoningLevel = 'off' | 'low' | 'high' | 'max'
  */
 export type TakoReasoningEfforts = Partial<Record<TakoReasoningLevel, string | null>>
 
-/** Default levels attached to every catalog model Tako does not describe. */
+/** Legacy configured defaults, not evidence of a model's supported reasoning capabilities. */
 export const DEFAULT_REASONING_EFFORTS: TakoReasoningEfforts = {
   off: null,
   low: 'low',
@@ -73,6 +73,24 @@ export interface CatalogOptions {
   includeClaudeCodeOnly?: boolean
   /** Per-model overrides applied last. */
   overrides?: Readonly<Record<string, TakoModelOverride>>
+}
+
+/**
+ * Summarize known manual capability overrides without mistaking legacy defaults for support.
+ * @param data - Current pricing records.
+ * @param options - The same filtering and override choices used for the model catalog.
+ * @returns Per-model evidence status and explicitly configured choices.
+ */
+export function reasoningCapabilityReport(data: readonly TakoPricingModel[], options: CatalogOptions = {}): {
+  model: string
+  source: 'override' | 'unknown'
+  reasoningEfforts?: false | TakoReasoningEfforts
+}[] {
+  return buildCatalog(data, options).map(model => {
+    const override = options.overrides?.[model.id]
+    if (override?.reasoningEfforts === undefined) return { model: model.id, source: 'unknown' }
+    return { model: model.id, source: 'override', reasoningEfforts: override.reasoningEfforts }
+  })
 }
 
 /** Endpoint types that mark a model as something other than a chat model. */

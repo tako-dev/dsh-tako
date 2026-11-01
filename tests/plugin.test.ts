@@ -93,6 +93,22 @@ describe('config', () => {
     })
   })
 
+  it('preserves different explicitly reviewed reasoning maps for each model', () => {
+    const overrides: PluginConfig['overrides'] = {
+      'fixture-a': { reasoningEfforts: { off: null, low: 'minimal', high: 'high' } },
+      'fixture-b': { reasoningEfforts: { high: 'medium', max: 'xhigh' } },
+      'fixture-disabled': { reasoningEfforts: false },
+    }
+    const parsed = Config({ ...config(), overrides }).overrides
+    for (const [id, value] of Object.entries(overrides)) expect(parsed[id]?.reasoningEfforts).toEqual(value.reasoningEfforts)
+  })
+
+  it('rejects invalid per-model reasoning override values at configuration load', () => {
+    for (const reasoningEfforts of [{ high: 42 }, { unsupported: 'high' }, 'high']) {
+      expect(() => Config({ ...config(), overrides: JSON.parse(JSON.stringify({ fixture: { reasoningEfforts } })) })).toThrow()
+    }
+  })
+
   it('normalizes the origin', () => {
     expect(normalizeOrigin('https://tako.shiroha.tech/v1/')).toBe('https://tako.shiroha.tech')
     expect(normalizeOrigin(' https://tako.shiroha.tech// ')).toBe('https://tako.shiroha.tech')

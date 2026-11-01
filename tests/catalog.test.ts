@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { TakoModel, TakoPricingModel, TakoPricingResponse } from '../src/catalog.ts'
-import { buildCatalog, contextFromTags, DEFAULT_REASONING_EFFORTS, isChatModel, parseTags, toModel } from '../src/catalog.ts'
+import { buildCatalog, contextFromTags, DEFAULT_REASONING_EFFORTS, isChatModel, parseTags, reasoningCapabilityReport, toModel } from '../src/catalog.ts'
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/pricing-2026-10-25.json', import.meta.url), 'utf8')) as TakoPricingResponse
 const data = fixture.data ?? []
@@ -161,6 +161,25 @@ describe('structured fields', () => {
     expect(isChatModel({ model_name: 'x', supported_endpoint_types: ['anthropic'] })).toBe(false)
     expect(isChatModel({ model_name: 'jev-x', kind: 'chat' })).toBe(false)
     expect(isChatModel({ model_name: '   ', kind: 'chat' })).toBe(false)
+  })
+})
+
+describe('reasoning capability evidence', () => {
+  it('marks missing capability metadata unknown rather than confirming legacy defaults', () => {
+    const cards: TakoPricingModel[] = ['a', 'b', 'disabled'].map(model_name => ({ model_name, kind: 'chat' }))
+    expect(reasoningCapabilityReport(cards, { overrides: {
+      a: { reasoningEfforts: { off: null, high: 'medium' } }, disabled: { reasoningEfforts: false },
+    } })).toEqual([
+      { model: 'a', source: 'override', reasoningEfforts: { off: null, high: 'medium' } },
+      { model: 'b', source: 'unknown' },
+      { model: 'disabled', source: 'override', reasoningEfforts: false },
+    ])
+  })
+
+  it('uses the same filters and pins as the offered catalog', () => {
+    const report = reasoningCapabilityReport(data, { include: ['gpt-*'], pinned: ['gpt-5.6'] })
+    expect(report[0]?.model).toBe('gpt-5.6')
+    expect(report.every(row => row.model.startsWith('gpt-') && row.source === 'unknown')).toBe(true)
   })
 })
 

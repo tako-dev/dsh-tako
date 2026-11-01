@@ -13,7 +13,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
-import type { CatalogOptions, TakoModel, TakoModelOverride, TakoPricingResponse } from './catalog.ts'
+import type { CatalogOptions, TakoModel, TakoModelOverride, TakoPricingResponse, TakoReasoningEfforts } from './catalog.ts'
 import { buildCatalog, DEFAULT_REASONING_EFFORTS } from './catalog.ts'
 import { applySearch } from './search.ts'
 import { applyTakoSkills } from './skills.ts'
@@ -90,11 +90,19 @@ export interface Config {
   overrides: Record<string, TakoModelOverride>
 }
 
+const ReasoningEfforts: z<TakoReasoningEfforts> = z.dict(
+  z.union([z.string(), z.const(null)]), z.string().pattern(/^(off|low|high|max)$/),
+)
+
 const ModelOverride: z<TakoModelOverride> = z.object({
   name: z.string(),
   contextWindow: z.natural().min(1),
   maxTokens: z.natural().min(1),
   input: z.array(z.union(['text', 'image'])),
+  reasoningEfforts: z.union([
+    z.const(false),
+    ReasoningEfforts,
+  ]),
 })
 
 /** Runtime config schema. */
