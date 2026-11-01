@@ -160,7 +160,11 @@ Tako 授权后会把浏览器跳回 `http://127.0.0.1:<端口>/tako/callback`，
 | `include` | `[]` | 非空时只保留匹配的模型 id，支持 `*` 通配 |
 | `exclude` | `[]` | 去掉匹配的模型 id，支持 `*` 通配，在 `include` 之后生效 |
 | `includeClaudeCodeOnly` | `false` | 保留 Tako 限定 Claude Code 客户端的模型（在 dsh 中调用会被 Tako 拒绝） |
-| `overrides` | `{}` | 按模型 id 修正 `name`、`contextWindow`、`maxTokens`、`input`（`text` / `image`） |
+| `overrides` | `{}` | 按模型 id 修正 `name`、`contextWindow`、`maxTokens`、`input`（`text` / `image`）和 `reasoningEfforts` |
+
+`reasoningEfforts` 是经过人工核实的“选择器等级 → 服务端值”映射，仅接受 `off` / `low` / `high` / `max` 为键、字符串或 `null` 为值；`null` 表示不发送该字段，`false` 表示明确禁用推理配置。每个模型的覆盖独立，配置时拒绝无效等级和值。现有目录未提供能力信息的模型仍沿用旧配置默认值，不能把这些默认值当作已确认支持；此处不凭模型名猜测能力，也不自动覆盖已有选择。
+
+维护者可先构建，再运行 `node scripts/reasoning-report.mjs <pricing.json> [catalog-options.json]`。报告与目录使用相同过滤和排序；明确人工覆盖标记为 `override`，其余标记为 `unknown`，不把旧默认值包装成能力统计。脚本只读本地 JSON，不读取凭据或请求模型。服务端提供可信能力字段前，完整自动模型能力列表仍待接入。
 
 ### 工作原理
 
