@@ -91,7 +91,18 @@ window.__ModuleLoader__.load({
         yes: '支持',
         no: '不支持',
         catalogDefault: '默认',
-        catalogEmpty: '目录尚未同步；插件会在启动后拉取 Tako 的公开目录',
+        catalogEmpty: '目录尚未同步；插件正在获取 Tako 的公开目录',
+        catalogSyncing: '正在同步目录',
+        catalogRetrying: '目录同步未完成，正在等待重试',
+        catalogFailed: '目录同步失败',
+        catalogAttempts: '已尝试 {count} 次',
+        catalogReadAgain: '刷新目录状态',
+        catalogDirectoryError: '暂时无法获取模型目录',
+        catalogSettingsError: '模型设置尚未就绪',
+        catalogWriteError: '模型设置写入未完成',
+        catalogTransactionError: '运行时重载事务冲突；若重试仍失败，请重启 dsh',
+        catalogReadOnlyError: '当前 profile 为只读，模型设置未写入',
+        catalogEmptyError: '过滤后没有可用的聊天模型',
         catalogMore: '其余 {count} 个',
         catalogLess: '收起',
         refreshIn: '约 {minutes} 分钟后刷新',
@@ -164,7 +175,18 @@ window.__ModuleLoader__.load({
         yes: 'Yes',
         no: 'No',
         catalogDefault: 'default',
-        catalogEmpty: 'The catalog has not synced yet; the plugin fetches Tako\'s public directory after startup',
+        catalogEmpty: 'The catalog has not synced yet; the plugin is fetching Tako\'s public directory',
+        catalogSyncing: 'Syncing the catalog',
+        catalogRetrying: 'Catalog sync has not completed; waiting to retry',
+        catalogFailed: 'Catalog sync failed',
+        catalogAttempts: '{count} attempts',
+        catalogReadAgain: 'Refresh catalog status',
+        catalogDirectoryError: 'The model directory could not be retrieved',
+        catalogSettingsError: 'Model settings are not ready',
+        catalogWriteError: 'The model settings write did not complete',
+        catalogTransactionError: 'Runtime reload transaction conflict; restart dsh if retries keep failing',
+        catalogReadOnlyError: 'The profile is read-only; model settings were not written',
+        catalogEmptyError: 'No chat models remain after filtering',
         catalogMore: '{count} more',
         catalogLess: 'Show less',
         refreshIn: 'refreshes in ~{minutes} min',
@@ -226,8 +248,8 @@ window.__ModuleLoader__.load({
       try { window.dispatchEvent(new Event('dsh-tako-credential')) } catch {}
     }
 
-    async function call(method, route, body) {
-      const init = { method, headers: { accept: 'application/json' }, cache: 'no-store' }
+    async function call(method, route, body, signal) {
+      const init = { method, headers: { accept: 'application/json' }, cache: 'no-store', signal }
       if (body !== undefined) {
         init.headers['content-type'] = 'application/json'
         init.body = JSON.stringify(body)
@@ -456,7 +478,11 @@ window.__ModuleLoader__.load({
         const timer = setInterval(() => setTick(n => n + 1), 1000)
         return () => clearInterval(timer)
       }, [nextSyncAt])
-      if (nextSyncAt === null || nextSyncAt === undefined) return t('refreshOnlyAtStartup')
+      if (nextSyncAt === null || nextSyncAt === undefined) {
+        if (props.refreshIntervalMs > 0) return t('refreshIn', { minutes: Math.ceil(props.refreshIntervalMs / 60000) })
+        if (props.lastSyncAt === null && props.refreshIntervalMs === undefined) return t('catalogSyncing')
+        return t('refreshOnlyAtStartup')
+      }
       const minutes = Math.ceil(Math.max(0, nextSyncAt - Date.now()) / 60000)
       return minutes <= 0 ? t('refreshSoon') : t('refreshIn', { minutes })
     }
@@ -806,10 +832,24 @@ window.__ModuleLoader__.load({
           }, open ? t('catalogLess') : t('catalogMore', { count: hidden })))
         }
       }
+      if (catalog?.status && catalog.status !== 'ready') {
+        const label = { syncing: 'catalogSyncing', retrying: 'catalogRetrying', failed: 'catalogFailed' }[catalog.status]
+        if (label) children.push(h('div', { key: 'phase', role: 'status', style: muted }, t(label)))
+      }
+      if (catalog?.lastError) {
+        const label = { 'directory-unavailable': 'catalogDirectoryError', 'settings-not-ready': 'catalogSettingsError',
+          'write-failed': 'catalogWriteError', 'runtime-transaction': 'catalogTransactionError',
+          'read-only': 'catalogReadOnlyError', 'empty-catalog': 'catalogEmptyError' }[catalog.lastError.code]
+        children.push(h('div', { key: 'failure', role: 'status', style: muted },
+          `${t(label || 'catalogFailed')} · ${t('catalogAttempts', { count: catalog.attempts ?? 0 })}`))
+      }
+      if (props.onRefresh) children.push(h('button', { key: 'refresh', type: 'button', onClick: props.onRefresh,
+        style: { ...quietButton, alignSelf: 'flex-start' } }, t('catalogReadAgain')))
       return Card({
         name: 'catalog',
         title: t('catalogCard'),
-        extra: catalog === undefined || catalog.nextSyncAt === undefined ? undefined : h(Countdown, { nextSyncAt: catalog.nextSyncAt, t }),
+        extra: catalog === undefined || catalog.nextSyncAt === undefined ? undefined : h(Countdown, {
+          nextSyncAt: catalog.nextSyncAt, lastSyncAt: catalog.lastSyncAt, refreshIntervalMs: catalog.refreshIntervalMs, t }),
         children,
       })
     }
@@ -825,7 +865,12 @@ window.__ModuleLoader__.load({
       const login = useTakoLogin()
 
       const alive = useRef(true)
-      useEffect(() => () => { alive.current = false }, [])
+      const catalogRequest = useRef(undefined)
+      const catalogController = useRef(undefined)
+      useEffect(() => {
+        alive.current = true
+        return () => { alive.current = false; catalogController.current?.abort() }
+      }, [])
 
       const loadStatus = async () => {
         try {
@@ -837,18 +882,52 @@ window.__ModuleLoader__.load({
           if (alive.current) setStatusError(String(error && error.message || error))
         }
       }
-      const loadCatalog = async () => {
-        try {
-          const next = await call('GET', CATALOG_ROUTE)
-          if (!alive.current) return
-          setCatalog(next)
-          setCatalogError(undefined)
-        } catch (error) {
-          if (alive.current) setCatalogError(String(error && error.message || error))
-        }
+      const loadCatalog = () => {
+        if (catalogRequest.current) return catalogRequest.current
+        const controller = new AbortController()
+        catalogController.current = controller
+        const request = (async () => {
+          try {
+            const next = await call('GET', CATALOG_ROUTE, undefined, controller.signal)
+            if (!alive.current || controller.signal.aborted) return
+            setCatalog(next)
+            setCatalogError(undefined)
+            return next
+          } catch (error) {
+            if (alive.current && !controller.signal.aborted) setCatalogError(String(error && error.message || error))
+          }
+        })()
+        catalogRequest.current = request
+        void request.finally(() => {
+          if (catalogRequest.current === request) catalogRequest.current = undefined
+        })
+        return request
       }
 
-      useEffect(() => { void loadStatus(); void loadCatalog() }, [])
+      useEffect(() => { void loadStatus() }, [])
+      useEffect(() => {
+        let disposed = false
+        let timer
+        let pendingReads = 0
+        const poll = async () => {
+          const next = await loadCatalog()
+          if (disposed) return
+          const unsettled = !next || next.status === 'syncing' || next.status === 'retrying' || next.lastSyncAt === null
+          if (unsettled) {
+            // Bound rapid reads; after one minute the explicit refresh remains available.
+            if (++pendingReads < 30) timer = setTimeout(poll, 2000)
+            else if (typeof next?.nextSyncAt === 'number') {
+              // Keep the advertised deadline after the fast-read budget is exhausted.
+              timer = setTimeout(poll, Math.min(2147483647, Math.max(60000, next.nextSyncAt - Date.now() + 250)))
+            }
+          } else if (typeof next.nextSyncAt === 'number') {
+            pendingReads = 0
+            timer = setTimeout(poll, Math.min(2147483647, Math.max(2000, next.nextSyncAt - Date.now() + 250)))
+          }
+        }
+        void poll()
+        return () => { disposed = true; clearTimeout(timer); catalogController.current?.abort() }
+      }, [])
       // A finished sign-in changes the stored key; refresh the status card.
       useEffect(() => { if (login.state.status === 'success') { setLogoutNote(undefined); void loadStatus() } }, [login.state.status])
 
@@ -882,7 +961,7 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, style: quietButton }, t('retry'))))
       }
       children.push(QuotaCard({ status, t }))
-      children.push(h(CatalogCard, { catalog, error: catalogError, t }))
+      children.push(h(CatalogCard, { catalog, error: catalogError, onRefresh: () => { void loadCatalog() }, t }))
       children.push(h(UpdateCard, { key: 'update', t }))
       return h('div', {
         'data-testid': 'dsh-tako-console-page',

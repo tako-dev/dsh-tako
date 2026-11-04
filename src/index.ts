@@ -76,8 +76,10 @@ export interface Config {
   apiKeyEnv: string
   /** Capacity for a model the directory does not size. */
   defaultContextWindow: number
-  /** Directory refresh interval; `0` refreshes only at startup. */
+  /** Regular refresh interval after attempts settle; `0` leaves initial sync and bounded recovery only. */
   refreshIntervalMs: number
+  /** Bounded recovery delays after directory or write failures, before the regular refresh. */
+  syncRetryDelaysMs: number[]
   /** Ids listed first in selectors. */
   pinned: string[]
   /** Keep only ids matching these globs (`*` wildcard). */
@@ -111,6 +113,7 @@ export const Config: z<Config> = z.object({
   apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV).description('存放 Tako API key 的凭据名'),
   defaultContextWindow: z.natural().min(1).default(128_000).description('目录未标注上下文时的兜底值'),
   refreshIntervalMs: z.natural().default(30 * 60_000).description('模型目录刷新间隔（毫秒），0 表示只在启动时刷新'),
+  syncRetryDelaysMs: z.array(z.natural().min(1)).default([1_000, 5_000, 30_000]).description('目录同步失败后的有界重试延迟（毫秒）；空数组禁用快速重试'),
   pinned: z.array(z.string()).default(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto']).description('置顶的模型'),
   include: z.array(z.string()).default([]).description('只保留匹配的模型，支持 * 通配'),
   exclude: z.array(z.string()).default([]).description('排除匹配的模型，支持 * 通配'),
@@ -218,6 +221,12 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
   }
   const controller = new AbortController()
   let credentialChecked = false
+  if (deps.catalog) {
+    deps.catalog.status = 'syncing'
+    deps.catalog.attempts = 0
+    deps.catalog.refreshIntervalMs = config.refreshIntervalMs
+    deps.catalog.lastError = null
+  }
   const timers = new Set<ReturnType<typeof setTimeout>>()
   const later = (fn: () => void, ms: number): void => {
     const timer = setTimeout(() => { timers.delete(timer); fn() }, ms)
@@ -226,28 +235,85 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
   }
 
   /** Write the route unless the profile layer already holds exactly this value. */
-  const write = async (section: PiAiSection, models: readonly TakoModel[]): Promise<void> => {
+  const write = async (section: PiAiSection, models: readonly TakoModel[]): Promise<boolean> => {
     const next = routeProfile(config, models)
     // Compare with the profile layer, not the resolved value: the resolved
     // value carries pi-ai's schema defaults and would never match.
-    if (canonicalJson(section.user?.providers?.[PROVIDER]) === canonicalJson(next)) return
+    if (canonicalJson(section.user?.providers?.[PROVIDER]) === canonicalJson(next)) return true
     if (!ctx.settings.writable) {
       logger.warn('active profile is read-only; Tako route not updated')
-      return
+      return false
     }
+    if (controller.signal.aborted) return false
     await ctx.settings.mutate(PI_AI_NS, [{ op: 'set', path: ['providers', PROVIDER], value: next }])
+    if (controller.signal.aborted) return false
     logger.info('Tako route updated with %d models', models.length)
+    return true
   }
 
   /** Keep the console route's view of the catalog current after each sync. */
   const record = (models: readonly TakoModel[]): void => {
-    if (deps.catalog === undefined) return
+    if (deps.catalog === undefined || controller.signal.aborted) return
+    deps.catalog.status = 'ready'
+    deps.catalog.lastError = null
     deps.catalog.models = models.map(model => ({ ...model }))
     deps.catalog.lastSyncAt = Date.now()
     deps.catalog.nextSyncAt = config.refreshIntervalMs > 0 ? deps.catalog.lastSyncAt + config.refreshIntervalMs : null
   }
 
-  const sync = async (attempt = 0): Promise<void> => {
+  const failureMessages = {
+    'directory-unavailable': 'The Tako model directory could not be retrieved.',
+    'settings-not-ready': 'The model settings section is not active yet.',
+    'write-failed': 'The model settings update did not complete.',
+    'runtime-transaction': 'The host runtime rejected the reload transaction; restart dsh if recovery fails.',
+    'read-only': 'This profile is read-only; the model route was not updated.',
+    'empty-catalog': 'No chat models remain after filtering.',
+  } as const
+  const failed = (code: keyof typeof failureMessages): void => {
+    if (deps.catalog === undefined || controller.signal.aborted) return
+    deps.catalog.status = 'failed'
+    deps.catalog.lastError = { code, message: failureMessages[code], at: Date.now() }
+  }
+  let recovering = false
+  let running = false
+  const sync = async (sectionAttempt = 0, recoveryAttempt = 0): Promise<void> => {
+    if (controller.signal.aborted || running) return
+    running = true
+    recovering = false
+    if (deps.catalog) {
+      deps.catalog.attempts = (deps.catalog.attempts ?? 0) + 1
+      deps.catalog.status = 'syncing'
+    }
+    const retry = (): void => {
+      const delay = config.syncRetryDelaysMs[recoveryAttempt]
+      if (delay === undefined || controller.signal.aborted) return
+      recovering = true
+      if (deps.catalog) {
+        deps.catalog.status = 'retrying'
+        deps.catalog.nextSyncAt = Date.now() + delay
+      }
+      later(() => { void sync(sectionAttempt, recoveryAttempt + 1) }, delay)
+    }
+    try {
+      await attemptSync(sectionAttempt, recoveryAttempt, retry)
+    } catch (error: unknown) {
+      if (!controller.signal.aborted) {
+        logger.warn('Tako catalog synchronization failed: %s', error instanceof Error ? error.message : String(error))
+        failed('write-failed')
+        retry()
+      }
+    } finally {
+      running = false
+      if (!controller.signal.aborted && !recovering) {
+        if (deps.catalog && deps.catalog.status !== 'ready') {
+          deps.catalog.nextSyncAt = config.refreshIntervalMs > 0 ? Date.now() + config.refreshIntervalMs : null
+        }
+        if (config.refreshIntervalMs > 0) later(() => { void sync() }, config.refreshIntervalMs)
+      }
+    }
+  }
+
+  const attemptSync = async (sectionAttempt: number, recoveryAttempt: number, retry: () => void): Promise<void> => {
     const signal = controller.signal
     let models: TakoModel[] | undefined
     let fetchError: unknown
@@ -261,8 +327,15 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
     const section = piAiSection(ctx)
     if (section === undefined) {
       // pi-ai may still be starting; its settings section appears once it runs.
-      if (attempt < sectionRetries) later(() => { void sync(attempt + 1) }, sectionRetryMs)
-      else logger.warn('settings section "%s" is not active; Tako route not written', PI_AI_NS)
+      failed('settings-not-ready')
+      if (sectionAttempt < sectionRetries) {
+        recovering = true
+        if (deps.catalog) {
+          deps.catalog.status = 'retrying'
+          deps.catalog.nextSyncAt = Date.now() + sectionRetryMs
+        }
+        later(() => { void sync(sectionAttempt + 1, recoveryAttempt) }, sectionRetryMs)
+      } else logger.warn('settings section "%s" is not active; Tako route not written', PI_AI_NS)
       return
     }
     // pi-ai is up, and the credential provider mounts before it in dsh-base.
@@ -274,32 +347,32 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
       if (models !== undefined) {
         if (models.length === 0) {
           logger.warn('no Tako chat models left after filtering; route not updated')
+          failed('empty-catalog')
           return
         }
-        await write(section, models)
-        record(models)
+        if (await write(section, models)) record(models)
+        else failed('read-only')
         return
       }
       logger.warn('Tako model directory refresh failed: %s', fetchError instanceof Error ? fetchError.message : String(fetchError))
       // Keep the last stored list; only seed a route that does not exist yet.
       if (section.value?.providers?.[PROVIDER] === undefined) {
-        await write(section, FALLBACK_MODELS)
-        record(FALLBACK_MODELS)
+        if (await write(section, FALLBACK_MODELS)) record(FALLBACK_MODELS)
+        else { failed('read-only'); return }
       }
+      failed('directory-unavailable')
+      retry()
     } catch (error: unknown) {
       if (signal.aborted) return
       logger.warn('writing the Tako route failed: %s', error instanceof Error ? error.message : String(error))
+      failed(error instanceof Error && error.message === 'HMR transactions cannot be nested' ? 'runtime-transaction' : 'write-failed')
+      retry()
     }
   }
 
   void sync()
-  const interval = config.refreshIntervalMs > 0
-    ? setInterval(() => { void sync() }, config.refreshIntervalMs)
-    : undefined
-  interval?.unref?.()
   return () => {
     controller.abort()
-    if (interval !== undefined) clearInterval(interval)
     for (const timer of timers) clearTimeout(timer)
     timers.clear()
   }

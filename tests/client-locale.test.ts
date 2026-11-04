@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 /**
  * The browser half (client/client.js) is a plain script that registers itself
@@ -29,7 +29,8 @@ const EXPECTED_KEYS = [
   'quotaCard', 'quotaRemain', 'quotaUsed', 'quotaPoints', 'quotaUsedShare', 'quotaNoteUsd', 'quotaNoteUnknown',
   'quotaNeedsLogin', 'quotaUnavailable',
   'catalogCard', 'catalogModel', 'catalogContext', 'catalogVision', 'visionBadge', 'yes', 'no', 'catalogDefault', 'catalogEmpty',
-  'catalogMore', 'catalogLess',
+  'catalogMore', 'catalogLess', 'catalogSyncing', 'catalogRetrying', 'catalogFailed', 'catalogAttempts', 'catalogReadAgain',
+  'catalogDirectoryError', 'catalogSettingsError', 'catalogWriteError', 'catalogReadOnlyError', 'catalogEmptyError', 'catalogTransactionError',
   'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry',
   'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'pluginVersion', 'copy', 'copied', 'updateFailed',
   'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
@@ -62,18 +63,21 @@ let hookStates: unknown[] = []
  * stub runs function components inline (no virtual DOM), which is enough to
  * read the texts the real page would render.
  */
-function materialize(): { plugin: Plugin, render: (component: unknown, props: Record<string, unknown>) => unknown } {
+function materialize(options: {
+  effect?: (callback: () => void | (() => void)) => void,
+  setState?: (index: number, value: unknown) => void,
+} = {}): { plugin: Plugin, render: (component: unknown, props: Record<string, unknown>) => unknown } {
   const createElement = (tag: string | Function, props: Record<string, unknown> | null, ...children: unknown[]): unknown =>
     typeof tag === 'function' ? (tag as (props: unknown) => unknown)(props ?? {}) : { tag, props, children }
   let hookIndex = 0
   const react = {
     createElement,
-    useEffect: () => {},
-    useRef: () => ({ current: true }),
+    useEffect: (callback: () => void | (() => void)) => { options.effect?.(callback) },
+    useRef: (initial: unknown) => ({ current: initial }),
     useState: (initial: unknown) => {
-      const value = hookStates[hookIndex] ?? initial
-      hookIndex++
-      return [value, () => {}]
+      const index = hookIndex++
+      const value = hookStates[index] ?? initial
+      return [value, (next: unknown) => { options.setState?.(index, next) }]
     },
   }
   if (row === undefined) throw new Error('module row not loaded yet')
@@ -381,6 +385,141 @@ describe('client i18n: fallback without the locale service', () => {
       expect(findByTestId(rendered, 'dsh-tako-console-sign-out')).toBeDefined()
       expect(findText(rendered, '登录状态')).toBeUndefined()
     } finally {
+      hookStates = []
+    }
+  })
+
+  it('shows safe retry failure and the real interval before a first successful catalog sync', async () => {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    const page = entries.find(entry => entry.slot === 'main')!.component
+    hookStates = [undefined, undefined, { models: [], lastSyncAt: null, nextSyncAt: null, refreshIntervalMs: 1800000,
+      status: 'failed', attempts: 4, lastError: { code: 'write-failed', message: 'untrusted-payload', at: 10 } },
+    undefined, false, undefined, { status: 'idle' }]
+    try {
+      setDocumentLang('zh-CN')
+      const rendered = render(page, {})
+      expect(findText(rendered, '模型设置写入未完成')).toBe('模型设置写入未完成 · 已尝试 4 次')
+      expect(findText(rendered, '只在启动时刷新')).toBeUndefined()
+      expect(findText(rendered, '约 30 分钟后刷新')).toBe('约 30 分钟后刷新')
+      expect(findText(rendered, 'untrusted-payload')).toBeUndefined()
+      expect(findText(rendered, '刷新目录状态')).toBe('刷新目录状态')
+    } finally { hookStates = [] }
+  })
+
+  it('re-reads a pending catalog, publishes recovery, and cancels polling on panel unload', async () => {
+    await loadModuleRow()
+    vi.useFakeTimers()
+    const effects: (() => void | (() => void))[] = []
+    const updates: unknown[] = []
+    const { plugin, render } = materialize({ effect: callback => { effects.push(callback) },
+      setState: (index, value) => { if (index === 2) updates.push(value) } })
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    const page = entries.find(entry => entry.slot === 'main')!.component
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (!String(input).includes('tako.catalog')) return Response.json({ configured: false })
+      calls++
+      return Response.json(calls === 1 ? { models: [], lastSyncAt: null, nextSyncAt: Date.now() + 1000, status: 'retrying' }
+        : { models: [{ id: 'recovered' }], lastSyncAt: Date.now(), nextSyncAt: null, status: 'ready' })
+    }))
+    const disposers: (() => void)[] = []
+    try {
+      hookStates = []
+      render(page, {})
+      for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
+      await vi.advanceTimersByTimeAsync(0)
+      expect(calls).toBe(1)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(calls).toBe(2)
+      expect(updates.at(-1)).toMatchObject({ models: [{ id: 'recovered' }], status: 'ready' })
+      for (const dispose of disposers) dispose()
+      await vi.advanceTimersByTimeAsync(10000)
+      expect(calls).toBe(2)
+    } finally {
+      for (const dispose of disposers) dispose()
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+      hookStates = []
+    }
+  })
+
+  it('bounds rapid catalog reads and stops further publication on unload', async () => {
+    await loadModuleRow()
+    vi.useFakeTimers()
+    const effects: (() => void | (() => void))[] = []
+    const updates: unknown[] = []
+    const { plugin, render } = materialize({ effect: callback => { effects.push(callback) },
+      setState: (index, value) => { if (index === 2) updates.push(value) } })
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    let calls = 0
+    let signal: AbortSignal | undefined
+    vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit) => {
+      if (!String(input).includes('tako.catalog')) return Response.json({ configured: false })
+      calls++
+      signal = init.signal ?? undefined
+      return Response.json({ models: [], lastSyncAt: null, nextSyncAt: null, status: 'failed' })
+    }))
+    const disposers: (() => void)[] = []
+    try {
+      hookStates = []
+      render(entries.find(entry => entry.slot === 'main')!.component, {})
+      for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(calls).toBe(30)
+      for (const dispose of disposers) dispose()
+      expect(signal?.aborted).toBe(true)
+      const settledUpdates = updates.length
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(updates.length).toBe(settledUpdates)
+      expect(calls).toBe(30)
+    } finally {
+      for (const dispose of disposers) dispose()
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+      hookStates = []
+    }
+  })
+
+  it('retains a known regular refresh deadline after the initial fast-poll budget is exhausted', async () => {
+    await loadModuleRow()
+    vi.useFakeTimers()
+    const effects: (() => void | (() => void))[] = []
+    const updates: unknown[] = []
+    const { plugin, render } = materialize({ effect: callback => { effects.push(callback) },
+      setState: (index, value) => { if (index === 2) updates.push(value) } })
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    const deadline = Date.now() + 1800000
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (!String(input).includes('tako.catalog')) return Response.json({ configured: false })
+      calls++
+      return Response.json(Date.now() < deadline ? { models: [], lastSyncAt: null, nextSyncAt: deadline, status: 'failed' }
+        : { models: [{ id: 'later-success' }], lastSyncAt: Date.now(), nextSyncAt: null, status: 'ready' })
+    }))
+    const disposers: (() => void)[] = []
+    try {
+      hookStates = []
+      render(entries.find(entry => entry.slot === 'main')!.component, {})
+      for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
+      await vi.advanceTimersByTimeAsync(120000)
+      expect(calls).toBe(30)
+      await vi.advanceTimersByTimeAsync(1800000 - 120000 + 250)
+      expect(calls).toBe(31)
+      expect(updates.at(-1)).toMatchObject({ models: [{ id: 'later-success' }], status: 'ready' })
+    } finally {
+      for (const dispose of disposers) dispose()
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
       hookStates = []
     }
   })
