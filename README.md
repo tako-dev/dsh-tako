@@ -67,7 +67,7 @@ dsh web
 
 ### 更新
 
-插件装进 profile 后由 pnpm 管理，正在运行的插件不能热更新自己，装完必须重启 dsh 才生效。
+插件装进 profile 后由 pnpm 管理。启用 profile 配置/清单 HMR 时，新增组合包可以热加载；这只说明插件已挂载，不代表模型目录同步完成。更新已加载插件的代码不保证重新 import，更新完成后重启 dsh 才加载新版本；未启用 HMR 时，新增插件也需重启。
 
 - **控制台（推荐）**：打开「Tako 控制台」的「更新」卡，落后时点「立即更新」。插件会把最新版装进当前 profile，装完提示重启 dsh。
 - **命令行**：`npx dsh-tako update [--profile web]`，同样会安装并打印重启提示。
@@ -108,7 +108,7 @@ npx dsh-tako update                   # 把最新 dsh-tako 装进 profile，装�
 - **登录状态**：是否已保存 key、掩码后的 key（`cr_****` + 末 4 位，明文永不下发到页面）、Tako 账号与套餐。未登录时按钮是「通过浏览器登录 Tako」；已登录时是「重新登录」和「退出」——「退出」先在 Tako 吊销这个 key（失败不阻断），再从 dsh 凭据里删除，语义与 `dsh-tako logout` 相同；key 来自环境变量时不吊销也不删除。
 - **更新**：对比本机版本和 npm 官方源的最新版本；落后时点「立即更新」真正安装（装完需重启 dsh），下面仍保留升级命令可复制作退路；已是最新时显示当前版本号，检查失败时只显示灰字提示。检查结果缓存 1 小时，见上面的[更新](#更新)一节。
 - **套餐 / 钱包**：有套餐时显示 **5h 窗口**和**周额度**的剩余百分比进度条（`user-quota`，和官网套餐页同一套，已经是美元）。钱包剩余是单独一列（`/api/desktop/me` 点数 / 500000 = $1）。两套数不要混。没套餐才只显示钱包。侧栏 footer 同一套数据，点击打开控制台。
-- **模型目录**：插件当前写入 `providers.tako` 的模型（`include` / `exclude` / `pinned` / `overrides` 过滤后的结果），列出模型名、上下文窗口、是否支持图片输入；右上角显示距下次目录刷新的倒计时（按 `nextSyncAt` 在浏览器本地倒数，不轮询服务端）。
+- **模型目录**：插件当前成功写入 `providers.tako` 的模型（`include` / `exclude` / `pinned` / `overrides` 过滤后的结果），列出模型名、上下文窗口、是否支持图片输入。同步阶段、尝试次数与安全错误原因显示在卡片中；失败不清空已成功写入的模型。旧运行时的 HMR 嵌套事务拒绝会明确标记为 `runtime-transaction`，持续失败时需重启 dsh；插件无法自行修复宿主的事务实现。`/api/tako.catalog` 返回 `status`、`attempts`、`refreshIntervalMs` 和 `lastError`（错误码、安全消息、时间），`nextSyncAt` 表示下次重试或常规刷新。初次未完成时面板最多每 2 秒读取一次状态，共 30 次；之后仍保留服务器给出的未来刷新计划，过期计划的检查至少间隔 1 分钟。同步成功后在下次计划刷新附近读取，也可点击“刷新目录状态”。关闭面板取消后续读取。
 
 账号与额度状态缓存在 Host 内按完整凭据的 SHA-256 指纹区分，脱敏文本只用于显示；两把密钥末四位相同也不会共用账号缓存。明文密钥和指纹均不下发到页面，不写入缓存文件。
 
@@ -155,7 +155,8 @@ Tako 授权后会把浏览器跳回 `http://127.0.0.1:<端口>/tako/callback`，
 | `baseURL` | `https://tako.shiroha.tech` | Tako 地址；聊天请求走 `<baseURL>/v1`，写成带 `/v1` 的也可以 |
 | `apiKeyEnv` | `TAKO_API_KEY` | 存放 Tako API key 的凭据名（环境变量或「设置 → 模型」里保存的密钥） |
 | `defaultContextWindow` | `128000` | 目录没有标注上下文的模型用这个值 |
-| `refreshIntervalMs` | `1800000` | 目录刷新间隔（毫秒）；`0` 表示只在启动时刷新 |
+| `refreshIntervalMs` | `1800000` | 常规目录刷新间隔（毫秒）；`0` 禁用常规刷新，首次同步和有界恢复仍执行 |
+| `syncRetryDelaysMs` | `[1000, 5000, 30000]` | 目录拉取/设置写入失败后的快速重试延迟（毫秒），按顺序最多各试一次；`[]` 禁用快速重试 |
 | `pinned` | `[deepseek-v4.1-flash, deepseek-v4-pro, tako-auto]` | 在选择器里排在最前的模型，按列出顺序；其余按字母排序 |
 | `include` | `[]` | 非空时只保留匹配的模型 id，支持 `*` 通配 |
 | `exclude` | `[]` | 去掉匹配的模型 id，支持 `*` 通配，在 `include` 之后生效 |
@@ -259,7 +260,9 @@ Set the key in **Settings → Models → Tako** (stored as `TAKO_API_KEY` in `$D
 
 ### Updating
 
-The plugin is installed into the profile by pnpm and cannot hot-update itself; after installing a newer copy, restart dsh to load it. There is no silent self-upgrade on startup.
+The plugin is installed into the profile by pnpm. With profile configuration/manifest HMR enabled, adding a new bundle can hot-load it; activation does not mean the model catalog has synced. Updating already-loaded plugin code does not guarantee a fresh import: restart dsh after updating. Without HMR, restart after adding a plugin too. There is no silent self-upgrade on startup.
+
+Catalog fetch/write failures use bounded recovery delays (`syncRetryDelaysMs`, default `[1000, 5000, 30000]`) before the regular `refreshIntervalMs` schedule. The console catalog response exposes phase, attempts, configured interval and a safe stage-specific `lastError`; failures retain prior successful models. Legacy HMR's nested-transaction rejection is labelled `runtime-transaction`, with a restart action if recovery keeps failing; the plugin cannot repair its host's transaction implementation. The mounted panel reads pending state every two seconds, at most30times, then retains any advertised future refresh deadline and offers explicit status refresh. Overdue deadlines are checked at least one minute apart. After success it reads near the next scheduled refresh; unmount cancels pending reads. `refreshIntervalMs: 0` disables regular refresh, not the initial attempt or bounded recovery.
 
 - **Console (recommended)**: the **Update** card's **Update now** button installs the latest version into the current profile, then asks you to restart dsh.
 - **CLI**: `npx dsh-tako update [--profile web]`.

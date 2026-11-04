@@ -251,16 +251,24 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
 // ---------------------------------------------------------------- console routes
 
 /**
- * What the sync loop (`start()` in `index.ts`) keeps in memory after each
- * successful sync, including the fallback seed. Read by {@link CATALOG_ROUTE}.
+ * Instance-owned sync progress and the last successfully written model list,
+ * including a fallback seed. Read by {@link CATALOG_ROUTE}.
  */
 export interface CatalogState {
   /** The filtered catalog of the last successful sync; empty before the first. */
   models: readonly TakoModel[]
   /** When that sync finished, in epoch ms; `null` before the first. */
   lastSyncAt: number | null
-  /** `lastSyncAt + refreshIntervalMs`; `null` when refreshing only at startup. */
+  /** Next recovery or regular refresh in epoch ms; `null` when no further attempt is scheduled. */
   nextSyncAt: number | null
+  /** Current operation phase, distinct from whether an older model list exists. */
+  status?: 'syncing' | 'retrying' | 'ready' | 'failed'
+  /** Lifetime count of attempts within this plugin instance. */
+  attempts?: number
+  /** Configured regular refresh interval, even before a successful sync. */
+  refreshIntervalMs?: number
+  /** Safe stage-specific error; never includes remote bodies or settings values. */
+  lastError?: { code: 'directory-unavailable' | 'settings-not-ready' | 'write-failed' | 'runtime-transaction' | 'read-only' | 'empty-catalog', message: string, at: number } | null
 }
 
 /** A catalog state that has never seen a sync. */
@@ -403,7 +411,7 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
 
   const handleCatalog = async (): Promise<Response> => {
     const state = options.catalog()
-    return json({ models: state.models.map(model => ({ ...model })), lastSyncAt: state.lastSyncAt, nextSyncAt: state.nextSyncAt })
+    return json({ ...state, models: state.models.map(model => ({ ...model })) })
   }
 
   return { handleStatus, handleLogout, handleCatalog }

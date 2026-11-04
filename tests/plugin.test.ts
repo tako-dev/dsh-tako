@@ -204,7 +204,8 @@ describe('sync', () => {
     stops.push(start(down.ctx, config(), { catalog: seeded, fetch: failFetch() }))
     await until(() => down.mutate.mock.calls.length === 1)
     expect(seeded.models).toEqual(FALLBACK_MODELS)
-    expect(seeded.nextSyncAt).toBeNull() // refreshIntervalMs 0 -> startup-only
+    expect(seeded.status).toBe('retrying')
+    expect(seeded.nextSyncAt).toBeGreaterThan(Date.now()) // bounded recovery also applies with regular refresh disabled
   })
 
   it('keeps an existing route when the directory is down', async () => {
@@ -253,6 +254,105 @@ describe('sync', () => {
     await until(() => fake.logger.warn.mock.calls.length > 0)
     expect(fake.mutate).toHaveBeenCalledTimes(1)
     expect(fake.logger.warn).toHaveBeenCalledWith('writing the Tako route failed: %s', 'validation failed')
+  })
+
+  it('recovers an initial rejected write without waiting for the regular refresh', async () => {
+    const fake = fakeCtx()
+    fake.mutate.mockRejectedValueOnce(new Error('private credential-like payload'))
+    const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+    stops.push(start(fake.ctx, config({ syncRetryDelaysMs: [5, 10] }), { catalog, fetch: okFetch() }))
+    await until(() => catalog.lastSyncAt !== null, 300)
+    expect(fake.mutate).toHaveBeenCalledTimes(2)
+    expect(catalog.attempts).toBe(2)
+    expect(catalog.lastError).toBeNull()
+    expect(catalog.status).toBe('ready')
+  })
+
+  it('bounds retries and exposes safe failure state without reporting a successful write', async () => {
+    const fake = fakeCtx()
+    fake.mutate.mockRejectedValue(new Error('private credential-like payload'))
+    const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+    stops.push(start(fake.ctx, config({ syncRetryDelaysMs: [5, 10] }), { catalog, fetch: okFetch() }))
+    await until(() => fake.mutate.mock.calls.length === 3, 300)
+    await settle()
+    expect(fake.mutate).toHaveBeenCalledTimes(3)
+    expect(catalog.lastSyncAt).toBeNull()
+    expect(catalog.status).toBe('failed')
+    expect(catalog.lastError?.code).toBe('write-failed')
+    expect(JSON.stringify(catalog)).not.toContain('private credential-like payload')
+    expect(catalog.nextSyncAt).toBeNull()
+  })
+
+  it('cancels scheduled recovery and does not publish after an in-flight write settles on unload', async () => {
+    const fake = fakeCtx()
+    let resolveWrite: () => void = () => {}
+    fake.mutate.mockImplementationOnce(() => new Promise<void>((resolve) => { resolveWrite = resolve }))
+    const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+    const stop = start(fake.ctx, config({ syncRetryDelaysMs: [5] }), { catalog, fetch: okFetch() })
+    await until(() => fake.mutate.mock.calls.length === 1)
+    stop()
+    resolveWrite()
+    await settle()
+    expect(catalog.lastSyncAt).toBeNull()
+    expect(fake.mutate).toHaveBeenCalledTimes(1)
+  })
+
+  it('recovers a transient directory failure while retaining the last good route', async () => {
+    const fake = fakeCtx({ user: { tako: { models: [{ id: 'kept' }] } } })
+    const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+    const fetchImpl = vi.fn<typeof fetch>().mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(new Response(fixtureText, { status: 200 }))
+    stops.push(start(fake.ctx, config({ syncRetryDelaysMs: [50] }), { catalog, fetch: fetchImpl }))
+    await until(() => catalog.lastError !== null && catalog.lastError !== undefined)
+    expect(fake.mutate).not.toHaveBeenCalled()
+    expect(catalog.lastError?.code).toBe('directory-unavailable')
+    expect(catalog.status).toBe('retrying')
+    await until(() => catalog.status === 'ready')
+    expect(catalog.attempts).toBe(2)
+    expect(fake.mutate).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not overlap slow sync with the regular refresh and cancels a queued retry', async () => {
+    const fake = fakeCtx()
+    let resolveFetch: (response: Response) => void = () => {}
+    const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => { resolveFetch = resolve }))
+    const stop = start(fake.ctx, config({ refreshIntervalMs: 5, syncRetryDelaysMs: [50] }), { fetch: fetchImpl })
+    await settle()
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    fake.mutate.mockRejectedValueOnce(new Error('retryable'))
+    resolveFetch(new Response(fixtureText))
+    await until(() => fake.logger.warn.mock.calls.length > 0)
+    stop()
+    await settle()
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps both retry budgets when the settings section disappears during recovery', async () => {
+    const fake = fakeCtx({ user: { tako: { models: [{ id: 'kept' }] } } })
+    const ready = fake.settings.describe()
+    let reads = 0
+    fake.settings.describe.mockImplementation(() => ++reads % 2 === 0 ? [] : ready)
+    const fetchImpl = vi.fn<typeof fetch>().mockRejectedValue(new Error('offline'))
+    const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+    stops.push(start(fake.ctx, config({ syncRetryDelaysMs: [5] }), {
+      catalog, fetch: fetchImpl, sectionRetryMs: 5, sectionRetries: 1,
+    }))
+    await until(() => fetchImpl.mock.calls.length >= 3)
+    await settle()
+    expect(fetchImpl).toHaveBeenCalledTimes(3)
+    expect(catalog.status).toBe('failed')
+    expect(catalog.nextSyncAt).toBeNull()
+  })
+
+  it('identifies the known host transaction rejection without exposing arbitrary write errors', async () => {
+    const fake = fakeCtx()
+    fake.mutate.mockRejectedValue(new Error('HMR transactions cannot be nested'))
+    const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
+    stops.push(start(fake.ctx, config({ syncRetryDelaysMs: [] }), { catalog, fetch: okFetch() }))
+    await until(() => catalog.status === 'failed')
+    expect(catalog.lastError?.code).toBe('runtime-transaction')
+    expect(catalog.lastError?.message).toContain('restart dsh')
+    expect(catalog.attempts).toBe(1)
   })
 
   it('waits for the pi-ai section to become active', async () => {

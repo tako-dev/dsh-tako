@@ -224,6 +224,13 @@ describe('console route /api/tako.logout', () => {
 })
 
 describe('console route /api/tako.catalog', () => {
+  it('returns recovery phase, attempts, configured interval and safe stage error', async () => {
+    const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: 1234, refreshIntervalMs: 1800000,
+      status: 'retrying', attempts: 2, lastError: { code: 'write-failed', message: 'The model settings update did not complete.', at: 1200 } }
+    const { svc } = service({ catalogState: catalog })
+    expect(await (await svc.handleCatalog()).json()).toEqual(catalog)
+  })
+
   it('answers empty before the first sync instead of failing', async () => {
     const { svc } = service()
     expect(await (await svc.handleCatalog()).json()).toEqual({ models: [], lastSyncAt: null, nextSyncAt: null })

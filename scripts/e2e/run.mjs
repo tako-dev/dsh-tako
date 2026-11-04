@@ -772,6 +772,115 @@ await testCase('n', 'console routes: /api/tako.status + /api/tako.catalog + /api
   }
 })
 
+await testCase('o', 'hot-add into running web: bounded safe failure on legacy HMR, recovery on a fixed runtime', async detail => {
+  const home = newHome('web-catalog-recovery')
+  home.env.DSH_TELEMETRY_DISABLED = '1'
+  const retryDelays = [1000, 2000]
+  // A config-only patch is inert before the bundle exists; profile initialization preserves it.
+  mkdirSync(home.profileDir('web'), { recursive: true })
+  setPluginConfig(home, 'web', { ...pluginConfig, syncRetryDelaysMs: retryDelays, refreshIntervalMs: 0 })
+  const pricingBefore = mock.pricingRequests().length
+  const requestsBefore = mock.state.requests.length
+  mock.state.pricingStatus = 503
+  const handle = spawnDsh(home, ['web', '--no-open', '--port', '0', '--host', '127.0.0.1'])
+  handle.child.stdout.on('data', chunk => { handle.log.stdout += chunk })
+  let adding
+  let addError
+  let observedError
+  try {
+    const url = await waitFor(() => /dsh web: (http\S+)/.exec(handle.log.stdout)?.[1], 90_000, 'dsh web to print its URL before plugin installation')
+    const first = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(5000) })
+    const cookie = (first.headers.getSetCookie?.() ?? []).map(value => value.split(';')[0]).join('; ')
+    if (!cookie) throw new Error('dsh web did not issue a browser session cookie')
+    const origin = new URL(url).origin
+    const headers = { cookie, origin }
+    const manifestFile = join(home.profileDir('web'), 'package.json')
+    const before = JSON.parse(readFileSync(manifestFile, 'utf8'))
+    check(detail, !(before.dsh?.profile?.bundles ?? []).includes('dsh-tako'), 'web is already running without the dsh-tako bundle')
+    const absent = await fetch(`${origin}/api/tako.catalog`, { headers, signal: AbortSignal.timeout(5000) })
+    check(detail, absent.status === 404 && mock.pricingRequests().length === pricingBefore, `before hot-add: catalog HTTP ${absent.status}, no pricing requests`)
+    const catalog = async () => {
+      if (handle.child.exitCode !== null || handle.child.signalCode !== null) throw new Error('dsh web exited during hot-add')
+      const response = await fetch(`${origin}/api/tako.catalog`, { headers, signal: AbortSignal.timeout(5000) })
+      if (response.status === 404) return undefined // HMR has not mounted the bundle yet.
+      if (!response.ok) throw new Error(`catalog HTTP ${response.status}`)
+      const state = await response.json()
+      const errorKey = JSON.stringify([state.status, state.attempts, state.lastError?.code])
+      if (state.lastError && errorKey !== observedError) {
+        detail.push(`info observed catalog error: ${JSON.stringify(state)}`)
+        observedError = errorKey
+      }
+      return state
+    }
+    // Observe while the command is running, so its exit cannot consume the retry window.
+    adding = pluginCmd(home, 'web', 'add', tgz).then(result => ({ result }), error => { addError = error; return { error } })
+    const failureMessages = {
+      'directory-unavailable': 'The Tako model directory could not be retrieved.',
+      'write-failed': 'The model settings update did not complete.',
+      'runtime-transaction': 'The host runtime rejected the reload transaction; restart dsh if recovery fails.',
+      'settings-not-ready': 'The model settings section is not active yet.',
+    }
+    const failed = await waitFor(async () => {
+      if (addError) throw addError
+      const state = await catalog()
+      return state?.status === 'retrying' && state.lastError ? state : undefined
+    }, 30_000, 'catalog startup error and scheduled retry while pricing returns HTTP 503')
+    detail.push(`info failure snapshot: ${JSON.stringify(failed)}`)
+    check(detail, Number.isInteger(failed.attempts) && failed.attempts >= 1 && failed.attempts <= retryDelays.length, `failed attempts=${failed.attempts}, status=${failed.status}`)
+    check(detail, failureMessages[failed.lastError.code] === failed.lastError.message && typeof failed.lastError.at === 'number', `safe lastError=${JSON.stringify(failed.lastError)}`)
+    check(detail, typeof failed.nextSyncAt === 'number' && failed.nextSyncAt > failed.lastError.at && failed.nextSyncAt - failed.lastError.at <= Math.max(...retryDelays) + 100, `retry scheduled: nextSyncAt=${failed.nextSyncAt}, error at=${failed.lastError.at}`)
+    check(detail, failed.refreshIntervalMs === 0, 'regular refresh is disabled; recovery must come from the startup retry')
+    const failedIds = JSON.stringify(failed.models?.map(model => model.id))
+    check(detail, (failedIds === '[]' && failed.lastSyncAt === null) || (failedIds === '["deepseek-v4.1-flash","deepseek-v4-pro"]' && typeof failed.lastSyncAt === 'number'), 'failure retains either the uninitialized catalog or the successfully seeded fallback and lastSyncAt')
+    // Only restore the external service after seeing the user-visible error.
+    mock.state.pricingStatus = 200
+    const added = await adding
+    if (added.error) throw added.error
+    check(detail, JSON.parse(readFileSync(manifestFile, 'utf8')).dsh?.profile?.bundles?.includes('dsh-tako'), 'packed plugin installed into the live profile')
+    const expected = (await expectedModels()).map(model => model.id)
+    const ready = await waitFor(async () => {
+      const state = await catalog()
+      if (state?.status === 'failed' && state.lastError?.code === 'runtime-transaction'
+        && state.attempts === retryDelays.length + 1 && state.nextSyncAt === null) return state
+      return state?.status === 'ready' && JSON.stringify(state.models?.map(model => model.id)) === JSON.stringify(expected) ? state : undefined
+    }, 30_000, 'catalog recovery or the bounded known legacy HMR rejection')
+    if (ready.status === 'failed') {
+      // Old DSH keeps a permanent transaction marker. Do not claim the plugin can repair that runtime.
+      check(detail, ready.lastError.message === failureMessages['runtime-transaction'], 'legacy runtime rejection remains safe and actionable')
+      check(detail, ready.models.length === 0 && ready.lastSyncAt === null, 'legacy runtime does not publish a failed write as a synchronized catalog')
+      const requests = mock.state.requests.slice(requestsBefore)
+      check(detail, requests.length === retryDelays.length + 1 && requests.every(request => request.method === 'GET'
+        && request.url === '/api/pricing' && request.authorization === undefined), 'legacy failure exhausts the retry budget with no OAuth/model/account calls')
+      await sleep(1500)
+      const stable = await catalog()
+      check(detail, stable.status === 'failed' && stable.attempts === ready.attempts && stable.nextSyncAt === null,
+        'legacy failure stays bounded with regular refresh disabled')
+      check(detail, handle.child.exitCode === null && handle.child.signalCode === null, 'legacy failure does not stop or restart the Web host')
+      detail.push('info legacy HMR limitation: runtime transaction fix or host restart is required; no successful catalog recovery claimed')
+      return
+    }
+    detail.push(`info recovery snapshot: ${JSON.stringify({ ...ready, models: ready.models.map(model => model.id) })}`)
+    check(detail, ready.lastError === null && ready.nextSyncAt === null, 'ready clears lastError and nextSyncAt (refreshIntervalMs=0)')
+    check(detail, ready.attempts > failed.attempts && ready.attempts <= retryDelays.length + 1, `recovered attempts=${ready.attempts}, greater than failed attempts=${failed.attempts}`)
+    check(detail, typeof ready.lastSyncAt === 'number' && (failed.lastSyncAt === null || ready.lastSyncAt > failed.lastSyncAt) && ready.models.length === 35, 'successful models replace the failed catalog and set or advance lastSyncAt')
+    check(detail, JSON.stringify(takoRoute(home, 'web')?.models?.map(model => model.id)) === JSON.stringify(expected), 'recovered model ids and order are persisted in the live profile')
+    const pricingAfter = mock.pricingRequests().length
+    await sleep(1500) // Let profile-write HMR settle; it must not reset the sync loop.
+    const stable = await catalog()
+    check(detail, stable?.status === 'ready' && stable.attempts === ready.attempts && stable.lastSyncAt === ready.lastSyncAt && stable.lastError === null && stable.nextSyncAt === null, 'catalog remains ready after profile-write HMR settles')
+    check(detail, mock.pricingRequests().length === pricingAfter, 'no extra directory fetch after recovery with regular refresh disabled')
+    check(detail, handle.child.exitCode === null && handle.child.signalCode === null && (handle.log.stdout.match(/dsh web: http/g) ?? []).length === 1, `same web process ${handle.child.pid}, origin and session survived hot-add and recovery; no restart`)
+    const requests = mock.state.requests.slice(requestsBefore)
+    check(detail, requests.length >= 2 && requests.every(request => request.method === 'GET' && request.url === '/api/pricing' && request.authorization === undefined), 'mock received only credential-free pricing GETs; no OAuth, model or account calls')
+  } catch (error) {
+    throw new Error(`${error.message}\n--- dsh web stdout:\n${handle.log.stdout}\n--- stderr:\n${handle.log.stderr}`)
+  } finally {
+    if (adding) await adding
+    await stopChild(handle)
+    mock.state.pricingStatus = 200
+  }
+})
+
 // ---------------------------------------------------------------- report
 
 async function finish() {
