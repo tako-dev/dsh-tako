@@ -17,6 +17,7 @@
 - 上下文窗口取自目录的结构化字段；没有时取 `272K`、`1M`、`1.05M` 这类精确的容量标签（`31B` 这种参数量标签会被忽略）；都没有就用 `defaultContextWindow`。带 `Vision` 标签的模型声明支持图片输入。
 - 把结果写成一个 OpenAI 兼容 provider：官方 `llm-pi-ai` 插件配置里的 `providers.tako`。之后请求、流式输出、重试、凭据都走 dsh 官方代码路径，插件本身不实现任何模型适配器。
 - 在 Web 界面侧边栏加一个带触手小章鱼的「Tako 控制台」，以及底部额度条（有套餐显示 5h / 周剩余进度条 + 钱包余额）。详见 [Tako 控制台](#tako-控制台)。
+- 注册 Tako 图像生成/编辑工具；省略 `model` 时使用公开目录中的 `gpt-image-2.5-sunburst`，显式传入其他模型时保留调用者选择。
 
 ### 安装
 
@@ -248,7 +249,7 @@ CI（`.github/workflows/ci.yml`）在 push 到 `main` 和 PR 时用 Node 22 / 24
 
 > **Issues are handled by a bot.** It replies as the maintainer, with a `bot` mark, then tries to fix and release. Desktop app bugs belong in [dsh-tako-desktop](https://github.com/tako-dev/dsh-tako-desktop/issues). Do not paste API keys. [Open an issue](https://github.com/tako-dev/dsh-tako/issues/new/choose).
 
-It reads Tako's public model directory (`GET /api/pricing`, no key needed), keeps chat models only (drops image/speech/search models, `jev-*`, and Claude-Code-only models), sizes each model from structured fields or exact size tags (`272K`, `1M`, `1.05M`), and writes the result as an OpenAI-compatible provider at `providers.tako` in the official `llm-pi-ai` plugin's settings. Requests, streaming, retries and credentials all stay on dsh's own code path. It writes only when the value changes, and refreshes every 30 minutes by default. The sidebar octopus opens the Tako console; the footer shows remaining 5h/weekly bars plus wallet.
+It reads Tako's public model directory (`GET /api/pricing`, no key needed), keeps chat models only (drops image/speech/search models, `jev-*`, and Claude-Code-only models), sizes each model from structured fields or exact size tags (`272K`, `1M`, `1.05M`), and writes the result as an OpenAI-compatible provider at `providers.tako` in the official `llm-pi-ai` plugin's settings. Requests, streaming, retries and credentials all stay on dsh's own code path. It writes only when the value changes, and refreshes every 30 minutes by default. The sidebar octopus opens the Tako console; the footer shows remaining 5h/weekly bars plus wallet. Tako's image generation/editing tools default to the public-directory model `gpt-image-2.5-sunburst` when `model` is omitted, while retaining an explicit caller-selected model.
 
 ```sh
 npm i -g @deepseek-ai/dsh

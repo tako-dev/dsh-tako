@@ -42,6 +42,16 @@ afterEach(() => {
 })
 
 describe('takoImageGenerate', () => {
+  it('uses the current public-directory Sunburst model by default', () => {
+    expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.5-sunburst')
+  })
+
+  it('preserves an explicitly selected image model', async () => {
+    const fetchImpl = jsonFetch()
+    await takoImageGenerate(http({ fetch: fetchImpl as unknown as typeof fetch }), { prompt: 'a cat', model: 'custom-image' })
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body)).model).toBe('custom-image')
+  })
+
   it('POSTs /v1/images/generations with Bearer and default model, and maps data[0].url', async () => {
     const fetchImpl = jsonFetch({ data: [{ url: 'https://cdn.test/cat.png', revised_prompt: 'a cat' }] })
     const result = await takoImageGenerate(http({ fetch: fetchImpl as unknown as typeof fetch }), { prompt: 'a cat' })

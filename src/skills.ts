@@ -60,7 +60,7 @@ export const TAKO_SKILLS: readonly TakoSkillRegistration[] = [
     content: [
       'Call the tool `tako_image_generate`.',
       'Required: `prompt` (what to draw).',
-      'Optional: `model` (default `gpt-image-2`), `n`, `size` (for example `1024x1024`).',
+      'Optional: `model` (default `gpt-image-2.5-sunburst`), `n`, `size` (for example `1024x1024`).',
       'The tool returns `url` and/or `b64_json` for the first image.',
       SIGN_IN,
     ].join('\n'),
@@ -74,7 +74,7 @@ export const TAKO_SKILLS: readonly TakoSkillRegistration[] = [
     content: [
       'Call the tool `tako_image_edit`.',
       'Required: `prompt` (what to change) and `image` (an https URL or a data URL). Do not pass a local filesystem path.',
-      'Optional: `model` (default `gpt-image-2`).',
+      'Optional: `model` (default `gpt-image-2.5-sunburst`).',
       SIGN_IN,
     ].join('\n'),
   },

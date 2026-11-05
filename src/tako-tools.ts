@@ -27,7 +27,7 @@ export const TAKO_TOOL_NAMES = [
   TAKO_SPEECH_TRANSCRIBE_TOOL,
 ] as const
 
-export const DEFAULT_IMAGE_MODEL = 'gpt-image-2'
+export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5-sunburst'
 export const DEFAULT_DECIDE_MODEL = 'jev-latest'
 export const DEFAULT_TTS_MODEL = 'speech_tts'
 export const DEFAULT_ASR_MODEL = 'speech_asr'
@@ -432,7 +432,7 @@ function takoToolDefinitions(
   return [
     jsonTool({
       name: TAKO_IMAGE_GENERATE_TOOL,
-      description: 'Generate an image with Tako. Required: prompt. Optional: model (default gpt-image-2), n, size.',
+      description: 'Generate an image with Tako. Required: prompt. Optional: model (default gpt-image-2.5-sunburst), n, size.',
       timeoutMs: IMAGE_TIMEOUT_MS,
       outputSchema: IMAGE_OUTPUT_SCHEMA,
       parameters: {
@@ -450,7 +450,7 @@ function takoToolDefinitions(
     }),
     jsonTool({
       name: TAKO_IMAGE_EDIT_TOOL,
-      description: 'Edit an image with Tako. Required: prompt and image (https or data URL). Optional: model (default gpt-image-2).',
+      description: 'Edit an image with Tako. Required: prompt and image (https or data URL). Optional: model (default gpt-image-2.5-sunburst).',
       timeoutMs: IMAGE_TIMEOUT_MS,
       outputSchema: IMAGE_OUTPUT_SCHEMA,
       parameters: {
