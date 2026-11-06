@@ -323,8 +323,9 @@ window.__ModuleLoader__.load({
         setState({ status: 'idle' })
       }
 
+      const clearSuccess = () => { if (state.status === 'success') setState({ status: 'idle' }) }
       const busy = state.status === 'starting' || state.status === 'pending'
-      return { state, start, cancel, busy }
+      return { state, start, cancel, clearSuccess, busy }
     }
 
     /** The pending/success/error notes and the sign-in link, shared by both surfaces. */
@@ -950,6 +951,7 @@ window.__ModuleLoader__.load({
           else if (result.action === 'removed') setLogoutNote(result.warning === undefined ? t('logoutRemoved') : `${t('logoutRemoved')}: ${result.warning}`)
           else if (result.action === 'external') setLogoutNote(t('logoutExternal'))
           else setLogoutNote(t('logoutNone'))
+          if (result.action !== 'external') login.clearSuccess()
           await loadStatus()
           notifyCredential()
         } catch (error) {

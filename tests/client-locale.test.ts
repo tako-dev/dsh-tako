@@ -649,6 +649,32 @@ describe('client account refresh ordering', () => {
   }
 })
 
+describe('client logout completion note', () => {
+  for (const success of [true, false]) {
+    it(success ? 'clears the completed sign-in note after logout' : 'retains the sign-in note when logout fails', async () => {
+      await loadModuleRow()
+      hookStates = [{ configured: true, me: { userName: 'Test account' } }, undefined, undefined, undefined, false, undefined,
+        { status: 'success', user: 'Test account', key: 'cr_****test', credential: 'TAKO_API_KEY' }]
+      const changes: unknown[] = []
+      const { plugin, render } = materialize({ setState: (index, value) => { if (index === 6) changes.push(value) } })
+      const { ctx, entries, runInjections } = stubCtx()
+      plugin.apply(ctx)
+      runInjections()
+      vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+        if (String(input).includes('tako.logout') && !success) throw new Error('logout failed')
+        return Response.json(String(input).includes('tako.logout') ? { action: 'revoked' } : { configured: false })
+      }))
+      try {
+        const view = render(entries.find(entry => entry.slot === 'main')!.component, {})
+        const logout = findByTestId(view, 'dsh-tako-console-sign-out')?.props?.onClick
+        expect(typeof logout).toBe('function')
+        await (logout as () => Promise<void>)()
+        expect(changes).toEqual(success ? [{ status: 'idle' }] : [])
+      } finally { hookStates = []; vi.unstubAllGlobals() }
+    })
+  }
+})
+
 describe('client primary browser sign-in button', () => {
   for (const mode of ['browser-popup', 'desktop-denied-blank'] as const) {
     it(`opens the authorization URL through the ${mode} path`, async () => {
