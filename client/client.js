@@ -34,6 +34,11 @@ window.__ModuleLoader__.load({
     const CATALOG_ROUTE = 'api/tako.catalog'
     const UPDATE_ROUTE = 'api/tako.update'
     const KEY_ROUTE = 'api/tako.key'
+    const LOGS_ROUTE = 'api/tako.logs'
+    const USAGE_ROUTE = 'api/tako.usage'
+    const NOTICE_ROUTE = 'api/tako.notice'
+    const CONFIG_ROUTE = 'api/tako.config'
+    const SYNC_ROUTE = 'api/tako.sync'
     /** The command the update card offers: re-running the install upgrades the plugin. */
     const UPGRADE_COMMAND = 'dsh plugin --profile web add dsh-tako'
     const PI_AI_NS = 'llm-pi-ai'
@@ -171,6 +176,92 @@ window.__ModuleLoader__.load({
         catalogNoMatch: '没有匹配的模型',
         catalogShown: '显示 {shown} / {total}',
         catalogReasoningBadge: '推理',
+        // console tabs
+        tabOverview: '概览',
+        tabRequests: '请求',
+        tabUsage: '用量',
+        tabModels: '模型',
+        tabKey: '密钥',
+        tabConfig: '配置',
+        // diagnostics
+        diagCopy: '复制诊断',
+        diagCopied: '已复制',
+        // announcements
+        noticeDismiss: '知道了',
+        noticeTitle: '公告',
+        noticeEmpty: '暂无公告',
+        noticeExpand: '展开',
+        noticeCollapse: '收起',
+        // model cards
+        cardChannels: '渠道',
+        cardEndpoints: '端点',
+        cardStandard: '标准',
+        cardRealized: '实测',
+        cardOutputRatio: '输出倍率',
+        cardClaude: 'ClaudeCode',
+        // request logs
+        logsEmpty: '这把 key 还没有请求记录',
+        logsNeedLogin: '登录后可查看这把 key 的请求记录',
+        logsModel: '全部模型',
+        logsRefresh: '刷新',
+        logsLoading: '加载中…',
+        logsColTime: '时间',
+        logsColModel: '模型',
+        logsColIn: '输入',
+        logsColOut: '输出',
+        logsColCost: '花费',
+        logsColDuration: '耗时',
+        logsColRequest: '请求',
+        logTypeTopup: '充值',
+        logTypeConsume: '消费',
+        logTypeManage: '管理',
+        logTypeSystem: '系统',
+        logTypeError: '错误',
+        logTypeRefund: '退款',
+        logTypeLogin: '登录',
+        // usage
+        usageToday: '今日花费',
+        usageTokenCard: '密钥额度',
+        usageGranted: '总额度',
+        usageUsed: '已用',
+        usageAvailable: '可用',
+        usageUnlimited: '不限额度',
+        usageExpires: '到期',
+        usageNever: '永不',
+        usageModelLimits: '模型白名单',
+        usageNoLimits: '全部模型',
+        usagePerModel: '按模型（今日）',
+        usageRequests: '{count} 次',
+        // key tab
+        keyTokenCard: '密钥详情',
+        keyName: '名称',
+        keyExpires: '到期时间',
+        keyModels: '可用模型',
+        // sync
+        syncNow: '立即同步',
+        syncWorking: '同步中…',
+        syncFailed: '同步触发失败',
+        // pin
+        pinTitle: '置顶',
+        unpinTitle: '取消置顶',
+        pinFailed: '置顶保存失败',
+        // config tab
+        configSave: '保存',
+        configSaving: '保存中…',
+        configSaved: '已保存',
+        configFailed: '保存失败',
+        configReadOnly: '当前 profile 为只读，配置不可修改',
+        configRetryDelays: '失败快速重试延迟（毫秒，逗号分隔）',
+        configRefresh: '目录刷新间隔（分钟，0 为仅启动时）',
+        configDefaultCtx: '默认上下文窗口',
+        configClaudeOnly: '包含仅 Claude Code 客户端的模型',
+        configInclude: '只保留（逗号分隔，* 通配）',
+        configExclude: '排除（逗号分隔，* 通配）',
+        configPinnedField: '置顶模型（逗号分隔）',
+        configSearchProvider: '联网搜索',
+        configSearchTako: 'Tako',
+        configSearchDefault: '官方默认',
+        configOverrides: '模型覆盖（只读）',
       },
       en: {
         signIn: 'Sign in to Tako with the browser',
@@ -296,6 +387,92 @@ window.__ModuleLoader__.load({
         catalogNoMatch: 'No models match',
         catalogShown: 'showing {shown} / {total}',
         catalogReasoningBadge: 'reasoning',
+        // console tabs
+        tabOverview: 'Overview',
+        tabRequests: 'Requests',
+        tabUsage: 'Usage',
+        tabModels: 'Models',
+        tabKey: 'Key',
+        tabConfig: 'Settings',
+        // diagnostics
+        diagCopy: 'Copy diagnostics',
+        diagCopied: 'Copied',
+        // announcements
+        noticeDismiss: 'Dismiss',
+        noticeTitle: 'Announcements',
+        noticeEmpty: 'No announcements',
+        noticeExpand: 'Expand',
+        noticeCollapse: 'Collapse',
+        // model cards
+        cardChannels: 'channels',
+        cardEndpoints: 'endpoints',
+        cardStandard: 'std',
+        cardRealized: 'realized',
+        cardOutputRatio: 'out',
+        cardClaude: 'ClaudeCode',
+        // request logs
+        logsEmpty: 'This key has no requests yet',
+        logsNeedLogin: 'Sign in to see this key\'s requests',
+        logsModel: 'All models',
+        logsRefresh: 'Refresh',
+        logsLoading: 'Loading…',
+        logsColTime: 'Time',
+        logsColModel: 'Model',
+        logsColIn: 'In',
+        logsColOut: 'Out',
+        logsColCost: 'Cost',
+        logsColDuration: 'Time',
+        logsColRequest: 'Request',
+        logTypeTopup: 'top-up',
+        logTypeConsume: 'consume',
+        logTypeManage: 'manage',
+        logTypeSystem: 'system',
+        logTypeError: 'error',
+        logTypeRefund: 'refund',
+        logTypeLogin: 'login',
+        // usage
+        usageToday: 'Spent today',
+        usageTokenCard: 'Key credit',
+        usageGranted: 'Granted',
+        usageUsed: 'Used',
+        usageAvailable: 'Available',
+        usageUnlimited: 'Unlimited',
+        usageExpires: 'Expires',
+        usageNever: 'Never',
+        usageModelLimits: 'Model allowlist',
+        usageNoLimits: 'All models',
+        usagePerModel: 'Per model (today)',
+        usageRequests: '{count} req',
+        // key tab
+        keyTokenCard: 'Key details',
+        keyName: 'Name',
+        keyExpires: 'Expires',
+        keyModels: 'Models',
+        // sync
+        syncNow: 'Sync now',
+        syncWorking: 'Syncing…',
+        syncFailed: 'Could not trigger a sync',
+        // pin
+        pinTitle: 'Pin',
+        unpinTitle: 'Unpin',
+        pinFailed: 'Could not save the pins',
+        // config tab
+        configSave: 'Save',
+        configSaving: 'Saving…',
+        configSaved: 'Saved',
+        configFailed: 'Could not save',
+        configReadOnly: 'The profile is read-only; settings cannot be changed',
+        configRetryDelays: 'Fast retry delays after failures (ms, comma-separated)',
+        configRefresh: 'Catalog refresh interval (minutes, 0 = startup only)',
+        configDefaultCtx: 'Default context window',
+        configClaudeOnly: 'Include Claude-Code-only models',
+        configInclude: 'Include only (comma-separated, * wildcards)',
+        configExclude: 'Exclude (comma-separated, * wildcards)',
+        configPinnedField: 'Pinned models (comma-separated)',
+        configSearchProvider: 'Web search',
+        configSearchTako: 'Tako',
+        configSearchDefault: 'Official default',
+        configOverrides: 'Model overrides (read-only)',
       },
     }
 
@@ -623,26 +800,106 @@ window.__ModuleLoader__.load({
     function ensureTakoTheme() {
       if (typeof document.getElementById !== 'function') return
       const css = [
-        '.dsh-tako-sheet{display:flex;flex-direction:column;gap:22px;max-width:720px;margin:0 auto;padding:28px 24px 56px}',
+        '.dsh-tako-sheet{display:flex;flex-direction:column;gap:14px;max-width:780px;margin:0 auto;padding:20px 24px 56px}',
         '.dsh-tako-head{display:flex;align-items:flex-start;gap:12px}',
         '.dsh-tako-head h1{margin:0;font-size:22px;font-weight:500;letter-spacing:0.04em}',
+        '.dsh-tako-hero{display:flex;align-items:center;gap:14px;padding:4px 2px 2px}',
+        '.dsh-tako-hero-name{display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap}',
+        '.dsh-tako-hero-name h1{margin:0;font-size:20px;font-weight:600;letter-spacing:0.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+        '.dsh-tako-hero-meta{font-size:12px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}',
+        '.dsh-tako-hero-spacer{flex:1}',
         '.dsh-tako-sub{font-size:13px;color:var(--dsw-alias-label-tertiary)}',
         '.dsh-tako-kicker{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary)}',
         '.dsh-tako-extra{letter-spacing:0;text-transform:none;font-size:12px}',
         '.dsh-tako-body{display:flex;flex-direction:column;gap:10px;margin-top:8px}',
         '.dsh-tako-tentacle{display:block;width:100%;height:10px}',
-        '.dsh-tako-stamps{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}',
+        // tab bar + cards + shared primitives
+        '.dsh-tako-section{background:var(--dsw-alias-settings-card-fill);border:0.5px solid var(--dsw-alias-settings-card-stroke);border-radius:var(--dsw-radius-xl,20px);padding:14px 16px;display:flex;flex-direction:column;gap:10px}',
+        '.dsh-tako-tabs{display:flex;gap:2px;border-bottom:0.5px solid var(--dsw-alias-border-l2);margin:2px 0 4px;overflow-x:auto}',
+        '.dsh-tako-tab{font:inherit;font-size:13px;padding:7px 12px;border:none;border-bottom:2px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;white-space:nowrap}',
+        '.dsh-tako-tab:hover{color:var(--dsw-alias-label-primary)}',
+        '.dsh-tako-tab[data-active="true"]{color:' + CLAY + ';border-bottom-color:' + CLAY + '}',
+        '.dsh-tako-btn{font:inherit;font-size:13px;padding:4px 12px;border-radius:8px;border:0.5px solid var(--dsw-alias-border-l1,var(--dsw-alias-border-l2));background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px}',
+        '.dsh-tako-btn:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+        '.dsh-tako-btn:disabled{opacity:0.5;cursor:default}',
+        '.dsh-tako-btn-primary{background:var(--dsw-alias-button-primary-fill);color:var(--dsw-alias-button-primary-foreground);border-color:transparent}',
+        '.dsh-tako-btn-primary:hover{background:var(--dsw-alias-button-primary-hover,var(--dsw-alias-button-primary-fill))}',
+        '.dsh-tako-btn-danger{border-color:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-state-error-primary)}',
+        '.dsh-tako-btn-danger:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+        '.dsh-tako-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}',
+        '.dsh-tako-table th{font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary);font-weight:500;text-align:left;padding:6px 8px 6px 0;border-bottom:0.5px solid var(--dsw-alias-border-l2);white-space:nowrap}',
+        '.dsh-tako-table td{padding:6px 8px 6px 0;border-bottom:0.5px solid var(--dsw-alias-border-l2);vertical-align:top;white-space:nowrap}',
+        '.dsh-tako-table td.w{white-space:normal;overflow-wrap:anywhere}',
+        '.dsh-tako-table tr:hover td{background:var(--dsw-alias-interactive-bg-hover)}',
+        '.dsh-tako-table .m{font-family:ui-monospace,"IBM Plex Mono",monospace;max-width:140px;overflow:hidden;text-overflow:ellipsis}',
+        '.dsh-tako-pill{display:inline-flex;align-items:center;font-size:10px;padding:1px 7px;border-radius:999px;border:0.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);flex:none;letter-spacing:0.04em}',
+        '.dsh-tako-pill[data-tone="warn"]{border-color:var(--dsw-alias-state-warn-primary);color:var(--dsw-alias-state-warn-primary)}',
+        '.dsh-tako-pill[data-tone="error"]{border-color:var(--dsw-alias-state-error-primary);color:var(--dsw-alias-state-error-primary)}',
+        '.dsh-tako-pill[data-tone="ok"]{border-color:var(--dsw-alias-state-success-primary);color:var(--dsw-alias-state-success-primary)}',
+        '.dsh-tako-pill[data-tone="clay"]{border-color:' + CLAY + ';color:' + CLAY + '}',
+        '.dsh-tako-notice{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-radius:12px;border:0.5px solid var(--dsw-alias-state-warn-primary);color:var(--dsw-alias-label-primary);font-size:13px}',
+        '.dsh-tako-notice>div{flex:1;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}',
+        '.dsh-tako-notice button{flex:none}',
+        '.dsh-tako-notices{display:flex;flex-direction:column;gap:8px}',
+        '.dsh-tako-notice-item{padding:10px 14px;border-radius:12px;border:0.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-settings-card-fill);font-size:13px;transition:border-color .15s ease}',
+        '.dsh-tako-notice-item:hover{border-color:var(--dsw-alias-border-l1,var(--dsw-alias-border-l2))}',
+        '.dsh-tako-notice-item>summary{display:flex;gap:10px;align-items:center;cursor:pointer;list-style:none;user-select:none}',
+        '.dsh-tako-notice-item>summary::-webkit-details-marker{display:none}',
+        '.dsh-tako-notice-item[open]>summary{margin-bottom:6px}',
+        '.dsh-tako-notice-item>summary>button{margin-left:auto;flex:none}',
+        '.dsh-tako-notice-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--dsw-alias-label-tertiary)}',
+        '.dsh-tako-notice-dot[data-tone="info"]{background:var(--dsw-alias-state-info-primary,#3b82f6)}',
+        '.dsh-tako-notice-dot[data-tone="success"]{background:var(--dsw-alias-state-success-primary)}',
+        '.dsh-tako-notice-dot[data-tone="warn"]{background:var(--dsw-alias-state-warn-primary)}',
+        '.dsh-tako-notice-dot[data-tone="error"]{background:var(--dsw-alias-state-error-primary)}',
+        '.dsh-tako-notice-preview{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}',
+        '.dsh-tako-notice-date{flex:none;font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}',
+        '.dsh-tako-notice-body{font-size:13px;line-height:1.6;overflow-wrap:anywhere}',
+        '.dsh-tako-notice-body h4{margin:6px 0 2px;font-size:13px;font-weight:600}',
+        '.dsh-tako-notice-body ul{margin:2px 0;padding-left:18px}',
+        '.dsh-tako-notice-body code{font-family:ui-monospace,"IBM Plex Mono",monospace;font-size:12px;background:var(--dsw-alias-interactive-bg-hover);padding:0 4px;border-radius:4px}',
+        '.dsh-tako-notice-body a{color:' + CLAY + '}',
+        '.dsh-tako-notice-x{flex:none;font-size:11px;color:var(--dsw-alias-label-tertiary)}',
+        // model cards
+        '.dsh-tako-model-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}',
+        '@media (max-width:560px){.dsh-tako-model-grid{grid-template-columns:1fr}}',
+        '.dsh-tako-model-card{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:14px;border:0.5px solid var(--dsw-alias-settings-card-stroke);background:var(--dsw-alias-bg-layer-1,var(--dsw-alias-settings-card-fill));cursor:pointer;transition:border-color .15s ease;min-width:0}',
+        '.dsh-tako-model-card:hover{border-color:' + CLAY + '}',
+        '.dsh-tako-model-card[data-pinned="true"]{border-color:' + CLAY + '}',
+        '.dsh-tako-model-card-top{display:flex;gap:10px;align-items:center;min-width:0}',
+        '.dsh-tako-model-card-id{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,"IBM Plex Mono",monospace;font-size:13px;font-weight:500}',
+        '.dsh-tako-model-card-vendor{flex:none;width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:' + CLAY + ';background:var(--dsw-alias-interactive-bg-hover);border:0.5px solid var(--dsw-alias-border-l2)}',
+        '.dsh-tako-model-card-desc{font-size:12px;color:var(--dsw-alias-label-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+        '.dsh-tako-model-card-pills{display:flex;gap:4px;flex-wrap:wrap}',
+        '.dsh-tako-model-card-price{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;font-variant-numeric:tabular-nums}',
+        '.dsh-tako-model-card-price b{font-weight:500;color:' + CLAY + '}',
+        '.dsh-tako-model-card-foot{font-size:11px;color:var(--dsw-alias-label-tertiary);display:flex;gap:6px;flex-wrap:wrap;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+        '.dsh-tako-field{display:flex;gap:14px;align-items:baseline;padding:7px 0;border-bottom:0.5px solid var(--dsw-alias-border-l2)}',
+        '.dsh-tako-field:last-of-type{border-bottom:none}',
+        '.dsh-tako-field>label{flex:none;width:210px;font-size:13px;color:var(--dsw-alias-label-secondary)}',
+        '.dsh-tako-field>.v{flex:1;min-width:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}',
+        '.dsh-tako-check{display:flex;gap:8px;align-items:center;font-size:13px}',
+        '.dsh-tako-code{font-family:ui-monospace,"IBM Plex Mono",monospace;font-size:12px;padding:8px 10px;border-radius:8px;background:var(--dsw-alias-interactive-bg-hover);overflow:auto;white-space:pre;max-height:160px}',
+        '.dsh-tako-bar>i[data-tone="warn"]{background:var(--dsw-alias-state-warn-primary)}',
+        '.dsh-tako-bar>i[data-tone="error"]{background:var(--dsw-alias-state-error-primary)}',
+        '.dsh-tako-stamp .n[data-tone="warn"]{color:var(--dsw-alias-state-warn-primary)}',
+        '.dsh-tako-stamp .n[data-tone="error"]{color:var(--dsw-alias-state-error-primary)}',
+        // unchanged primitives
+        '.dsh-tako-stamps{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px 28px}',
         '.dsh-tako-stamps-3{grid-template-columns:repeat(3,minmax(0,1fr))}',
         '.dsh-tako-stamp .n{font-variant-numeric:tabular-nums;font-size:22px;font-weight:500;line-height:28px}',
         '.dsh-tako-stamp .n small{font-size:13px;font-weight:400;color:var(--dsw-alias-label-tertiary)}',
-        '.dsh-tako-model{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 10px;margin:0 -10px;border-radius:8px;transition:background .15s ease}',
+        '.dsh-tako-model{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;margin:0 -10px;border-radius:8px;transition:background .15s ease}',
         '.dsh-tako-model:hover{background:var(--dsw-alias-interactive-bg-hover)}',
-        '.dsh-tako-model a{color:inherit;text-decoration:none}',
+        '.dsh-tako-model a{color:inherit;text-decoration:none;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
         '.dsh-tako-model a:hover{color:' + CLAY + '}',
+        '.dsh-tako-pin{flex:none;font:inherit;font-size:13px;padding:2px 5px;border:none;background:transparent;color:var(--dsw-alias-label-dimmed,var(--dsw-alias-label-tertiary));cursor:pointer;line-height:1}',
+        '.dsh-tako-pin[data-active="true"]{color:' + CLAY + '}',
         '.dsh-tako-links{display:flex;flex-wrap:wrap;gap:8px}',
         '.dsh-tako-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:inherit;text-decoration:none;font-size:12px;line-height:18px;transition:border-color .15s ease,color .15s ease}',
         '.dsh-tako-chip:hover{border-color:' + CLAY + ';color:' + CLAY + '}',
         '.dsh-tako-chip .arrow{opacity:.45;font-size:11px}',
+        '.dsh-tako-chip[data-active="true"]{border-color:' + CLAY + ';color:' + CLAY + '}',
         '.dsh-tako-status{display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary)}',
         '.dsh-tako-dot{width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-label-tertiary);display:inline-block}',
         '.dsh-tako-dot.on{background:var(--dsw-alias-state-success-primary)}',
@@ -652,13 +909,12 @@ window.__ModuleLoader__.load({
         '.dsh-tako-ghost{font:inherit;padding:5px 12px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:inherit;cursor:pointer;transition:border-color .15s ease,color .15s ease}',
         '.dsh-tako-ghost:hover{border-color:' + CLAY + ';color:' + CLAY + '}',
         '.dsh-tako-cardfoot{display:flex;gap:14px;flex-wrap:wrap;margin-top:4px}',
-        '.dsh-tako-model{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-bottom:0.5px solid var(--dsw-alias-border-l2)}',
         '.dsh-tako-model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
         '.dsh-tako-toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
         '.dsh-tako-input{font:inherit;font-size:13px;padding:5px 9px;border-radius:6px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:inherit;min-width:0;flex:1 1 160px}',
         '.dsh-tako-input:focus{outline:none;border-color:' + CLAY + '}',
-        '.dsh-tako-chip{font:inherit;font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:inherit;cursor:pointer}',
-        '.dsh-tako-chip[data-active="true"]{border-color:' + CLAY + ';color:' + CLAY + '}',
+        '.dsh-tako-input:disabled{opacity:0.5}',
+        '.dsh-tako-select{font:inherit;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:inherit}',
         '.dsh-tako-summary{font-size:12px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}',
         '.dsh-tako-tag{font-size:11px;padding:1px 6px;border-radius:4px;border:0.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);flex:none}',
         '.dsh-tako-badge{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:' + CLAY + '}',
@@ -824,17 +1080,18 @@ window.__ModuleLoader__.load({
       const login = props.login
       const t = props.t ?? fallbackT
       const configured = status !== undefined && status.configured === true
+      const compact = props.compact === true
       const userName = configured && status.me && status.me.userName ? status.me.userName : t('consoleTitle')
       const planName = configured && status.me && status.me.planName ? status.me.planName : undefined
       const maskedKey = configured && status.maskedKey ? status.maskedKey : undefined
-      const body = [h('h1', { key: 'h' }, userName)]
-      body.push(h('div', { key: 'status', className: 'dsh-tako-status' },
+      const body = compact ? [] : [h('h1', { key: 'h' }, userName)]
+      if (!compact) body.push(h('div', { key: 'status', className: 'dsh-tako-status' },
         h('span', { className: configured ? 'dsh-tako-dot on' : 'dsh-tako-dot', 'aria-hidden': true }),
         configured ? t('signedIn') : t('signedOut'),
         planName === undefined ? null : h('span', { className: 'dsh-tako-plan' }, planName)))
       if (status !== undefined && !configured) {
         body.push(h('div', { key: 'lead', className: 'dsh-tako-sub' }, t('signedOutLead')))
-      } else if (maskedKey !== undefined) {
+      } else if (maskedKey !== undefined && !compact) {
         body.push(h('div', { key: 'sub', className: 'dsh-tako-sub' },
           h('span', { key: 'key', 'data-testid': 'dsh-tako-console-key', style: mono }, maskedKey)))
       }
@@ -864,9 +1121,11 @@ window.__ModuleLoader__.load({
         body.push(h('div', { key: 'note', role: 'status', style: { fontSize: '0.85em', overflowWrap: 'anywhere' } }, props.logoutNote))
       }
       body.push(h(KeyEditor, { key: 'key-editor', status, t, onChanged: props.onKeyChanged }))
+      const wrap = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 } }, ...body)
+      if (compact) return h('section', { className: 'dsh-tako-section', 'data-dsh-tako-card': 'account' },
+        h('div', { className: 'dsh-tako-kicker' }, t('accountCard')), wrap)
       return h('header', { className: 'dsh-tako-head', 'data-dsh-tako-card': 'account' },
-        TakoMark(32),
-        h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 } }, ...body))
+        TakoMark(32), wrap)
     }
 
     /**
@@ -1158,6 +1417,52 @@ window.__ModuleLoader__.load({
     /** Rows shown before "show all"; the toolbar still counts the whole catalog. */
     const CATALOG_PREVIEW = 6
 
+    /**
+     * One plaza-style model card. `card` carries the display-only fields the
+     * console route pairs with each route model; `model` supplies the DSH
+     * flags, so older hosts without cards still render a minimal card.
+     */
+    function ModelCardView(props) {
+      const t = props.t ?? fallbackT
+      const model = props.model
+      const card = props.card
+      const pills = []
+      if (model.contextWindow !== undefined || (card && card.contextWindow !== undefined)) pills.push(h('span', { key: 'ctx', className: 'dsh-tako-pill' }, compactContext((card && card.contextWindow) || model.contextWindow)))
+      const vision = card ? card.vision : (model.input || []).includes('image')
+      const reasoning = card ? card.reasoning : model.reasoningEfforts !== false
+      if (vision) pills.push(h('span', { key: 'v', className: 'dsh-tako-pill', 'data-badge': 'vision' }, t('visionBadge')))
+      if (reasoning) pills.push(h('span', { key: 'r', className: 'dsh-tako-pill', 'data-badge': 'reasoning' }, t('catalogReasoningBadge')))
+      if (card && card.claudeCodeOnly) pills.push(h('span', { key: 'cc', className: 'dsh-tako-pill', 'data-tone': 'warn' }, t('cardClaude')))
+      if (card && card.channelTag) pills.push(h('span', { key: 'ct', className: 'dsh-tako-pill', 'data-tone': 'clay' }, card.channelTag))
+      const price = []
+      if (card && typeof card.standardPriceUsdPerMillion === 'number') price.push(h('span', { key: 'std' }, `${t('cardStandard')} `, h('b', null, `$${card.standardPriceUsdPerMillion}/M`)))
+      if (card && typeof card.realizedPriceUsdPerMillion === 'number') price.push(h('span', { key: 'real' }, `${t('cardRealized')} `, h('b', null, `~$${card.realizedPriceUsdPerMillion}/M`)))
+      if (card && typeof card.outputRatio === 'number' && card.outputRatio !== 1) price.push(h('span', { key: 'out', style: muted }, `${t('cardOutputRatio')} ×${card.outputRatio}`))
+      if (card && typeof card.cacheHitRate === 'number' && card.cacheHitRate > 0) price.push(h('span', { key: 'cache', style: muted }, `cache ${Math.round(card.cacheHitRate * 100)}%`))
+      const foot = []
+      if (card && card.channelCount > 0) foot.push(`${t('cardChannels')} ${card.channelCount}`)
+      if (card && card.endpoints.length > 0) foot.push(`${t('cardEndpoints')} ${card.endpoints.slice(0, 3).join('·')}${card.endpoints.length > 3 ? ' +' + (card.endpoints.length - 3) : ''}`)
+      const vendor = card && card.vendor ? String(card.vendor) : ''
+      return h('div', {
+        className: 'dsh-tako-model-card',
+        'data-model': model.id,
+        'data-pinned': String(props.pinned === true),
+        role: 'link',
+        tabIndex: 0,
+        onClick: () => { window.open(props.url, '_blank', 'noopener') },
+        'data-testid': `dsh-tako-modelcard-${model.id}`,
+      },
+        h('div', { className: 'dsh-tako-model-card-top' },
+          h('span', { className: 'dsh-tako-model-card-vendor', 'aria-hidden': true }, (vendor || model.id).slice(0, 1).toUpperCase()),
+          h('span', { className: 'dsh-tako-model-card-id', title: model.id }, model.id),
+          props.pin,
+          h('a', { href: props.url, target: '_blank', rel: 'noopener noreferrer', className: 'dsh-tako-ghost', style: { padding: '0 2px' }, onClick: event => event.stopPropagation() }, '↗')),
+        card && card.description ? h('div', { className: 'dsh-tako-model-card-desc', title: card.description }, card.description) : null,
+        pills.length > 0 ? h('div', { className: 'dsh-tako-model-card-pills' }, pills) : null,
+        price.length > 0 ? h('div', { className: 'dsh-tako-model-card-price' }, price) : null,
+        foot.length > 0 ? h('div', { className: 'dsh-tako-model-card-foot' }, foot.join(' · ')) : null)
+    }
+
     function CatalogCard(props) {
       const catalog = props.catalog
       const t = props.t ?? fallbackT
@@ -1182,13 +1487,18 @@ window.__ModuleLoader__.load({
           long: models.filter(hasLong).length,
           reasoning: models.filter(hasReasoning).length,
         }
+        const cards = Array.isArray(props.cards) ? props.cards : []
+        const cardsById = new Map(cards.map(card => [card.id, card]))
         const needle = query.trim().toLowerCase()
         const filtering = needle !== '' || filter !== 'all'
         const matched = models.filter(model => {
           if (filter === 'vision' && !hasVision(model)) return false
           if (filter === 'long' && !hasLong(model)) return false
           if (filter === 'reasoning' && !hasReasoning(model)) return false
-          return needle === '' || model.id.toLowerCase().includes(needle)
+          if (needle === '') return true
+          if (model.id.toLowerCase().includes(needle)) return true
+          const card = cardsById.get(model.id)
+          return card !== undefined && typeof card.description === 'string' && card.description.toLowerCase().includes(needle)
         })
         const expanded = open || filtering
         const shown = expanded ? matched : matched.slice(0, CATALOG_PREVIEW)
@@ -1224,21 +1534,45 @@ window.__ModuleLoader__.load({
         if (shown.length === 0) {
           children.push(h('div', { key: 'nomatch', style: { ...muted, padding: '6px 0' }, 'data-testid': 'dsh-tako-catalog-nomatch' }, t('catalogNoMatch')))
         }
-        for (const model of shown) {
-          const vision = hasVision(model)
-          children.push(h('div', { key: model.id, className: 'dsh-tako-model', 'data-model': model.id },
-            h('a', {
-              className: 'dsh-tako-model-name',
-              style: mono,
-              title: model.id,
-              href: `${origin}/pricing?search=${encodeURIComponent(model.id)}`,
-              target: '_blank',
-              rel: 'noopener noreferrer',
-            }, model.id),
-            h('span', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', flex: 'none' } },
-              h('span', { style: { ...muted, fontVariantNumeric: 'tabular-nums' } }, compactContext(model.contextWindow)),
-              vision ? h('span', { className: 'dsh-tako-tag', 'data-badge': 'vision' }, t('visionBadge')) : null,
-              model.reasoningEfforts !== false ? h('span', { className: 'dsh-tako-tag', 'data-badge': 'reasoning' }, t('catalogReasoningBadge')) : null)))
+        const pinned = Array.isArray(props.pinned) ? props.pinned : []
+        const pinButton = model => props.onTogglePin === undefined ? null : h('button', {
+          type: 'button',
+          className: 'dsh-tako-pin',
+          'data-active': String(pinned.includes(model.id)),
+          'data-testid': `dsh-tako-pin-${model.id}`,
+          title: pinned.includes(model.id) ? t('unpinTitle') : t('pinTitle'),
+          onClick: event => { event.stopPropagation(); void props.onTogglePin(model.id) },
+        }, pinned.includes(model.id) ? '★' : '☆')
+        const plazaUrl = id => `${origin}/pricing?search=${encodeURIComponent(id)}`
+        if (cards.length > 0) {
+          children.push(h('div', { key: 'grid', className: 'dsh-tako-model-grid' },
+            shown.map(model => h(ModelCardView, {
+              key: model.id,
+              model,
+              card: cardsById.get(model.id),
+              t,
+              url: plazaUrl(model.id),
+              pin: pinButton(model),
+              pinned: pinned.includes(model.id),
+            }))))
+        } else {
+          for (const model of shown) {
+            const vision = hasVision(model)
+            children.push(h('div', { key: model.id, className: 'dsh-tako-model', 'data-model': model.id },
+              pinButton(model),
+              h('a', {
+                className: 'dsh-tako-model-name',
+                style: mono,
+                title: model.id,
+                href: plazaUrl(model.id),
+                target: '_blank',
+                rel: 'noopener noreferrer',
+              }, model.id),
+              h('span', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', flex: 'none' } },
+                h('span', { style: { ...muted, fontVariantNumeric: 'tabular-nums' } }, compactContext(model.contextWindow)),
+                vision ? h('span', { className: 'dsh-tako-tag', 'data-badge': 'vision' }, t('visionBadge')) : null,
+                model.reasoningEfforts !== false ? h('span', { className: 'dsh-tako-tag', 'data-badge': 'reasoning' }, t('catalogReasoningBadge')) : null)))
+          }
         }
         if (!expanded && matched.length > shown.length) {
           children.push(h('button', {
@@ -1271,8 +1605,15 @@ window.__ModuleLoader__.load({
         children.push(h('div', { key: 'failure', role: 'status', style: muted },
           `${t(label || 'catalogFailed')} · ${t('catalogAttempts', { count: catalog.attempts ?? 0 })}`))
       }
-      if (props.onRefresh) children.push(h('button', { key: 'refresh', type: 'button', onClick: props.onRefresh,
-        style: { ...quietButton, alignSelf: 'flex-start' } }, t('catalogReadAgain')))
+      const foot = []
+      if (props.onRefresh) foot.push(h('button', { key: 'refresh', type: 'button', onClick: props.onRefresh,
+        className: 'dsh-tako-btn', 'data-testid': 'dsh-tako-catalog-refresh' }, t('catalogReadAgain')))
+      if (props.onSync) foot.push(h('button', { key: 'sync', type: 'button',
+        disabled: props.syncBusy === true,
+        onClick: props.onSync,
+        className: 'dsh-tako-btn', 'data-testid': 'dsh-tako-catalog-sync' }, props.syncBusy === true ? t('syncWorking') : t('syncNow')))
+      if (foot.length > 0) children.push(h('div', { key: 'foot', className: 'dsh-tako-cardfoot' }, foot))
+      if (props.syncNote) children.push(h('div', { key: 'syncnote', role: 'status', style: { ...muted, fontSize: '12px' }, 'data-testid': 'dsh-tako-catalog-syncnote' }, props.syncNote))
       return Card({
         name: 'catalog',
         title: t('catalogCard'),
@@ -1282,6 +1623,472 @@ window.__ModuleLoader__.load({
       })
     }
 
+    /** `## heading\n- item` → flat text; announcements arrive as small markdown blobs. */
+    const stripMarkdown = text => String(text ?? '').replace(/^[#>\-*+\s]+/gm, '').replace(/\[(.*?)\]\(.*?\)/g, '$1').trim()
+
+    const fmtDateTime = ms => {
+      if (typeof ms !== 'number' || !Number.isFinite(ms)) return '—'
+      const date = new Date(ms)
+      const pad = n => String(n).padStart(2, '0')
+      const now = new Date()
+      const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
+      if (sameDay) return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+      return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+    }
+    const fmtFullTime = ms => {
+      if (typeof ms !== 'number' || !Number.isFinite(ms) || ms <= 0) return '—'
+      const d = new Date(ms)
+      const pad = n => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+    const compactTokens = value => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+      if (Math.abs(value) >= 1_000_000) return `${Math.round(value / 1_000_000 * 10) / 10}M`
+      if (Math.abs(value) >= 1_000) return `${Math.round(value / 1_000 * 10) / 10}K`
+      return String(value)
+    }
+    const LOG_TYPE_KEYS = { 1: 'logTypeTopup', 3: 'logTypeManage', 4: 'logTypeSystem', 5: 'logTypeError', 6: 'logTypeRefund', 7: 'logTypeLogin' }
+    const logTypeLabel = (type, t) => {
+      const key = LOG_TYPE_KEYS[type]
+      return key === undefined ? String(type ?? '—') : t(key)
+    }
+    const quotaUsd = quota => typeof quota === 'number' && Number.isFinite(quota) ? fmtUsd(quota / 500000) : '—'
+
+    /** Inline markdown-lite: **bold**, `code`, [text](https://url). Input is text nodes, never raw HTML. */
+    const mdInline = text => {
+      const parts = []
+      const pattern = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\[[^\]]*\]\((?:https?:\/\/|mailto:)[^)\s]*\))/g
+      let last = 0
+      let match
+      while ((match = pattern.exec(text)) !== null) {
+        if (match.index > last) parts.push(text.slice(last, match.index))
+        const token = match[0]
+        if (token.startsWith('`')) parts.push(h('code', { key: parts.length }, token.slice(1, -1)))
+        else if (token.startsWith('**')) parts.push(h('strong', { key: parts.length }, token.slice(2, -2)))
+        else {
+          const label = token.slice(token.indexOf('[') + 1, token.indexOf(']'))
+          const url = token.slice(token.indexOf('(') + 1, -1)
+          parts.push(h('a', { key: parts.length, href: url, target: '_blank', rel: 'noopener noreferrer' }, label))
+        }
+        last = match.index + token.length
+      }
+      if (last < text.length) parts.push(text.slice(last))
+      return parts
+    }
+
+    /** Block-level markdown-lite: ## headings, - / * lists, blank-line-separated paragraphs. */
+    const mdLite = text => {
+      const blocks = []
+      for (const line of String(text ?? '').split('\n')) {
+        const trimmed = line.trim()
+        if (trimmed === '') continue
+        const heading = /^(#{1,4})\s+(.*)$/.exec(trimmed)
+        if (heading !== null) { blocks.push(h('h4', { key: blocks.length }, mdInline(heading[2]))); continue }
+        const bullet = /^[-*·]\s+(.*)$/.exec(trimmed)
+        if (bullet !== null) {
+          const last = blocks[blocks.length - 1]
+          if (last !== undefined && last.tag === 'ul') last.children.push(h('li', { key: last.children.length }, mdInline(bullet[1])))
+          else blocks.push(h('ul', { key: blocks.length }, h('li', { key: 0 }, mdInline(bullet[1]))))
+          continue
+        }
+        blocks.push(h('p', { key: blocks.length, style: { margin: '2px 0' } }, mdInline(trimmed)))
+      }
+      return blocks
+    }
+
+    const NOTICE_TONES = { ongoing: 'info', success: 'success', warning: 'warn', error: 'error' }
+
+    function NoticeItem(props) {
+      const t = props.t ?? fallbackT
+      const item = props.item
+      const preview = stripMarkdown(item.content).split('\n').filter(line => line !== '')[0] ?? ''
+      const date = item.publishDate !== undefined ? String(item.publishDate).slice(0, 10) : item.date
+      // <details>/<summary> gives the expand/collapse for free, no hook slot.
+      return h('details', {
+        className: 'dsh-tako-notice-item',
+        'data-testid': 'dsh-tako-notice-item',
+      },
+        h('summary', { className: 'dsh-tako-notice-summary' },
+          h('span', { className: 'dsh-tako-notice-dot', 'data-tone': NOTICE_TONES[item.type], 'aria-hidden': true }),
+          h('span', { className: 'dsh-tako-notice-preview' }, preview),
+          date === undefined ? null : h('span', { className: 'dsh-tako-notice-date' }, date),
+          h('button', {
+            type: 'button',
+            className: 'dsh-tako-ghost',
+            'data-testid': 'dsh-tako-notice-dismiss',
+            onClick: event => { event.preventDefault(); event.stopPropagation(); props.onDismiss(item) },
+          }, t('noticeDismiss'))),
+        h('div', { className: 'dsh-tako-notice-body', 'data-testid': 'dsh-tako-notice-body' }, mdLite(item.content)))
+    }
+
+    function NoticeList(props) {
+      const t = props.t ?? fallbackT
+      const items = (props.notice && props.notice.announcements) || []
+      const visible = items.filter(item => item && (props.dismissed || []).includes(noticeId(item)) === false)
+      if (visible.length === 0) return null
+      return h('div', { className: 'dsh-tako-notices', 'data-testid': 'dsh-tako-notice' },
+        visible.map(item => h(NoticeItem, { key: noticeId(item), item, t, onDismiss: props.onDismiss })))
+    }
+
+    const noticeId = item => item.id !== undefined ? String(item.id) : String(item.publishDate ?? '') + ':' + String(item.content ?? '').slice(0, 40)
+
+    function OverviewTab(props) {
+      const t = props.t
+      return h('div', { 'data-testid': 'dsh-tako-tabpanel-overview', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
+        props.notice !== undefined && props.notice.ok === true && Array.isArray(props.notice.announcements)
+          ? h(NoticeList, { key: 'notice', notice: props.notice, dismissed: props.dismissed || [], onDismiss: props.onDismiss, t })
+          : null,
+        AccountCard({ status: props.status, login: props.login, busyLogout: props.busyLogout, compact: true,
+          onLogout: props.onLogout, logoutNote: props.logoutNote, t, onKeyChanged: props.onKeyChanged }),
+        QuotaCard({ status: props.status, origin: props.origin, t }),
+        ServicesCard({ origin: props.origin, t }),
+        h(UpdateCard, { key: 'update', t }))
+    }
+
+    function RequestsTab(props) {
+      const t = props.t ?? fallbackT
+      const [logs, setLogs] = useState(undefined)
+      const [error, setError] = useState(undefined)
+      const [model, setModel] = useState('')
+      const [refreshing, setRefreshing] = useState(false)
+      const alive = useRef(true)
+      useEffect(() => () => { alive.current = false }, [])
+      const load = async next => {
+        if (refreshing) return
+        setRefreshing(true)
+        try {
+          const query = (next ?? model) === '' ? '' : `?model=${encodeURIComponent(next ?? model)}`
+          const result = await call('GET', LOGS_ROUTE + query)
+          if (!alive.current) return
+          if (result && result.ok === true) { setLogs(result.logs || []); setError(undefined) }
+          else { setError(result && result.message ? String(result.message) : (result && result.code) || 'error'); setLogs(undefined) }
+        } catch (err) {
+          if (alive.current) { setError(String(err && err.message || err)); setLogs(undefined) }
+        } finally {
+          if (alive.current) setRefreshing(false)
+        }
+      }
+      useEffect(() => { void load('') }, [])
+      const children = []
+      const catalog = props.catalog
+      const models = catalog === undefined || catalog.models === undefined ? [] : catalog.models
+      children.push(h('div', { key: 'bar', className: 'dsh-tako-toolbar' },
+        h('select', {
+          className: 'dsh-tako-select',
+          value: model,
+          'data-testid': 'dsh-tako-logs-model',
+          onChange: event => { setModel(event.target.value); void load(event.target.value) },
+        },
+          h('option', { value: '' }, t('logsModel')),
+          models.map(m => h('option', { key: m.id, value: m.id }, m.id))),
+        h('button', { type: 'button', className: 'dsh-tako-btn', 'data-testid': 'dsh-tako-logs-refresh', disabled: refreshing, onClick: () => { void load() } }, refreshing ? t('logsLoading') : t('logsRefresh'))))
+      if (error !== undefined) {
+        const text = error === 'not-configured' ? t('logsNeedLogin') : `${t('loadFailed')}: ${error}`
+        children.push(h('div', { key: 'err', role: 'alert', style: { ...muted, fontSize: '13px' }, 'data-testid': 'dsh-tako-logs-error' }, text))
+      } else if (logs === undefined) {
+        children.push(h('div', { key: 'load', style: muted }, t('logsLoading')))
+      } else if (logs.length === 0) {
+        children.push(h('div', { key: 'empty', style: muted, 'data-testid': 'dsh-tako-logs-empty' }, t('logsEmpty')))
+      } else {
+        children.push(h('table', { key: 'table', className: 'dsh-tako-table', 'data-testid': 'dsh-tako-logs-table' },
+          h('thead', null, h('tr', null,
+            h('th', null, t('logsColTime')), h('th', null, t('logsColModel')), h('th', null, t('logsColIn')),
+            h('th', null, t('logsColOut')), h('th', null, t('logsColCost')), h('th', null, t('logsColDuration')),
+            h('th', null, ''), h('th', null, t('logsColRequest')), h('th', null, 'IP'))),
+          h('tbody', null, logs.map(row => h('tr', { key: row.id ?? row.requestId },
+            h('td', null, fmtDateTime(typeof row.createdAt === 'number' ? row.createdAt * 1000 : row.createdAt)),
+            h('td', { className: 'm', title: row.modelName }, row.modelName || '—'),
+            h('td', null, compactTokens(row.promptTokens)),
+            h('td', null, compactTokens(row.completionTokens)),
+            h('td', null, quotaUsd(row.quota)),
+            h('td', null, typeof row.useTime === 'number' ? `${row.useTime}s` : '—'),
+            h('td', null, row.type !== undefined && row.type !== 2 ? h('span', { className: 'dsh-tako-pill', 'data-tone': row.type === 5 ? 'error' : undefined }, logTypeLabel(row.type, t)) : (row.isStream === true ? h('span', { className: 'dsh-tako-pill' }, 'stream') : null)),
+            h('td', { className: 'm', title: row.requestId }, typeof row.requestId === 'string' ? row.requestId.slice(0, 8) : '—'),
+            h('td', null, row.ip || '—'))))))
+      }
+      return h('section', { 'data-dsh-tako-card': 'logs', className: 'dsh-tako-section', 'data-testid': 'dsh-tako-tabpanel-requests' }, children)
+    }
+
+    function UsageTab(props) {
+      const t = props.t ?? fallbackT
+      const [usage, setUsage] = useState(undefined)
+      const [error, setError] = useState(undefined)
+      const alive = useRef(true)
+      useEffect(() => () => { alive.current = false }, [])
+      useEffect(() => {
+        void (async () => {
+          try {
+            const result = await call('GET', USAGE_ROUTE)
+            if (!alive.current) return
+            if (result && result.ok === true) { setUsage(result); setError(undefined) }
+            else setError(result && result.message ? String(result.message) : (result && result.code) || 'error')
+          } catch (err) {
+            if (alive.current) setError(String(err && err.message || err))
+          }
+        })()
+      }, [])
+      const children = []
+      if (error !== undefined) {
+        children.push(h('div', { key: 'err', role: 'alert', style: { ...muted, fontSize: '13px' } }, `${t('loadFailed')}: ${error}`))
+      } else if (usage === undefined) {
+        children.push(h('div', { key: 'load', style: muted }, '…'))
+      } else {
+        children.push(h('section', { key: 'daily', className: 'dsh-tako-section', 'data-dsh-tako-card': 'daily' },
+          h('div', { className: 'dsh-tako-kicker' }, t('usageToday')),
+          h('div', { className: 'dsh-tako-stamp' },
+            h('div', { className: 'n dsh-tako-ink', 'data-testid': 'dsh-tako-usage-daily' },
+              usage.statsError ? '—' : fmtUsd(usage.dailyCostUsd)),
+            usage.statsError ? h('div', { style: { ...muted, fontSize: '12px' }, 'data-testid': 'dsh-tako-usage-statserror' }, usage.statsError) : null)))
+        const token = usage.token || {}
+        const tokenRows = []
+        if (usage.tokenError) tokenRows.push(h('div', { key: 'te', style: { ...muted, fontSize: '12px' }, 'data-testid': 'dsh-tako-usage-tokenerror' }, usage.tokenError))
+        else {
+          if (token.unlimitedQuota === true) tokenRows.push(h('div', { key: 'ul', className: 'dsh-tako-pill', 'data-tone': 'ok' }, t('usageUnlimited')))
+          else if (typeof token.grantedUsd === 'number' && token.grantedUsd > 0) {
+            const share = remainingShare(token.usedUsd, token.grantedUsd)
+            tokenRows.push(h('div', { key: 'bar', className: 'dsh-tako-bar' }, h('i', {
+              'data-tone': share !== undefined && share <= 0.05 ? 'error' : share !== undefined && share <= 0.2 ? 'warn' : undefined,
+              style: { width: `${(1 - (share ?? 0)) * 100}%` } })))
+          }
+          tokenRows.push(h('div', { key: 'grid', className: 'dsh-tako-stamps dsh-tako-stamps-3' },
+            h('div', { className: 'dsh-tako-stamp' }, h('div', { className: 'dsh-tako-kicker' }, t('usageGranted')), h('div', { className: 'n' }, fmtUsd(token.grantedUsd))),
+            h('div', { className: 'dsh-tako-stamp' }, h('div', { className: 'dsh-tako-kicker' }, t('usageUsed')), h('div', { className: 'n' }, fmtUsd(token.usedUsd))),
+            h('div', { className: 'dsh-tako-stamp' }, h('div', { className: 'dsh-tako-kicker' }, t('usageAvailable')), h('div', { className: 'n' }, fmtUsd(token.availableUsd)))))
+        }
+        children.push(h('section', { key: 'token', className: 'dsh-tako-section', 'data-dsh-tako-card': 'token' },
+          h('div', { className: 'dsh-tako-kicker' }, t('usageTokenCard')), ...tokenRows))
+        const models = Array.isArray(usage.models) ? usage.models : []
+        children.push(h('section', { key: 'models', className: 'dsh-tako-section', 'data-dsh-tako-card': 'permodel' },
+          h('div', { className: 'dsh-tako-kicker' }, t('usagePerModel')),
+          usage.modelStatsError ? h('div', { style: { ...muted, fontSize: '12px' }, 'data-testid': 'dsh-tako-usage-modelerror' }, usage.modelStatsError)
+            : models.length === 0 ? h('div', { style: muted }, '—')
+            : models.map(row => h('div', { key: row.model, className: 'dsh-tako-model', 'data-model': row.model },
+                h('span', { className: 'dsh-tako-model-name', style: mono }, row.model),
+                h('span', { style: { display: 'flex', gap: '10px', alignItems: 'baseline', flex: 'none', fontSize: '12px' } },
+                  h('span', { style: muted }, t('usageRequests', { count: row.requests ?? 0 })),
+                  h('span', { style: muted }, `${compactTokens(row.inputTokens)} / ${compactTokens(row.outputTokens)}`),
+                  h('span', { style: { ...mono, fontSize: '12px' } }, fmtUsd(row.costUsd)))))))
+      }
+      return h('div', { 'data-testid': 'dsh-tako-tabpanel-usage', style: { display: 'flex', flexDirection: 'column', gap: '14px' } }, children)
+    }
+
+    function ModelsTab(props) {
+      const t = props.t ?? fallbackT
+      const [pinned, setPinned] = useState(undefined)
+      const [syncBusy, setSyncBusy] = useState(false)
+      const [syncNote, setSyncNote] = useState(undefined)
+      const alive = useRef(true)
+      useEffect(() => () => { alive.current = false }, [])
+      useEffect(() => {
+        void (async () => {
+          try {
+            const result = await call('GET', CONFIG_ROUTE)
+            if (alive.current && result && result.ok === true && result.config && Array.isArray(result.config.pinned)) setPinned(result.config.pinned)
+            else if (alive.current) setPinned([])
+          } catch {
+            if (alive.current) setPinned([])
+          }
+        })()
+      }, [])
+      const togglePin = async id => {
+        const current = Array.isArray(pinned) ? pinned : []
+        const next = current.includes(id) ? current.filter(item => item !== id) : [...current, id]
+        setPinned(next)
+        try {
+          const result = await call('POST', CONFIG_ROUTE, { set: { pinned: next } })
+          if (!alive.current) return
+          if (!result || result.ok !== true) { setPinned(current); setSyncNote(t('pinFailed')) }
+        } catch (err) {
+          if (!alive.current) return
+          setPinned(current)
+          setSyncNote(`${t('pinFailed')}: ${String(err && err.message || err)}`)
+        }
+      }
+      const sync = async () => {
+        setSyncBusy(true)
+        setSyncNote(undefined)
+        try {
+          const result = await call('POST', SYNC_ROUTE, {})
+          if (!alive.current) return
+          if (!result || result.ok !== true) setSyncNote(t('syncFailed'))
+          else props.onRefresh()
+        } catch (err) {
+          if (alive.current) setSyncNote(`${t('syncFailed')}: ${String(err && err.message || err)}`)
+        } finally {
+          if (alive.current) setSyncBusy(false)
+        }
+      }
+      return h('div', { 'data-testid': 'dsh-tako-tabpanel-models' },
+        h(CatalogCard, {
+          catalog: props.catalog,
+          cards: props.catalog && props.catalog.cards,
+          error: props.catalogError,
+          origin: props.origin,
+          onRefresh: props.onRefresh,
+          onSync: () => { void sync() },
+          syncBusy,
+          syncNote,
+          pinned: pinned ?? [],
+          onTogglePin: pinned === undefined ? undefined : id => { void togglePin(id) },
+          t,
+        }))
+    }
+
+    function KeyTab(props) {
+      const t = props.t ?? fallbackT
+      const [usage, setUsage] = useState(undefined)
+      const alive = useRef(true)
+      useEffect(() => () => { alive.current = false }, [])
+      useEffect(() => {
+        if (props.configured !== true) return
+        void (async () => {
+          try {
+            const result = await call('GET', USAGE_ROUTE)
+            if (alive.current && result && result.ok === true) setUsage(result)
+          } catch { /* token detail degrades to the status card alone */ }
+        })()
+      }, [])
+      const status = props.status
+      const token = usage === undefined ? undefined : usage.token
+      const limits = token && token.modelLimitsEnabled === true ? Object.keys(token.modelLimits || {}) : []
+      const children = [
+        KeyEditor({ status, t, onChanged: props.onKeyChanged, key: 'editor' }),
+      ]
+      if (props.configured === true) {
+        const rows = []
+        if (status && status.maskedKey) rows.push(h('div', { key: 'mask', className: 'dsh-tako-field' }, h('label', null, 'key'), h('div', { className: 'v', style: mono }, status.maskedKey)))
+        if (token && token.name) rows.push(h('div', { key: 'name', className: 'dsh-tako-field' }, h('label', null, t('keyName')), h('div', { className: 'v' }, token.name)))
+        if (token) rows.push(h('div', { key: 'exp', className: 'dsh-tako-field' }, h('label', null, t('keyExpires')),
+          h('div', { className: 'v' }, !token.expiresAt || token.expiresAt <= 0 ? t('usageNever') : fmtFullTime(token.expiresAt * 1000))))
+        rows.push(h('div', { key: 'models', className: 'dsh-tako-field' }, h('label', null, t('keyModels')),
+          h('div', { className: 'v' }, limits.length === 0 ? t('usageNoLimits') : limits.map(id => h('span', { key: id, className: 'dsh-tako-tag' }, id)))))
+        children.push(Card({ name: 'keytoken', title: t('keyTokenCard'), children: rows, key: 'token' }))
+      }
+      return h('div', { 'data-testid': 'dsh-tako-tabpanel-key', style: { display: 'flex', flexDirection: 'column', gap: '14px' } }, children)
+    }
+
+    function ConfigTab(props) {
+      const t = props.t ?? fallbackT
+      const [config, setConfig] = useState(undefined)
+      const [error, setError] = useState(undefined)
+      const [form, setForm] = useState(undefined)
+      const [saving, setSaving] = useState(false)
+      const [note, setNote] = useState(undefined)
+      const alive = useRef(true)
+      useEffect(() => () => { alive.current = false }, [])
+      const csv = list => Array.isArray(list) ? list.join(', ') : ''
+      const parseCsv = text => String(text ?? '').split(',').map(item => item.trim()).filter(item => item !== '')
+      const parseInts = text => {
+        const items = parseCsv(text)
+        for (const item of items) if (!/^\d+$/.test(item)) return undefined
+        return items.map(Number)
+      }
+      const toForm = result => ({
+        refreshMinutes: typeof result.config.refreshIntervalMs === 'number' ? String(Math.round(result.config.refreshIntervalMs / 60000)) : '30',
+        retryDelays: csv(result.config.syncRetryDelaysMs),
+        defaultContextWindow: typeof result.config.defaultContextWindow === 'number' ? String(result.config.defaultContextWindow) : '',
+        includeClaudeCodeOnly: result.config.includeClaudeCodeOnly === true,
+        include: csv(result.config.include),
+        exclude: csv(result.config.exclude),
+        pinned: csv(result.config.pinned),
+        searchProvider: result.webSearchProvider === 'tako' ? 'tako' : 'deepseek-official',
+      })
+      const load = async () => {
+        try {
+          const result = await call('GET', CONFIG_ROUTE)
+          if (!alive.current) return
+          if (result && result.ok === true) { setConfig(result); setForm(toForm(result)); setError(undefined) }
+          else setError(result && result.message ? String(result.message) : (result && result.code) || 'error')
+        } catch (err) {
+          if (alive.current) setError(String(err && err.message || err))
+        }
+      }
+      useEffect(() => { void load() }, [])
+      const field = (key, label, input) => h('div', { key, className: 'dsh-tako-field', 'data-field': key }, h('label', null, label), h('div', { className: 'v' }, input))
+      const text = (key, label, dataTest) => field(key, label, h('input', {
+        className: 'dsh-tako-input', value: form === undefined ? '' : form[key], disabled: config === undefined || config.writable === false,
+        'data-testid': dataTest,
+        onChange: event => setForm({ ...form, [key]: event.target.value }),
+      }))
+      const save = async () => {
+        if (config === undefined || form === undefined) return
+        const minutes = parseInt(form.refreshMinutes, 10)
+        const retries = parseInts(form.retryDelays)
+        const ctxWin = form.defaultContextWindow.trim() === '' ? undefined : parseInt(form.defaultContextWindow, 10)
+        const set = {}
+        if (!Number.isNaN(minutes)) set.refreshIntervalMs = Math.max(0, minutes) * 60000
+        if (retries !== undefined) set.syncRetryDelaysMs = retries
+        if (ctxWin !== undefined && !Number.isNaN(ctxWin) && ctxWin >= 1) set.defaultContextWindow = ctxWin
+        set.includeClaudeCodeOnly = form.includeClaudeCodeOnly
+        set.include = parseCsv(form.include)
+        set.exclude = parseCsv(form.exclude)
+        set.pinned = parseCsv(form.pinned)
+        set.webSearchProvider = form.searchProvider
+        setSaving(true)
+        setNote(undefined)
+        try {
+          const result = await call('POST', CONFIG_ROUTE, { set })
+          if (!alive.current) return
+          if (result && result.ok === true) { setNote(t('configSaved')); await load() }
+          else setNote(`${t('configFailed')}: ${result && result.message ? result.message : (result && result.code) || 'error'}`)
+        } catch (err) {
+          if (alive.current) setNote(`${t('configFailed')}: ${String(err && err.message || err)}`)
+        } finally {
+          if (alive.current) setSaving(false)
+        }
+      }
+      const children = []
+      if (error !== undefined) children.push(h('div', { key: 'err', role: 'alert', style: { ...muted, fontSize: '13px' } }, `${t('loadFailed')}: ${error}`))
+      else if (form === undefined) children.push(h('div', { key: 'load', style: muted }, '…'))
+      else {
+        const readOnly = config === undefined || config.writable === false
+        if (readOnly) children.push(h('div', { key: 'ro', style: { ...muted, fontSize: '12px' }, 'data-testid': 'dsh-tako-config-readonly' }, t('configReadOnly')))
+        children.push(h('section', { key: 'form', className: 'dsh-tako-section', 'data-dsh-tako-card': 'config' },
+          text('refreshMinutes', t('configRefresh'), 'dsh-tako-config-refresh'),
+          text('retryDelays', t('configRetryDelays'), 'dsh-tako-config-retry'),
+          text('defaultContextWindow', t('configDefaultCtx'), 'dsh-tako-config-ctx'),
+          field('include', t('configInclude'), h('input', {
+            className: 'dsh-tako-input', value: form.include, disabled: readOnly, 'data-testid': 'dsh-tako-config-include',
+            onChange: event => setForm({ ...form, include: event.target.value }),
+          })),
+          field('exclude', t('configExclude'), h('input', {
+            className: 'dsh-tako-input', value: form.exclude, disabled: readOnly, 'data-testid': 'dsh-tako-config-exclude',
+            onChange: event => setForm({ ...form, exclude: event.target.value }),
+          })),
+          field('pinned', t('configPinnedField'), h('input', {
+            className: 'dsh-tako-input', value: form.pinned, disabled: readOnly, 'data-testid': 'dsh-tako-config-pinned',
+            onChange: event => setForm({ ...form, pinned: event.target.value }),
+          })),
+          field('claude', ' ', h('label', { className: 'dsh-tako-check' },
+            h('input', {
+              type: 'checkbox', checked: form.includeClaudeCodeOnly, disabled: readOnly, 'data-testid': 'dsh-tako-config-claude',
+              onChange: event => setForm({ ...form, includeClaudeCodeOnly: event.target.checked }),
+            }), t('configClaudeOnly'))),
+          field('search', t('configSearchProvider'), h('select', {
+            className: 'dsh-tako-select', value: form.searchProvider, disabled: readOnly, 'data-testid': 'dsh-tako-config-search',
+            onChange: event => setForm({ ...form, searchProvider: event.target.value }),
+          },
+            h('option', { value: 'tako' }, t('configSearchTako')),
+            h('option', { value: 'deepseek-official' }, t('configSearchDefault')))),
+          config && config.config && config.config.overrides !== undefined && Object.keys(config.config.overrides).length > 0
+            ? field('overrides', t('configOverrides'), h('pre', { className: 'dsh-tako-code' }, JSON.stringify(config.config.overrides, null, 2)))
+            : null,
+          !readOnly ? h('div', { key: 'actions', className: 'dsh-tako-cardfoot' },
+            h('button', { type: 'button', className: 'dsh-tako-btn dsh-tako-btn-primary', disabled: saving, 'data-testid': 'dsh-tako-config-save', onClick: () => { void save() } }, saving ? t('configSaving') : t('configSave'))) : null))
+        if (note !== undefined) children.push(h('div', { key: 'note', role: 'status', style: { ...muted, fontSize: '12px' }, 'data-testid': 'dsh-tako-config-note' }, note))
+      }
+      return h('div', { 'data-testid': 'dsh-tako-tabpanel-config', style: { display: 'flex', flexDirection: 'column', gap: '14px' } }, children)
+    }
+
+    const TABS = [
+      ['overview', 'tabOverview'],
+      ['requests', 'tabRequests'],
+      ['usage', 'tabUsage'],
+      ['models', 'tabModels'],
+      ['key', 'tabKey'],
+      ['config', 'tabConfig'],
+    ]
+
     function TakoConsolePage(props) {
       const t = props.t ?? fallbackT
       const [status, setStatus] = useState(undefined)
@@ -1290,6 +2097,10 @@ window.__ModuleLoader__.load({
       const [catalogError, setCatalogError] = useState(undefined)
       const [busyLogout, setBusyLogout] = useState(false)
       const [logoutNote, setLogoutNote] = useState(undefined)
+      const [tab, setTab] = useState('overview')
+      const [notice, setNotice] = useState(undefined)
+      const [dismissedNotice, setDismissedNotice] = useState(undefined)
+      const [diagCopied, setDiagCopied] = useState(false)
       const login = useTakoLogin()
 
       const alive = useRef(true)
@@ -1333,6 +2144,16 @@ window.__ModuleLoader__.load({
       }
 
       useEffect(() => { void loadStatus() }, [])
+      useEffect(() => {
+        void (async () => {
+          try {
+            const result = await call('GET', NOTICE_ROUTE)
+            if (alive.current) setNotice(result)
+          } catch {
+            if (alive.current) setNotice({ ok: false })
+          }
+        })()
+      }, [])
       useEffect(() => {
         let disposed = false
         let timer
@@ -1379,28 +2200,61 @@ window.__ModuleLoader__.load({
       }
 
       ensureTakoTheme()
-      const children = [
-        AccountCard({
-          status,
-          login,
-          busyLogout,
-          onLogout: logout,
-          logoutNote,
-          t,
-          onKeyChanged: async () => { await loadStatus(); notifyCredential() },
-        }),
-        Tentacle(),
-      ]
+      const origin = takoOrigin(status)
+      const me = status === undefined || status.me === null || status.me === undefined ? undefined : status.me
+      const planName = me && me.planName ? me.planName : undefined
+      const name = me && me.userName ? me.userName : (status && status.configured === true ? t('signedIn') : 'Tako')
+      const diagnostics = () => {
+        const lines = [
+          `dsh-tako console diagnostics`,
+          `endpoint: ${status && status.origin ? status.origin : '?'}`,
+          `configured: ${status === undefined ? '?' : status.configured}`,
+          `key: ${status && status.maskedKey ? status.maskedKey : '(none)'}`,
+          `credential: ${status && status.credential ? status.credential : '(unknown)'}`,
+          `account: ${me && me.userName ? me.userName : '(none)'}${planName ? ` (${planName})` : ''}`,
+          `catalog: ${catalog === undefined ? 'unloaded' : `${catalog.status || '?'} · ${(catalog.models || []).length} models · last ${fmtFullTime(catalog.lastSyncAt)}`}`,
+          `catalog error: ${catalogError || (catalog && catalog.lastError ? catalog.lastError.message : '(none)')}`,
+          `status error: ${statusError || '(none)'}`,
+          `notice: ${notice === undefined ? 'unloaded' : notice.ok === true ? `${(notice.announcements || []).length}` : 'failed'}`,
+        ]
+        return lines.join('\n')
+      }
+      const copyDiagnostics = async () => {
+        try { await navigator.clipboard.writeText(diagnostics()) } catch { /* clipboard blocked */ }
+        setDiagCopied(true)
+        setTimeout(() => setDiagCopied(false), 2000)
+      }
+      const hero = h('div', { key: 'hero', className: 'dsh-tako-hero' },
+        TakoMark(36),
+        h('div', { className: 'dsh-tako-hero-name' },
+          h('h1', null, name),
+          planName === undefined ? null : h('span', { className: 'dsh-tako-plan' }, planName),
+          status && status.maskedKey ? h('span', { className: 'dsh-tako-hero-meta', style: mono }, status.maskedKey) : null),
+        h('span', { className: 'dsh-tako-hero-spacer' }),
+        h('button', { type: 'button', className: 'dsh-tako-btn', 'data-testid': 'dsh-tako-copy-diagnostics', onClick: () => { void copyDiagnostics() } }, diagCopied ? t('diagCopied') : t('diagCopy')))
+      const tabs = h('div', { key: 'tabs', className: 'dsh-tako-tabs', role: 'tablist' },
+        TABS.map(([id, key]) => h('button', {
+          key: id,
+          type: 'button',
+          role: 'tab',
+          className: 'dsh-tako-tab',
+          'data-active': String(tab === id),
+          'data-testid': `dsh-tako-tab-${id}`,
+          onClick: () => setTab(id),
+        }, t(key))))
+      const children = [hero, tabs]
       if (statusError !== undefined) {
         children.push(h('div', { key: 'err', role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: '0.9em', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
           `${t('loadFailed')}: ${statusError}`,
-          h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, style: quietButton }, t('retry'))))
+          h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, className: 'dsh-tako-ghost' }, t('retry'))))
       }
-      const origin = takoOrigin(status)
-      children.push(QuotaCard({ status, origin, t }))
-      children.push(ServicesCard({ origin, t }))
-      children.push(h(CatalogCard, { catalog, error: catalogError, origin, onRefresh: () => { void loadCatalog() }, t }))
-      children.push(h(UpdateCard, { key: 'update', t }))
+      const onKeyChanged = async () => { await loadStatus(); notifyCredential() }
+      if (tab === 'overview') children.push(h(OverviewTab, { key: 'overview', t, status, login, busyLogout, onLogout: logout, logoutNote, onKeyChanged, origin, notice, dismissed: dismissedNotice, onDismiss: item => setDismissedNotice([...(Array.isArray(dismissedNotice) ? dismissedNotice : []), noticeId(item)]) }))
+      else if (tab === 'requests') children.push(h(RequestsTab, { key: 'requests', t, catalog }))
+      else if (tab === 'usage') children.push(h(UsageTab, { key: 'usage', t }))
+      else if (tab === 'models') children.push(h(ModelsTab, { key: 'models', t, catalog, catalogError, origin, onRefresh: () => { void loadCatalog() } }))
+      else if (tab === 'key') children.push(h(KeyTab, { key: 'key', t, status, configured: status !== undefined && status.configured === true, onKeyChanged }))
+      else if (tab === 'config') children.push(h(ConfigTab, { key: 'config', t }))
       return h('div', {
         'data-testid': 'dsh-tako-console-page',
         style: { height: '100%', minHeight: 0, overflowY: 'auto', fontSize: '14px', lineHeight: '22px' },
