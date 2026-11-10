@@ -106,16 +106,20 @@ npx dsh-tako update                   # 把最新 dsh-tako 装进 profile，装�
 
 `web` profile 左侧栏是带触手的小章鱼（「Tako 控制台」），底部 footer 显示额度。点开控制台：
 
-- **登录状态**：是否已保存 key、掩码后的 key（`cr_****` + 末 4 位，明文永不下发到页面）、Tako 账号与套餐。未登录时按钮是「通过浏览器登录 Tako」；已登录时是「重新登录」和「退出」——「退出」先在 Tako 吊销这个 key（失败不阻断），再从 dsh 凭据里删除，语义与 `dsh-tako logout` 相同；key 来自环境变量时不吊销也不删除。
-- **更新**：对比本机版本和 npm 官方源的最新版本；落后时点「立即更新」真正安装（装完需重启 dsh），下面仍保留升级命令可复制作退路；已是最新时显示当前版本号，检查失败时只显示灰字提示。检查结果缓存 1 小时，见上面的[更新](#更新)一节。
-- **套餐 / 钱包**：有套餐时显示 **5h 窗口**和**周额度**的剩余百分比进度条（`user-quota`，和官网套餐页同一套，已经是美元）。钱包剩余是单独一列（`/api/desktop/me` 点数 / 500000 = $1）。两套数不要混。没套餐才只显示钱包。侧栏 footer 同一套数据，点击打开控制台。
-- **模型目录**：插件当前成功写入 `providers.tako` 的模型（`include` / `exclude` / `pinned` / `overrides` 过滤后的结果），列出模型名、上下文窗口、是否支持图片输入。同步阶段、尝试次数与安全错误原因显示在卡片中；失败不清空已成功写入的模型。旧运行时的 HMR 嵌套事务拒绝会明确标记为 `runtime-transaction`，持续失败时需重启 dsh；插件无法自行修复宿主的事务实现。`/api/tako.catalog` 返回 `status`、`attempts`、`refreshIntervalMs` 和 `lastError`（错误码、安全消息、时间），`nextSyncAt` 表示下次重试或常规刷新。初次未完成时面板最多每 2 秒读取一次状态，共 30 次；之后仍保留服务器给出的未来刷新计划，过期计划的检查至少间隔 1 分钟。同步成功后在下次计划刷新附近读取，也可点击“刷新目录状态”。关闭面板取消后续读取。
+页头是当前账号（章鱼标 + 用户名 + 套餐徽标 + key 掩码 + 「复制诊断」，一键把端点/账号/同步状态/最近错误拼进剪贴板），下面六个 Tab 懒加载：
+
+- **概览**：Tako 官方**公告**（`GET /api/tako.notice` 透传 `/api/status`，每条按类型着色 + 预览行 + 日期 + 点击展开渲染 markdown）+ 账号/登录卡 + 套餐/钱包额度（`5h`/周剩余百分比 + 钱包美元）+ Tako 服务链接 + 版本更新行。
+- **请求**：本 key 的最近调用日志（`GET /api/tako.logs` 代理 `/api/log/token`，字段按 camelCase 白名单透传、`other`/`user_*` 字段不下发）：时间、模型、in/out tokens、花费（点数/500000=USD）、耗时、stream、request_id、IP；顶部可按模型过滤并刷新。
+- **用量**：`GET /api/tako.usage`：今日总花费大数字 + 本 key 的额度/白名单/到期明细 + 按模型用量排行（`user-model-stats`）；token/stats/modelStats 三条腿各自降级，各自挂错不影响其它。
+- **模型**：当前目录以官网同款卡片呈现（`api/tako.catalog` 新返回 `cards`，数据来自 `/api/pricing` 每张卡的 description/端点/渠道/价格），支持搜索/过滤/预览/展开/每行 ★ 置顶（写回 `pinned`）/「立即同步」（`POST /api/tako.sync`）+ 同步状态行；`cards` 为空时退回模型 id 行。同步阶段、尝试次数与安全错误原因照常展示，失败不清空已写入模型。
+- **密钥**：粘贴 key 编辑器 + 本 key 在 Tako 侧的详情（名字、到期、白名单、额度进度）+ 「吊销并退出」。
+- **配置**：直接读写 `cordis.patch.yml` 里本插件的 `tako` 段（`GET/POST /api/tako.config`）：`refreshIntervalMs`、`syncRetryDelaysMs`、`defaultContextWindow`、`includeClaudeCodeOnly`、`include`/`exclude`/`pinned`、`webSearchProvider`（联网搜索 pin 到 `web` 段）可编辑，`overrides` 只读展示；profile 只读时整个表单 disabled。保存即生效（mutate 触发插件重载并重同步）。
 
 账号与额度状态缓存在 Host 内按完整凭据的 SHA-256 指纹区分，脱敏文本只用于显示；两把密钥末四位相同也不会共用账号缓存。明文密钥和指纹均不下发到页面，不写入缓存文件。
 
-面板数据来自插件注册的四个路由：`GET /api/tako.status`、`POST /api/tako.logout`、`GET /api/tako.catalog`、`GET /api/tako.update`（POST 安装最新版），和 Web 界面同源、走 dsh 的浏览器登录围栏。目录尚未同步时模型卡显示空态而不是报错。
+面板数据来自插件注册的 11 条路由：`GET /api/tako.status`、`POST /api/tako.logout`、`POST /api/tako.key`、`GET /api/tako.catalog`、`GET /api/tako.update`（POST 装最新）、`GET /api/tako.logs`、`GET /api/tako.usage`、`GET /api/tako.notice`、`GET/POST /api/tako.config`、`POST /api/tako.sync`，与 Web 界面同源、走 dsh 的浏览器登录围栏。目录尚未同步时模型卡显示空态而不是报错。
 
-界面语言跟随 dsh 客户端的语言设置：控制台四张卡、「设置 → 模型」登录卡片和侧栏名称的全部文案走 dsh 官方的 i18n 体系，在「设置 → 通用 → 语言」切换时即时变化。插件的词典注册在自己的 `dsh-tako` 命名空间；宿主还没有这套体系时（更老的 dsh），自动回退为按页面语言取中英文案，行为与旧版本一致。
+界面语言跟随 dsh 客户端的语言设置：控制台全部文案、「设置 → 模型」登录卡片和侧栏名称走 dsh 官方的 i18n 体系，在「设置 → 通用 → 语言」切换时即时变化。插件的词典注册在自己的 `dsh-tako` 命名空间；宿主还没有这套体系时（更老的 dsh），自动回退为按页面语言取中英文案，行为与旧版本一致。
 
 #### dsh 在远程服务器上
 
@@ -291,17 +295,18 @@ Tako names the token `tako-connect@<device name>` and replaces an older token wi
 
 ### Tako console
 
-The `web` profile's sidebar uses the tentacled octopus icon ("Tako Console"). The footer shows quota. The console page:
+The `web` profile's sidebar uses the tentacled octopus icon ("Tako Console"). The footer shows quota. The console page is a tabbed admin panel: a hero header (octopus, user name, plan badge, masked key, "Copy diagnostics") and six lazily-mounted tabs:
 
-- **Sign-in status**: whether a key is stored (status dot and signed-in/out label), the masked key (`cr_****` plus the last four characters; the plaintext never reaches the page), and the Tako account and plan badge. Signed out, the button reads "Sign in to Tako with the browser"; signed in, "Sign in again", "Sign out", and **Open in Tako** — sign-out revokes the key on Tako first (a failure does not block) and then removes it from dsh credentials, the same semantics as `dsh-tako logout`; a key that comes from an environment variable is neither revoked nor deleted.
-- **Tako services**: quick links into the site at the origin the host reports (`/api/tako.status` now includes it): dashboard, model plaza, wallet, subscriptions, and docs; the plan/wallet card adds "Manage plan" and "Top up", and each catalog model links to its plaza search (`/pricing?search=<id>`). These are plain links, so a custom `baseURL` points at the matching site.
-- **Update**: the installed version against npm's latest; when behind, **Update now** actually installs it (restart dsh to load it) and the upgrade command stays as a copy-able fallback; when current the installed version, and only a gray note when the check fails. The answer is cached for an hour; see [Updating](#updating) above.
-- **Plan / wallet**: with a plan, remaining **5h** and **weekly** bars (`user-quota`, same as the Tako plan page, already USD). Wallet remainder is a separate stamp (`/api/desktop/me` points / 500000 = $1). Do not mix the two. Without a plan, only the wallet is shown. The sidebar footer uses the same data; clicking it opens the console.
-- **Model catalog**: what the plugin currently writes to `providers.tako` (after `include` / `exclude` / `pinned` / `overrides`) — model, context window, image input — with a countdown to the next directory refresh computed locally from `nextSyncAt` (no server polling).
+- **Overview**: Tako's **announcements** (`GET /api/tako.notice` passes `/api/status` through; each row colored by type with a preview line, date, and a click-to-expand markdown body) plus the account/sign-in card, plan/wallet quota (remaining **5h**/weekly percentages plus the USD wallet), Tako service links, and the update row.
+- **Requests**: this key's recent request log (`GET /api/tako.logs` proxies `/api/log/token`; fields pass a camelCase whitelist — `other`/`user_*` never leave the host): time, model, in/out tokens, cost (points / 500000 = USD), elapsed, stream, request_id, IP; filterable by model.
+- **Usage**: `GET /api/tako.usage` — today's spend, this key's grant/whitelist/expiry, and per-model usage; each leg degrades independently.
+- **Models**: the synced catalog as site-parity model cards (`api/tako.catalog` returns `cards` built from `/api/pricing`'s description/endpoints/channels/pricing), with search/filters, per-card ★ pinning (writes `pinned`), an "Sync now" button (`POST /api/tako.sync`), and the sync status line; falls back to plain rows when `cards` is empty.
+- **Key**: the paste-a-key editor plus this key's detail on Tako (name, expiry, whitelist, quota bar) and "Revoke and sign out".
+- **Config**: reads/writes the plugin's own `tako` section in `cordis.patch.yml` (`GET/POST /api/tako.config`): `refreshIntervalMs`, `syncRetryDelaysMs`, `defaultContextWindow`, `includeClaudeCodeOnly`, `include`/`exclude`/`pinned`, and `webSearchProvider` are editable, `overrides` read-only; the form is disabled on a read-only profile. Saving takes effect immediately (the mutation reloads the plugin and resyncs).
 
-The panel reads four routes the plugin registers on the Web connection: `GET /api/tako.status`, `POST /api/tako.logout`, `GET /api/tako.catalog`, `GET /api/tako.update` (POST installs the latest), same origin and behind dsh's browser authentication fence. Before the first sync the catalog card shows an empty state instead of an error.
+The panel reads 11 routes the plugin registers on the Web connection: `GET /api/tako.status`, `POST /api/tako.logout`, `POST /api/tako.key`, `GET /api/tako.catalog`, `GET /api/tako.update` (POST installs the latest), `GET /api/tako.logs`, `GET /api/tako.usage`, `GET /api/tako.notice`, `GET/POST /api/tako.config`, `POST /api/tako.sync` — same origin, behind dsh's browser authentication fence. Before the first sync the models tab shows an empty state instead of an error.
 
-The UI language follows the dsh client's language setting: every text on the four cards, the Settings → Models sign-in card, and the sidebar entry goes through dsh's official i18n and switches live with Settings → General → Language. The plugin's dictionaries are registered under its own `dsh-tako` namespace; on hosts without that system (older dsh) the texts fall back to picking Chinese or English from the page language, exactly as before.
+The UI language follows the dsh client's language setting: every console text, the Settings → Models sign-in card, and the sidebar entry go through dsh's official i18n and switch live with Settings → General → Language. The plugin's dictionaries are registered under its own `dsh-tako` namespace; on hosts without that system (older dsh) the texts fall back to picking Chinese or English from the page language, exactly as before.
 
 **Remote dsh**: Tako redirects the browser to `127.0.0.1:<port>` on the machine running the browser. When dsh runs on a remote host, either paste a key (Settings → Models or `TAKO_API_KEY`), or forward a fixed port: `ssh -L 53682:127.0.0.1:53682 user@remote`, then on the remote host `npx dsh-tako login --no-open --port 53682` and open the printed URL locally. The Web button only completes when the page is opened on the dsh host itself; on a remote address the card says so.
 

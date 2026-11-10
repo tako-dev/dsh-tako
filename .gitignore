@@ -1,3 +1,4 @@
 node_modules/
 lib/
 *.tgz
+preview/node_modules_local/
