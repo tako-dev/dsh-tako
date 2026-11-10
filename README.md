@@ -164,7 +164,7 @@ Tako 授权后会把浏览器跳回 `http://127.0.0.1:<端口>/tako/callback`，
 | `includeClaudeCodeOnly` | `false` | 保留 Tako 限定 Claude Code 客户端的模型（在 dsh 中调用会被 Tako 拒绝） |
 | `overrides` | `{}` | 按模型 id 修正 `name`、`contextWindow`、`maxTokens`、`input`（`text` / `image`）和 `reasoningEfforts` |
 
-`reasoningEfforts` 是经过人工核实的“选择器等级 → 服务端值”映射，仅接受 `off` / `low` / `medium` / `high` / `max` 为键、字符串或 `null` 为值；`null` 表示不发送该字段，`false` 表示明确禁用推理配置。每个模型的覆盖独立，配置时拒绝无效等级和值。现有目录未提供能力信息的模型仍沿用旧配置默认值，不能把这些默认值当作已确认支持；此处不凭模型名猜测能力，也不自动覆盖已有选择。
+`reasoningEfforts` 是经过人工核实的“选择器等级 → 服务端值”映射，仅接受 `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` 为键、字符串或 `null` 为值；`null` 表示不发送该字段，`false` 表示明确禁用推理配置。每个模型的覆盖独立，配置时拒绝无效等级和值。现有目录未提供能力信息的模型仍沿用旧配置默认值，不能把这些默认值当作已确认支持；此处不凭模型名猜测能力，也不自动覆盖已有选择。
 
 维护者可先构建，再运行 `node scripts/reasoning-report.mjs <pricing.json> [catalog-options.json]`。报告与目录使用相同过滤和排序；明确人工覆盖标记为 `override`，其余标记为 `unknown`，不把旧默认值包装成能力统计。脚本只读本地 JSON，不读取凭据或请求模型。服务端提供可信能力字段前，完整自动模型能力列表仍待接入。
 
@@ -212,7 +212,7 @@ Tako 授权后会把浏览器跳回 `http://127.0.0.1:<端口>/tako/callback`，
 
 ### 限制
 
-- 能力信息只来自 Tako 的公开目录：识别上下文窗口和图片输入。公开目录不标推理等级，插件给每个聊天模型自动加上 `off` / `low` / `high` / `max`（`off` 不发 `reasoning_effort`，避免部分路由拒收）。最大输出 token 仍用 dsh 默认值，需要时用 `overrides` 修正。
+- 能力信息只来自 Tako 的公开目录：识别上下文窗口、图片输入和 `reasoning_levels`。目录声明了推理等级就照声明写（如 `swe-2` 的 `medium` / `high` / `max`）；目录没声明时，插件仍给每个聊天模型加上旧默认 `off` / `low` / `high` / `max`（`off` 不发 `reasoning_effort`，避免部分路由拒收）。最大输出 token 仍用 dsh 默认值，需要时用 `overrides` 修正。
 - 所有模型都走 OpenAI 兼容的 `openai-completions` 协议。
 - 默认排除 Tako 限定 Claude Code 客户端的模型，因为 Tako 会拒绝来自 dsh 的调用。
 - 依赖 dsh 官方 `@deepseek-ai/dsh-llm-pi-ai` 的设置结构，在 dsh `0.2.1-rc.2` 上验证过；dsh 改动该结构时可能需要更新本插件。

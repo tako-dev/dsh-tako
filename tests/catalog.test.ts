@@ -132,6 +132,22 @@ describe('catalog options', () => {
   })
 })
 
+describe('declared reasoning levels', () => {
+  it('uses the levels a card declares', () => {
+    expect(toModel({ model_name: 'swe-2', reasoning_levels: ['medium', 'high', 'max'] }).reasoningEfforts)
+      .toEqual({ medium: 'medium', high: 'high', max: 'max' })
+    expect(toModel({ model_name: 'm', reasoning_levels: ['off', 'xhigh'] }).reasoningEfforts)
+      .toEqual({ off: null, xhigh: 'xhigh' })
+  })
+
+  it('falls back to the legacy defaults when a card declares nothing usable', () => {
+    expect(toModel({ model_name: 'm' }).reasoningEfforts).toEqual(DEFAULT_REASONING_EFFORTS)
+    expect(toModel({ model_name: 'm', reasoning_levels: [] }).reasoningEfforts).toEqual(DEFAULT_REASONING_EFFORTS)
+    expect(toModel({ model_name: 'm', reasoning_levels: ['ultra', 'medium', 'medium'] }).reasoningEfforts)
+      .toEqual({ medium: 'medium' })
+  })
+})
+
 describe('structured fields', () => {
   it('win over tags', () => {
     const model = toModel({

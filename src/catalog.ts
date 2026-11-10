@@ -17,6 +17,8 @@ export interface TakoPricingModel {
   context_length?: number
   max_output_tokens?: number
   input_modalities?: string[]
+  /** Reasoning levels the model declares, in escalation order. */
+  reasoning_levels?: string[]
   kind?: string
   client_restriction?: string | null
 }
@@ -30,8 +32,8 @@ export interface TakoPricingResponse {
 /** Request modalities DSH's pi-ai routes accept. */
 export type Modality = 'text' | 'image'
 
-/** Reasoning levels the Models picker and composer may offer. */
-export type TakoReasoningLevel = 'off' | 'low' | 'medium' | 'high' | 'max'
+/** Reasoning levels the Models picker and composer may offer, in escalation order. */
+export type TakoReasoningLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 /**
  * Selectable reasoning efforts for one model. `off: null` means the level is
@@ -46,6 +48,26 @@ export const DEFAULT_REASONING_EFFORTS: TakoReasoningEfforts = {
   low: 'low',
   high: 'high',
   max: 'max',
+}
+
+/** Levels a directory entry may declare, in escalation order. */
+const REASONING_LEVELS: readonly TakoReasoningLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
+
+/**
+ * Read the levels a card declares; unknown names are ignored and duplicates
+ * collapse to the first. `undefined` means the directory declared nothing, so
+ * the legacy defaults still apply.
+ * @param levels - the card's `reasoning_levels`, as published.
+ * @returns the declared efforts, or `undefined` when none survive.
+ */
+function declaredEfforts(levels: readonly string[] | undefined): TakoReasoningEfforts | undefined {
+  if (levels === undefined) return undefined
+  const efforts: TakoReasoningEfforts = {}
+  for (const level of levels) {
+    if (!(REASONING_LEVELS as readonly string[]).includes(level) || level in efforts) continue
+    efforts[level as TakoReasoningLevel] = level === 'off' ? null : level
+  }
+  return Object.keys(efforts).length > 0 ? efforts : undefined
 }
 
 /** A DSH pi-ai model profile, the shape stored under `providers.<route>.models`. */
@@ -171,7 +193,7 @@ export function toModel(model: TakoPricingModel): TakoModel {
     ...contextWindow === undefined ? {} : { contextWindow },
     ...maxTokens === undefined ? {} : { maxTokens },
     input: vision ? ['text', 'image'] : ['text'],
-    reasoningEfforts: { ...DEFAULT_REASONING_EFFORTS },
+    reasoningEfforts: declaredEfforts(model.reasoning_levels) ?? { ...DEFAULT_REASONING_EFFORTS },
   }
 }
 
