@@ -486,10 +486,7 @@ window.__ModuleLoader__.load({
 
     function ensureTakoTheme() {
       if (typeof document.getElementById !== 'function') return
-      if (document.getElementById('dsh-tako-theme') !== null) return
-      const style = document.createElement('style')
-      style.id = 'dsh-tako-theme'
-      style.textContent = [
+      const css = [
         '.dsh-tako-sheet{display:flex;flex-direction:column;gap:22px;max-width:720px;margin:0 auto;padding:28px 24px 56px}',
         '.dsh-tako-head{display:flex;align-items:flex-start;gap:12px}',
         '.dsh-tako-head h1{margin:0;font-size:22px;font-weight:500;letter-spacing:0.04em}',
@@ -528,7 +525,15 @@ window.__ModuleLoader__.load({
         '.dsh-tako-bar>i{display:block;height:100%;background:' + CLAY + ';border-radius:inherit}',
         '.dsh-tako-footer-bar{height:4px;width:100%;margin-top:3px}',
       ].join('')
-      document.head.appendChild(style)
+      // Replace the rules when they changed: a hot-reloaded client must not keep
+      // the stylesheet an older bundle installed under the same id.
+      let style = document.getElementById('dsh-tako-theme')
+      if (style === null) {
+        style = document.createElement('style')
+        style.id = 'dsh-tako-theme'
+        document.head.appendChild(style)
+      }
+      if (style.textContent !== css) style.textContent = css
     }
 
     /** Compact context windows: 1_000_000 → 1M, 1_050_000 → 1.05M, 272_000 → 272K. */
