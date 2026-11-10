@@ -31,7 +31,7 @@ export interface TakoPricingResponse {
 export type Modality = 'text' | 'image'
 
 /** Reasoning levels the Models picker and composer may offer. */
-export type TakoReasoningLevel = 'off' | 'low' | 'high' | 'max'
+export type TakoReasoningLevel = 'off' | 'low' | 'medium' | 'high' | 'max'
 
 /**
  * Selectable reasoning efforts for one model. `off: null` means the level is
@@ -144,6 +144,18 @@ export function isChatModel(model: TakoPricingModel, options: Pick<CatalogOption
   return true
 }
 
+/**
+ * Drop an override's absent `input`, which the config schema materializes as
+ * `[]`: pi-ai reads `[]` as "no answer here", so the catalog's own modalities
+ * must survive an override that only names other fields.
+ * @param override - the per-model override as the config schema resolved it.
+ * @returns the override without a blank `input`.
+ */
+function withoutBlankInput(override: TakoModelOverride): TakoModelOverride {
+  const { input, ...rest } = override
+  return input !== undefined && input.length > 0 ? { ...rest, input } : rest
+}
+
 /** Map one chat card to a model profile; structured fields win over tags. */
 export function toModel(model: TakoPricingModel): TakoModel {
   const tags = parseTags(model.tags)
@@ -191,7 +203,7 @@ export function buildCatalog(data: readonly TakoPricingModel[], options: Catalog
     if (matchesAny(model.id, exclude)) continue
     seen.add(model.id)
     const override = options.overrides?.[model.id]
-    models.push(override === undefined ? model : { ...model, ...override, id: model.id })
+    models.push(override === undefined ? model : { ...model, ...withoutBlankInput(override), id: model.id })
   }
   const pinned = options.pinned ?? []
   const rank = (id: string): number => {

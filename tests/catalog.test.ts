@@ -116,6 +116,14 @@ describe('catalog options', () => {
     expect(byId(models, 'hy3')).toMatchObject({ id: 'hy3', name: 'Hunyuan 3', contextWindow: 256_000, input: ['text', 'image'] })
   })
 
+  it('keeps the catalog input when an override leaves it unset', () => {
+    const card: TakoPricingModel = { model_name: 'swe-2', tags: '262K,Vision', supported_endpoint_types: ['openai'] }
+    const [named] = buildCatalog([card], { overrides: { 'swe-2': { reasoningEfforts: { medium: 'medium' } } } })
+    expect(named).toMatchObject({ input: ['text', 'image'], reasoningEfforts: { medium: 'medium' } })
+    const [explicit] = buildCatalog([card], { overrides: { 'swe-2': { input: ['text'] } } })
+    expect(explicit?.input).toEqual(['text'])
+  })
+
   it('deduplicates repeated ids', () => {
     const card: TakoPricingModel = { model_name: 'dup', tags: '1M', supported_endpoint_types: ['openai'] }
     expect(buildCatalog([card, { ...card, tags: '2M' }])).toEqual([{

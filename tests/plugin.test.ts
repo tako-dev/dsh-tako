@@ -97,6 +97,7 @@ describe('config', () => {
     const overrides: PluginConfig['overrides'] = {
       'fixture-a': { reasoningEfforts: { off: null, low: 'minimal', high: 'high' } },
       'fixture-b': { reasoningEfforts: { high: 'medium', max: 'xhigh' } },
+      'fixture-medium': { reasoningEfforts: { medium: 'medium' } },
       'fixture-disabled': { reasoningEfforts: false },
     }
     const parsed = Config({ ...config(), overrides }).overrides

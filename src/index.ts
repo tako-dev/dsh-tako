@@ -93,7 +93,7 @@ export interface Config {
 }
 
 const ReasoningEfforts: z<TakoReasoningEfforts> = z.dict(
-  z.union([z.string(), z.const(null)]), z.string().pattern(/^(off|low|high|max)$/),
+  z.union([z.string(), z.const(null)]), z.string().pattern(/^(off|low|medium|high|max)$/),
 )
 
 const ModelOverride: z<TakoModelOverride> = z.object({
