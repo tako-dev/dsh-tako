@@ -78,6 +78,7 @@ describe('console route /api/tako.status', () => {
     const body = await (await svc.handleStatus()).json()
     expect(body).toEqual({
       configured: true,
+      origin: 'https://tako.test',
       maskedKey: 'cr_****WXYZ',
       credential: 'TAKO_API_KEY',
       me: {
@@ -153,7 +154,7 @@ describe('console route /api/tako.status', () => {
     expect(body.me.userName).toBe('account-b')
     expect(body.maskedKey).toBe('cr_****SAME')
     expect(fetchImpl).toHaveBeenCalledTimes(6)
-    expect(Object.keys(body).sort()).toEqual(['configured', 'credential', 'maskedKey', 'me', 'plan'])
+    expect(Object.keys(body).sort()).toEqual(['configured', 'credential', 'maskedKey', 'me', 'origin', 'plan'])
     expect(JSON.stringify(body)).not.toContain('fixture-account')
     await svc.handleStatus()
     expect(fetchImpl).toHaveBeenCalledTimes(6)

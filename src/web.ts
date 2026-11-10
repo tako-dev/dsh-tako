@@ -352,7 +352,7 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     // A display mask is not an account identity. Neither the key nor its fingerprint leaves the host.
     if (cache !== undefined && cache.fingerprint === fingerprint && now() - cache.at < cacheMs) {
       return json({
-        configured: true, maskedKey, credential: options.apiKeyEnv, me: cache.me, plan: cache.plan,
+        configured: true, origin, maskedKey, credential: options.apiKeyEnv, me: cache.me, plan: cache.plan,
         ...(cache.meError === undefined ? {} : { meError: cache.meError }),
         ...(cache.planError === undefined ? {} : { planError: cache.planError }),
       })
@@ -373,7 +373,7 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     }
     cache = { fingerprint, at: now(), me, meError, plan, planError }
     return json({
-      configured: true, maskedKey, credential: options.apiKeyEnv, me, plan,
+      configured: true, origin, maskedKey, credential: options.apiKeyEnv, me, plan,
       ...(meError === undefined ? {} : { meError }),
       ...(planError === undefined ? {} : { planError }),
     })

@@ -129,6 +129,16 @@ window.__ModuleLoader__.load({
         weeklyShort: '本周',
         walletBalance: '钱包',
         planWindows: '套餐额度',
+        servicesCard: 'Tako 服务',
+        serviceConsole: '控制台',
+        servicePricing: '模型广场',
+        serviceWallet: '钱包',
+        serviceSubscriptions: '订阅',
+        serviceDocs: '文档',
+        openInTako: '在 Tako 打开',
+        managePlan: '管理订阅',
+        topUp: '充值',
+        plazaLink: '在广场查看',
       },
       en: {
         signIn: 'Sign in to Tako with the browser',
@@ -213,6 +223,16 @@ window.__ModuleLoader__.load({
         weeklyShort: 'Week',
         walletBalance: 'Wallet',
         planWindows: 'Plan windows',
+        servicesCard: 'Tako services',
+        serviceConsole: 'Dashboard',
+        servicePricing: 'Model plaza',
+        serviceWallet: 'Wallet',
+        serviceSubscriptions: 'Subscriptions',
+        serviceDocs: 'Docs',
+        openInTako: 'Open in Tako',
+        managePlan: 'Manage plan',
+        topUp: 'Top up',
+        plazaLink: 'View in plaza',
       },
     }
 
@@ -428,6 +448,42 @@ window.__ModuleLoader__.load({
         h('div', { className: 'dsh-tako-body' }, props.children))
     }
 
+    const DEFAULT_TAKO_ORIGIN = 'https://tako.shiroha.tech'
+
+    /** The Tako origin the host reported, or the public site for hosts that predate the field. */
+    const takoOrigin = status => {
+      const origin = status !== undefined && typeof status.origin === 'string' ? status.origin.replace(/\/+$/, '') : ''
+      return origin === '' ? DEFAULT_TAKO_ORIGIN : origin
+    }
+
+    function TakoChip(props) {
+      return h('a', {
+        href: props.href,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        className: props.className === undefined ? 'dsh-tako-chip' : `dsh-tako-chip ${props.className}`,
+      }, props.label, h('span', { className: 'arrow', 'aria-hidden': true }, '↗'))
+    }
+
+    /** Quick jumps into the Tako site, so the console is a door into the service, not a dead end. */
+    function ServicesCard(props) {
+      const t = props.t ?? fallbackT
+      const origin = props.origin
+      const items = [
+        ['serviceConsole', '/dashboard'],
+        ['servicePricing', '/pricing'],
+        ['serviceWallet', '/wallet'],
+        ['serviceSubscriptions', '/subscriptions'],
+        ['serviceDocs', '/docs'],
+      ]
+      return Card({
+        name: 'services',
+        title: t('servicesCard'),
+        children: [h('div', { key: 'links', className: 'dsh-tako-links' },
+          items.map(([key, path]) => h(TakoChip, { key, href: origin + path, label: t(key) })))],
+      })
+    }
+
     function ensureTakoTheme() {
       if (typeof document.getElementById !== 'function') return
       if (document.getElementById('dsh-tako-theme') !== null) return
@@ -446,7 +502,23 @@ window.__ModuleLoader__.load({
         '.dsh-tako-stamps-3{grid-template-columns:repeat(3,minmax(0,1fr))}',
         '.dsh-tako-stamp .n{font-variant-numeric:tabular-nums;font-size:22px;font-weight:500;line-height:28px}',
         '.dsh-tako-stamp .n small{font-size:13px;font-weight:400;color:var(--dsw-alias-label-tertiary)}',
-        '.dsh-tako-model{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-bottom:0.5px solid var(--dsw-alias-border-l2)}',
+        '.dsh-tako-model{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 10px;margin:0 -10px;border-radius:8px;transition:background .15s ease}',
+        '.dsh-tako-model:hover{background:var(--dsw-alias-interactive-bg-hover)}',
+        '.dsh-tako-model a{color:inherit;text-decoration:none}',
+        '.dsh-tako-model a:hover{color:' + CLAY + '}',
+        '.dsh-tako-links{display:flex;flex-wrap:wrap;gap:8px}',
+        '.dsh-tako-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:var(--dsw-alias-interactive-bg-hover);color:inherit;text-decoration:none;font-size:12px;line-height:18px;transition:border-color .15s ease,color .15s ease}',
+        '.dsh-tako-chip:hover{border-color:' + CLAY + ';color:' + CLAY + '}',
+        '.dsh-tako-chip .arrow{opacity:.45;font-size:11px}',
+        '.dsh-tako-status{display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary)}',
+        '.dsh-tako-dot{width:6px;height:6px;border-radius:50%;background:var(--dsw-alias-label-tertiary);display:inline-block}',
+        '.dsh-tako-dot.on{background:var(--dsw-alias-state-success-primary)}',
+        '.dsh-tako-plan{display:inline-flex;align-items:center;padding:1px 8px;border:0.5px solid ' + CLAY + ';border-radius:999px;color:' + CLAY + ';font-size:11px;line-height:18px;letter-spacing:0}',
+        '.dsh-tako-primary{font:inherit;padding:5px 14px;border:0.5px solid ' + CLAY + ';border-radius:999px;background:' + CLAY + ';color:#fff;cursor:pointer;transition:opacity .15s ease}',
+        '.dsh-tako-primary:hover{opacity:.88}',
+        '.dsh-tako-ghost{font:inherit;padding:5px 12px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:inherit;cursor:pointer;transition:border-color .15s ease,color .15s ease}',
+        '.dsh-tako-ghost:hover{border-color:' + CLAY + ';color:' + CLAY + '}',
+        '.dsh-tako-cardfoot{display:flex;gap:14px;flex-wrap:wrap;margin-top:4px}',
         '.dsh-tako-badge{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:' + CLAY + '}',
         '.dsh-tako-footer{display:flex;align-items:center;gap:10px;width:100%;padding:6px 2px;border:none;background:transparent;color:inherit;text-align:left;cursor:pointer}',
         '.dsh-tako-footer .frac{font-variant-numeric:tabular-nums;font-size:13px;font-weight:500}',
@@ -496,26 +568,27 @@ window.__ModuleLoader__.load({
       const planName = configured && status.me && status.me.planName ? status.me.planName : undefined
       const maskedKey = configured && status.maskedKey ? status.maskedKey : undefined
       const body = [h('h1', { key: 'h' }, userName)]
+      body.push(h('div', { key: 'status', className: 'dsh-tako-status' },
+        h('span', { className: configured ? 'dsh-tako-dot on' : 'dsh-tako-dot', 'aria-hidden': true }),
+        configured ? t('signedIn') : t('signedOut'),
+        planName === undefined ? null : h('span', { className: 'dsh-tako-plan' }, planName)))
       if (status !== undefined && !configured) {
         body.push(h('div', { key: 'lead', className: 'dsh-tako-sub' }, t('signedOutLead')))
-      } else if (planName !== undefined || maskedKey !== undefined) {
-        const keySpan = maskedKey === undefined
-          ? null
-          : h('span', { key: 'key', 'data-testid': 'dsh-tako-console-key', style: mono }, maskedKey)
+      } else if (maskedKey !== undefined) {
         body.push(h('div', { key: 'sub', className: 'dsh-tako-sub' },
-          planName === undefined ? null : planName,
-          planName !== undefined && keySpan !== null ? ' · ' : null,
-          keySpan))
+          h('span', { key: 'key', 'data-testid': 'dsh-tako-console-key', style: mono }, maskedKey)))
       }
       if (configured && status.meError !== undefined) {
         body.push(h('div', { key: 'meerr', role: 'status', style: { fontSize: '0.85em', color: 'var(--dsw-alias-state-warn-primary)', overflowWrap: 'anywhere' } }, `${t('whoamiFailed')}: ${status.meError}`))
       }
       const actions = []
+      const origin = takoOrigin(status)
       if (status !== undefined && !configured) {
-        actions.push(h('button', { key: 'in', type: 'button', 'data-testid': 'dsh-tako-console-sign-in', disabled: login.busy, onClick: login.start, style: { ...buttonStyle, opacity: login.busy ? 0.6 : 1 } }, t('signIn')))
+        actions.push(h('button', { key: 'in', type: 'button', 'data-testid': 'dsh-tako-console-sign-in', disabled: login.busy, onClick: login.start, className: 'dsh-tako-primary', style: { opacity: login.busy ? 0.6 : 1 } }, t('signIn')))
       } else if (configured) {
-        actions.push(h('button', { key: 'again', type: 'button', disabled: login.busy, onClick: login.start, style: { ...buttonStyle, opacity: login.busy ? 0.6 : 1 } }, t('signInAgain')))
-        actions.push(h('button', { key: 'out', type: 'button', 'data-testid': 'dsh-tako-console-sign-out', disabled: props.busyLogout, onClick: props.onLogout, style: { ...buttonStyle, color: 'var(--dsw-alias-state-error-primary)' } }, props.busyLogout ? t('signOutWorking') : t('signOut')))
+        actions.push(h('button', { key: 'again', type: 'button', disabled: login.busy, onClick: login.start, className: 'dsh-tako-ghost', style: { opacity: login.busy ? 0.6 : 1 } }, t('signInAgain')))
+        actions.push(h('button', { key: 'out', type: 'button', 'data-testid': 'dsh-tako-console-sign-out', disabled: props.busyLogout, onClick: props.onLogout, className: 'dsh-tako-ghost', style: { color: 'var(--dsw-alias-state-error-primary)' } }, props.busyLogout ? t('signOutWorking') : t('signOut')))
+        actions.push(h(TakoChip, { key: 'open', href: origin + '/dashboard', label: t('openInTako') }))
       }
       if (login.busy) actions.push(h('button', { key: 'cancel', type: 'button', onClick: login.cancel, style: quietButton }, t('cancel')))
       if (actions.length > 0) body.push(h('div', { key: 'actions', style: rowStyle }, actions))
@@ -525,7 +598,7 @@ window.__ModuleLoader__.load({
         body.push(h('div', { key: 'note', role: 'status', style: { fontSize: '0.85em', overflowWrap: 'anywhere' } }, props.logoutNote))
       }
       return h('header', { className: 'dsh-tako-head', 'data-dsh-tako-card': 'account' },
-        TakoMark(28),
+        TakoMark(32),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 } }, ...body))
     }
 
@@ -769,6 +842,7 @@ window.__ModuleLoader__.load({
     function QuotaCard(props) {
       const status = props.status
       const t = props.t ?? fallbackT
+      const origin = props.origin ?? DEFAULT_TAKO_ORIGIN
       const children = []
       const configured = status !== undefined && status.configured === true
       const plan = configured ? status.plan : undefined
@@ -798,12 +872,24 @@ window.__ModuleLoader__.load({
           h('div', { className: 'n dsh-tako-ink', 'data-testid': 'dsh-tako-quota-remain' },
             typeof remainUsd === 'number' ? fmtUsd(remainUsd) : '—')))
       }
-      return Card({ name: 'quota', children })
+      if (configured) {
+        children.push(h('div', { key: 'links', className: 'dsh-tako-cardfoot' },
+          h(TakoChip, { href: origin + '/subscriptions', label: t('managePlan') }),
+          h(TakoChip, { href: origin + '/wallet', label: t('topUp') })))
+      }
+      const planName = configured && status.me && status.me.planName ? status.me.planName : undefined
+      return Card({
+        name: 'quota',
+        title: t('quotaCard'),
+        extra: planName === undefined ? undefined : h('span', { className: 'dsh-tako-plan' }, planName),
+        children,
+      })
     }
 
     function CatalogCard(props) {
       const catalog = props.catalog
       const t = props.t ?? fallbackT
+      const origin = props.origin ?? DEFAULT_TAKO_ORIGIN
       const [open, setOpen] = useState(false)
       const children = []
       if (catalog === undefined) {
@@ -812,12 +898,19 @@ window.__ModuleLoader__.load({
         children.push(h('div', { key: 'x', style: muted }, t('catalogEmpty')))
       } else {
         const models = catalog.models
+        children.push(h('div', { key: 'links', className: 'dsh-tako-cardfoot', style: { marginTop: 0 } },
+          h(TakoChip, { href: origin + '/pricing', label: t('plazaLink') })))
         const hidden = Math.max(0, models.length - 3)
         const shown = open || hidden === 0 ? models : models.slice(0, 3)
         for (const model of shown) {
           const vision = (model.input || []).includes('image')
           children.push(h('div', { key: model.id, className: 'dsh-tako-model', 'data-model': model.id },
-            h('span', { style: mono }, model.id),
+            h('a', {
+              href: `${origin}/pricing?search=${encodeURIComponent(model.id)}`,
+              target: '_blank',
+              rel: 'noopener noreferrer',
+              style: mono,
+            }, model.id),
             h('span', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', flex: 'none' } },
               h('span', { style: muted }, compactContext(model.contextWindow)),
               vision ? h('span', { className: 'dsh-tako-badge' }, t('visionBadge')) : null)))
@@ -960,8 +1053,10 @@ window.__ModuleLoader__.load({
           `${t('loadFailed')}: ${statusError}`,
           h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, style: quietButton }, t('retry'))))
       }
-      children.push(QuotaCard({ status, t }))
-      children.push(h(CatalogCard, { catalog, error: catalogError, onRefresh: () => { void loadCatalog() }, t }))
+      const origin = takoOrigin(status)
+      children.push(QuotaCard({ status, origin, t }))
+      children.push(ServicesCard({ origin, t }))
+      children.push(h(CatalogCard, { catalog, error: catalogError, origin, onRefresh: () => { void loadCatalog() }, t }))
       children.push(h(UpdateCard, { key: 'update', t }))
       return h('div', {
         'data-testid': 'dsh-tako-console-page',

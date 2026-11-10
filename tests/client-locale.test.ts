@@ -35,6 +35,8 @@ const EXPECTED_KEYS = [
   'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'pluginVersion', 'copy', 'copied', 'updateFailed',
   'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
   'footerRemain', 'footerUsed', 'windowHours', 'weeklyShort', 'walletBalance', 'planWindows',
+  'servicesCard', 'serviceConsole', 'servicePricing', 'serviceWallet', 'serviceSubscriptions', 'serviceDocs',
+  'openInTako', 'managePlan', 'topUp', 'plazaLink',
 ]
 
 let row: ModuleRow | undefined
@@ -520,6 +522,36 @@ describe('client i18n: fallback without the locale service', () => {
       for (const dispose of disposers) dispose()
       vi.unstubAllGlobals()
       vi.useRealTimers()
+      hookStates = []
+    }
+  })
+
+  it('links into the Tako site using the origin the host reports', async () => {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const face = localeService()
+    const { ctx, entries, runInjections } = stubCtx({ locale: face })
+    plugin.apply(ctx)
+    runInjections()
+    const page = entries.find(entry => entry.slot === 'main')!.component
+    const status = {
+      configured: true,
+      origin: 'https://tako.example',
+      maskedKey: 'cr_****WXYZ',
+      me: { userName: 'u', planName: 'Pro', quotaRemainUsd: 2 },
+      plan: { windowMinutes: 300, windowCost: 12, windowCostLimit: 200, weeklyCost: 80, weeklyCostLimit: 930 },
+    }
+    const catalog = { models: [{ id: 'swe-2', contextWindow: 262000, input: ['text', 'image'] }], nextSyncAt: null }
+    // [status, statusError, catalog, catalogError, busyLogout, logoutNote, login, catalogOpen]
+    hookStates = [status, undefined, catalog, undefined, false, undefined, { status: 'idle' }, false]
+    try {
+      const rendered = render(page, { t: face.bind() }) as Element
+      const flat = JSON.stringify(rendered)
+      for (const path of ['/dashboard', '/pricing', '/wallet', '/subscriptions', '/docs']) {
+        expect(flat).toContain(`https://tako.example${path}`)
+      }
+      expect(flat).toContain('https://tako.example/pricing?search=swe-2')
+    } finally {
       hookStates = []
     }
   })
