@@ -56,7 +56,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "prepublishOnly": "npm run typecheck && npm test && npm run build",
-    "e2e": "node scripts/e2e/run.mjs"
+    "e2e": "node scripts/e2e/run.mjs",
+    "dev": "tsc -p tsconfig.build.json --watch"
   },
   "peerDependencies": {
     "@deepseek-ai/schemastery": "^3.18.0"

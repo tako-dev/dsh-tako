@@ -43,6 +43,13 @@ export const LOGOUT_ROUTE = '/api/tako.logout'
 export const CATALOG_ROUTE = '/api/tako.catalog'
 /** Console route: GET compares with npm latest; POST installs it (restart to load). */
 export const UPDATE_ROUTE = '/api/tako.update'
+/**
+ * Console route: paste a key instead of signing in with the browser. POST
+ * `{ key }` verifies it against `/api/desktop/me` before storing it in the
+ * profile's credentials; POST `{ action: 'clear' }` removes a file-sourced key
+ * without revoking it on Tako.
+ */
+export const KEY_ROUTE = '/api/tako.key'
 
 /** Same grammar the settings controller enforces for credential references. */
 const CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/u
@@ -234,6 +241,12 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
           fetch: () => consoleService.handleCatalog(),
         }),
         connection.fetch.register({
+          path: KEY_ROUTE,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: request => consoleService.handleKey(request),
+        }),
+        connection.fetch.register({
           path: UPDATE_ROUTE,
           methods: ['GET', 'POST'],
           requestBody: 'buffered',
@@ -327,10 +340,10 @@ interface StatusCache {
 }
 
 /**
- * The console panel's three route handlers. One service instance per Web
+ * The console panel's route handlers. One service instance per Web
  * connection; the resolved key only travels as `maskKey()` output.
  */
-export function createConsoleService(options: ConsoleServiceOptions): { handleStatus: () => Promise<Response>, handleLogout: () => Promise<Response>, handleCatalog: () => Promise<Response> } {
+export function createConsoleService(options: ConsoleServiceOptions): { handleStatus: () => Promise<Response>, handleLogout: () => Promise<Response>, handleCatalog: () => Promise<Response>, handleKey: (request: Request) => Promise<Response> } {
   const origin = normalizeOrigin(options.baseURL)
   const cacheMs = options.statusCacheMs ?? STATUS_CACHE_MS
   const now = options.now ?? Date.now
@@ -352,7 +365,7 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     // A display mask is not an account identity. Neither the key nor its fingerprint leaves the host.
     if (cache !== undefined && cache.fingerprint === fingerprint && now() - cache.at < cacheMs) {
       return json({
-        configured: true, origin, maskedKey, credential: options.apiKeyEnv, me: cache.me, plan: cache.plan,
+        configured: true, origin, baseURL: origin, maskedKey, credential: options.apiKeyEnv, me: cache.me, plan: cache.plan,
         ...(cache.meError === undefined ? {} : { meError: cache.meError }),
         ...(cache.planError === undefined ? {} : { planError: cache.planError }),
       })
@@ -373,7 +386,7 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     }
     cache = { fingerprint, at: now(), me, meError, plan, planError }
     return json({
-      configured: true, origin, maskedKey, credential: options.apiKeyEnv, me, plan,
+      configured: true, origin, baseURL: origin, maskedKey, credential: options.apiKeyEnv, me, plan,
       ...(meError === undefined ? {} : { meError }),
       ...(planError === undefined ? {} : { planError }),
     })
@@ -414,7 +427,60 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     return json({ ...state, models: state.models.map(model => ({ ...model })) })
   }
 
-  return { handleStatus, handleLogout, handleCatalog }
+  /**
+   * Paste-a-key surface for hosts where the browser sign-in is inconvenient
+   * (SSH, a remote dsh, a machine without a browser). The candidate key is
+   * verified against Tako before it replaces the stored one, so a typo cannot
+   * silently break the route; the value never comes back in the answer.
+   */
+  const handleKey = async (request: Request): Promise<Response> => {
+    const credentials = options.credentials()
+    if (credentials === undefined) return json({ ok: false, code: 'no-credentials', message: 'this dsh profile mounts no credential service' }, 503)
+    if (!CREDENTIAL_REF.test(options.apiKeyEnv)) return json({ ok: false, code: 'bad-config', message: `invalid apiKeyEnv ${JSON.stringify(options.apiKeyEnv)}` }, 500)
+    let body: { key?: unknown, action?: unknown } = {}
+    try {
+      const text = await request.text()
+      if (text.trim() !== '') body = JSON.parse(text) as { key?: unknown, action?: unknown }
+    } catch {
+      return json({ ok: false, code: 'bad-request', message: 'invalid JSON body' }, 400)
+    }
+
+    if (body.action === 'clear') {
+      let current: { value: string, source: string } | undefined
+      try {
+        current = await credentials.resolve(options.apiKeyEnv)
+      } catch (error: unknown) {
+        return json({ ok: false, code: 'read-failed', message: error instanceof Error ? error.message : String(error) }, 500)
+      }
+      if (current === undefined) return json({ ok: true, action: 'not-configured' })
+      cache = undefined
+      // An environment or .env key belongs to whoever set it there; the plugin does not delete it.
+      if (current.source !== 'file') return json({ ok: true, action: 'external', source: current.source })
+      await credentials.unset(options.apiKeyEnv)
+      options.onCredentialChange?.()
+      options.logger.info('Tako console removed key %s from %s', maskKey(current.value), options.apiKeyEnv)
+      return json({ ok: true, action: 'removed' })
+    }
+
+    if (body.action !== undefined) return json({ ok: false, code: 'bad-request', message: 'unknown action' }, 400)
+    const candidate = typeof body.key === 'string' ? body.key.trim() : ''
+    if (candidate.length < 8 || candidate.length > 256 || !/^[\x21-\x7e]+$/u.test(candidate)) {
+      return json({ ok: false, code: 'invalid-format', message: 'a Tako key is 8-256 printable ASCII characters' }, 400)
+    }
+    let me: ConsoleIdentity | null = null
+    try {
+      me = identityOf(await fetchMe(origin, candidate, options.fetch))
+    } catch (error: unknown) {
+      return json({ ok: false, code: 'invalid', message: error instanceof Error ? error.message : String(error) }, 401)
+    }
+    await credentials.set(options.apiKeyEnv as never, candidate)
+    cache = undefined
+    options.onCredentialChange?.()
+    options.logger.info('Tako console stored key %s as %s', maskKey(candidate), options.apiKeyEnv)
+    return json({ ok: true, maskedKey: maskKey(candidate), credential: options.apiKeyEnv, me })
+  }
+
+  return { handleStatus, handleLogout, handleCatalog, handleKey }
 }
 
 /**

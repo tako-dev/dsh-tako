@@ -37,6 +37,11 @@ const EXPECTED_KEYS = [
   'footerRemain', 'footerUsed', 'windowHours', 'weeklyShort', 'walletBalance', 'planWindows',
   'servicesCard', 'serviceConsole', 'servicePricing', 'serviceWallet', 'serviceSubscriptions', 'serviceDocs',
   'openInTako', 'managePlan', 'topUp', 'plazaLink',
+  'keyCard', 'keyHint', 'keyOrPaste', 'keyConfigured', 'keyMissing', 'keyPlaceholder', 'keySave', 'keySaving',
+  'keySaved', 'keyInvalid', 'keyClear', 'keyClearing', 'keyCleared', 'keyClearExternal', 'keyClearNone',
+  'keyShow', 'keyHide', 'keySource', 'endpointLabel', 'credentialLabel',
+  'catalogSummary', 'catalogSearch', 'catalogFilterAll', 'catalogFilterVision', 'catalogFilterLong',
+  'catalogFilterReasoning', 'catalogNoMatch', 'catalogShown', 'catalogReasoningBadge',
 ]
 
 let row: ModuleRow | undefined
@@ -242,7 +247,7 @@ describe('client i18n: registration', () => {
     const previous = win.location.hostname
     win.location.hostname = 'app'
     win.__DSH_TAKO_PROFILE__ = true
-    hookStates = [{ status: 'pending', id: '1', url: 'https://tako.example/app/authorize' }]
+    hookStates = [{ status: 'pending', id: '1', url: 'https://tako.example/app/authorize' }, '', false, false, undefined]
     try {
       const { plugin } = materialize()
       const { ctx, entries, runInjections } = stubCtx()
@@ -334,7 +339,7 @@ describe('client i18n: fallback without the locale service', () => {
     // busyLogout, logoutNote, then useTakoLogin's login state. CatalogCard's
     // expand flag is the next hook (the recording stub inlines function
     // components); omitted here so it defaults to false.
-    hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }]
+    hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }, '', false, false, undefined]
     try {
       // No `t` seat (an older host renders the entry without one): inline fallback.
       setDocumentLang('zh-CN')
@@ -368,7 +373,7 @@ describe('client i18n: fallback without the locale service', () => {
       expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), '模型')).toBe('模型')
       expect(findText(rendered, '分钟后刷新')).toBe('约 5 分钟后刷新')
 
-      hookStates = [{ configured: false }, undefined, catalog, undefined, false, undefined, { status: 'idle' }]
+      hookStates = [{ configured: false }, undefined, catalog, undefined, false, undefined, { status: 'idle' }, '', false, false, undefined]
       rendered = render(page, { t: face.bind() }) as Element
       expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
       expect(findText(rendered, '钥匙走')).toBe('登录后，额度、模型和搜索会跟这把钥匙走')
@@ -379,12 +384,13 @@ describe('client i18n: fallback without the locale service', () => {
         configured: true,
         maskedKey: 'cr_****abcd',
         me: { userName: 'Ada', planName: 'Pro' },
-      }, undefined, catalog, undefined, false, undefined, { status: 'idle' }]
+      }, undefined, catalog, undefined, false, undefined, { status: 'idle' }, '', false, false, undefined]
       rendered = render(page, { t: face.bind() }) as Element
       expect(findByTag(rendered, 'h1')?.children[0]).toBe('Ada')
       expect(findByTestId(rendered, 'dsh-tako-console-key')?.children[0]).toBe('cr_****abcd')
       expect(findText(rendered, 'Pro')).toBe('Pro')
       expect(findByTestId(rendered, 'dsh-tako-console-sign-out')).toBeDefined()
+      expect(findByTag(rendered, 'input')).toBeDefined()
       expect(findText(rendered, '登录状态')).toBeUndefined()
     } finally {
       hookStates = []
@@ -543,7 +549,7 @@ describe('client i18n: fallback without the locale service', () => {
     }
     const catalog = { models: [{ id: 'swe-2', contextWindow: 262000, input: ['text', 'image'] }], nextSyncAt: null }
     // [status, statusError, catalog, catalogError, busyLogout, logoutNote, login, catalogOpen]
-    hookStates = [status, undefined, catalog, undefined, false, undefined, { status: 'idle' }, false]
+    hookStates = [status, undefined, catalog, undefined, false, undefined, { status: 'idle' }, '', false, false, undefined, false, '', 'all']
     try {
       const rendered = render(page, { t: face.bind() }) as Element
       const flat = JSON.stringify(rendered)
@@ -556,7 +562,7 @@ describe('client i18n: fallback without the locale service', () => {
     }
   })
 
-  it('shows the first 3 catalog models and hides the rest until expanded', async () => {
+  it('previews six catalog models and hides the rest until expanded', async () => {
     await loadModuleRow()
     const { plugin, render } = materialize()
     const face = localeService()
@@ -570,27 +576,31 @@ describe('client i18n: fallback without the locale service', () => {
         { id: 'deepseek-v4-pro', contextWindow: 1_050_000 },
         { id: 'tako-auto', contextWindow: 272_000 },
         { id: 'other-model' },
+        { id: 'extra-model-1' },
+        { id: 'extra-model-2' },
+        { id: 'extra-model-3' },
+        { id: 'extra-model-4' },
       ],
       nextSyncAt: Date.now() + 5 * 60_000,
     }
     // CatalogCard's useState is consumed next after TakoConsolePage's 7 hooks
     // because the recording React stub runs function components inline.
     // [status, statusError, catalog, catalogError, busyLogout, logoutNote, login, catalogOpen]
-    hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }, false]
+    hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }, '', false, false, undefined, false]
     try {
       face.setActive('zh')
       let rendered = render(page, { t: face.bind() }) as Element
-      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto'])
-      expect(findByAttr(rendered, 'data-model', 'other-model')).toBeUndefined()
+      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto', 'other-model', 'extra-model-1', 'extra-model-2'])
+      expect(findByAttr(rendered, 'data-model', 'extra-model-3')).toBeUndefined()
       expect(findText(rendered, '1M')).toBe('1M')
       expect(findText(rendered, '1.05M')).toBe('1.05M')
       expect(findText(rendered, '272K')).toBe('272K')
       const more = findByTestId(rendered, 'dsh-tako-catalog-more')
-      expect(findText(more, '其余')).toBe('其余 1 个')
+      expect(findText(more, '其余')).toBe('其余 2 个')
 
-      hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }, true]
+      hookStates = [undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' }, '', false, false, undefined, true]
       rendered = render(page, { t: face.bind() }) as Element
-      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto', 'other-model'])
+      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto', 'other-model', 'extra-model-1', 'extra-model-2', 'extra-model-3', 'extra-model-4'])
       expect(findText(findByAttr(rendered, 'data-model', 'other-model'), '—')).toBe('—')
       expect(findText(findByTestId(rendered, 'dsh-tako-catalog-more'), '收起')).toBe('收起')
     } finally {
@@ -616,11 +626,76 @@ describe('client TakoMark', () => {
     plugin.apply(ctx)
     runInjections()
     const page = entries.find(entry => entry.slot === 'main')!.component
-    hookStates = [undefined, undefined, undefined, undefined, false, undefined, { status: 'idle' }]
+    hookStates = [undefined, undefined, undefined, undefined, false, undefined, { status: 'idle' }, '', false, false, undefined]
     try {
       const mark = findByTestId(render(page, {}), 'dsh-tako-mark')
       expect(mark?.tag).toBe('img')
       expect(String(mark?.props?.src)).toMatch(/^data:image\/png;base64,/)
+    } finally {
+      hookStates = []
+    }
+  })
+})
+describe('client console surfaces', () => {
+  const catalog = {
+    models: [
+      { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'], reasoningEfforts: { high: 'high' } },
+      { id: 'deepseek-v4-pro', contextWindow: 1_050_000, input: ['text'] },
+      { id: 'tako-auto', contextWindow: 272_000, input: ['text'], reasoningEfforts: false },
+      { id: 'gemma-4-31b-it', input: ['text'] },
+    ],
+    nextSyncAt: null,
+  }
+  /** TakoConsolePage's hooks, then KeyEditor's, then CatalogCard's; see the presets in the tests above. */
+  const pageHooks = (options: { filter?: string, query?: string, open?: boolean, keyValue?: string } = {}): unknown[] => [
+    undefined, undefined, catalog, undefined, false, undefined, { status: 'idle' },
+    options.keyValue ?? '', false, false, undefined,
+    options.open ?? false, options.query ?? '', options.filter ?? 'all',
+  ]
+
+  const renderPage = async (hooks: unknown[]) => {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const face = localeService()
+    const { ctx, entries, runInjections } = stubCtx({ locale: face })
+    plugin.apply(ctx)
+    runInjections()
+    const page = entries.find(entry => entry.slot === 'main')!.component
+    hookStates = hooks
+    face.setActive('zh')
+    return { rendered: render(page, { t: face.bind() }) as Element, face, render, page }
+  }
+
+  it('offers a paste-a-key editor and a searchable catalog summary', async () => {
+    try {
+      const { rendered } = await renderPage(pageHooks())
+      expect(findByTestId(rendered, 'dsh-tako-key-input')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-key-save')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-catalog-search')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-all')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-vision')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-long')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-reasoning')).toBeDefined()
+      expect(findText(findByTestId(rendered, 'dsh-tako-catalog-summary'), '共 4 个')).toBe('共 4 个 · 视觉 1 · 长上下文 2 · 推理 3')
+      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-long')?.children[0]).toBe('长上下文')
+    } finally {
+      hookStates = []
+    }
+  })
+
+  it('filters the catalog by capability and by name', async () => {
+    try {
+      let { rendered } = await renderPage(pageHooks({ filter: 'vision' }))
+      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash'])
+
+      const named = await renderPage(pageHooks({ query: 'tako' }))
+      rendered = named.rendered
+      expect(collectModels(rendered)).toEqual(['tako-auto'])
+      expect(findText(findByTestId(rendered, 'dsh-tako-catalog-shown'), '显示')).toBe('显示 1 / 4')
+
+      const miss = await renderPage(pageHooks({ query: 'no-such-model' }))
+      expect(findByTestId(miss.rendered, 'dsh-tako-catalog-nomatch')).toBeDefined()
+      expect(findText(miss.rendered, '没有匹配的模型')).toBe('没有匹配的模型')
     } finally {
       hookStates = []
     }

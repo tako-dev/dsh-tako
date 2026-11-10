@@ -81,6 +81,7 @@ describe('console route /api/tako.status', () => {
       origin: 'https://tako.test',
       maskedKey: 'cr_****WXYZ',
       credential: 'TAKO_API_KEY',
+      baseURL: 'https://tako.test',
       me: {
         userName: 'e2e-user',
         planName: 'E2E Plan',
@@ -154,7 +155,7 @@ describe('console route /api/tako.status', () => {
     expect(body.me.userName).toBe('account-b')
     expect(body.maskedKey).toBe('cr_****SAME')
     expect(fetchImpl).toHaveBeenCalledTimes(6)
-    expect(Object.keys(body).sort()).toEqual(['configured', 'credential', 'maskedKey', 'me', 'origin', 'plan'])
+    expect(Object.keys(body).sort()).toEqual(['baseURL', 'configured', 'credential', 'maskedKey', 'me', 'origin', 'plan'])
     expect(JSON.stringify(body)).not.toContain('fixture-account')
     await svc.handleStatus()
     expect(fetchImpl).toHaveBeenCalledTimes(6)
@@ -260,5 +261,77 @@ describe('console route /api/tako.catalog', () => {
     const first = await (await svc.handleCatalog()).json()
     first.models[0].id = 'mutated'
     expect((await (await svc.handleCatalog()).json()).models[0].id).toBe('deepseek-v4.1-flash')
+  })
+})
+
+describe('console route /api/tako.key', () => {
+  const post = (body: unknown): Request => new Request('http://localhost/api/tako.key', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  it('verifies the pasted key against Tako before storing it, and answers with the mask only', async () => {
+    const onCredentialChange = vi.fn()
+    const { svc, set, tako } = service({ onCredentialChange })
+    const response = await svc.handleKey(post({ key: `  ${KEY}  ` }))
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.ok).toBe(true)
+    expect(body.maskedKey).toBe('cr_****WXYZ')
+    expect(body.credential).toBe('TAKO_API_KEY')
+    expect(body.me).toEqual({
+      userName: 'e2e-user',
+      planName: 'E2E Plan',
+      quotaRemain: 1_000_000,
+      quotaUsed: 250_000,
+      quotaRemainUsd: 2,
+      quotaUsedUsd: 0.5,
+    })
+    expect(JSON.stringify(body)).not.toContain(KEY)
+    expect(set).toHaveBeenCalledWith('TAKO_API_KEY', KEY)
+    expect(onCredentialChange).toHaveBeenCalledTimes(1)
+    expect(tako.fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a key Tako rejects, and stores nothing', async () => {
+    const onCredentialChange = vi.fn()
+    const tako = takoFetch({ meFails: true })
+    const { svc, set } = service({ fetch: tako.fetchImpl, onCredentialChange })
+    const response = await svc.handleKey(post({ key: 'cr_wrongwrongwrong' }))
+    expect(response.status).toBe(401)
+    const body = await response.json()
+    expect(body.ok).toBe(false)
+    expect(body.code).toBe('invalid')
+    expect(set).not.toHaveBeenCalled()
+    expect(onCredentialChange).not.toHaveBeenCalled()
+  })
+
+  it('rejects values that cannot be a key without touching Tako', async () => {
+    const { svc, set, tako } = service()
+    for (const body of [{ key: 'short' }, { key: 'has space in it' }, { key: 42 }, {}]) {
+      const response = await svc.handleKey(post(body))
+      expect(response.status).toBe(400)
+      expect((await response.json()).ok).toBe(false)
+    }
+    expect(set).not.toHaveBeenCalled()
+    expect(tako.fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('clears a file-sourced key locally without revoking it on Tako', async () => {
+    const onCredentialChange = vi.fn()
+    const { svc, unset } = service({ resolved: { value: KEY, source: 'file' }, onCredentialChange })
+    const response = await svc.handleKey(post({ action: 'clear' }))
+    const body = await response.json()
+    expect(body).toEqual({ ok: true, action: 'removed' })
+    expect(unset).toHaveBeenCalledWith('TAKO_API_KEY')
+    expect(onCredentialChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves an environment-sourced key alone', async () => {
+    const { svc, unset } = service({ resolved: { value: KEY, source: 'env' } })
+    const body = await (await svc.handleKey(post({ action: 'clear' }))).json()
+    expect(body).toEqual({ ok: true, action: 'external', source: 'env' })
+    expect(unset).not.toHaveBeenCalled()
   })
 })

@@ -33,6 +33,7 @@ window.__ModuleLoader__.load({
     const LOGOUT_ROUTE = 'api/tako.logout'
     const CATALOG_ROUTE = 'api/tako.catalog'
     const UPDATE_ROUTE = 'api/tako.update'
+    const KEY_ROUTE = 'api/tako.key'
     /** The command the update card offers: re-running the install upgrades the plugin. */
     const UPGRADE_COMMAND = 'dsh plugin --profile web add dsh-tako'
     const PI_AI_NS = 'llm-pi-ai'
@@ -139,6 +140,37 @@ window.__ModuleLoader__.load({
         managePlan: '管理订阅',
         topUp: '充值',
         plazaLink: '在广场查看',
+        // api key editor
+        keyCard: 'API key',
+        keyHint: '浏览器登录不方便（远程机器、SSH、没有浏览器）时，可以直接粘贴 key',
+        keyOrPaste: '或直接粘贴 API key：',
+        keyConfigured: '已配置',
+        keyMissing: '未配置',
+        keyPlaceholder: '粘贴 Tako API key（cr_…）',
+        keySave: '保存并验证',
+        keySaving: '验证中…',
+        keySaved: 'API key 已保存，账号信息已刷新',
+        keyInvalid: 'key 校验失败',
+        keyClear: '清除本地 key',
+        keyClearing: '清除中…',
+        keyCleared: '已从 dsh 凭据中删除',
+        keyClearExternal: '这个 key 来自环境变量或 .env，插件不会删除；请在对应位置移除',
+        keyClearNone: '没有已保存的 Tako key',
+        keyShow: '显示',
+        keyHide: '隐藏',
+        keySource: '来源',
+        endpointLabel: '接口',
+        credentialLabel: '凭据',
+        // catalog toolbar
+        catalogSummary: '共 {count} 个 · 视觉 {vision} · 长上下文 {long} · 推理 {reasoning}',
+        catalogSearch: '搜索模型名…',
+        catalogFilterAll: '全部',
+        catalogFilterVision: '视觉',
+        catalogFilterLong: '长上下文',
+        catalogFilterReasoning: '推理',
+        catalogNoMatch: '没有匹配的模型',
+        catalogShown: '显示 {shown} / {total}',
+        catalogReasoningBadge: '推理',
       },
       en: {
         signIn: 'Sign in to Tako with the browser',
@@ -233,6 +265,37 @@ window.__ModuleLoader__.load({
         managePlan: 'Manage plan',
         topUp: 'Top up',
         plazaLink: 'View in plaza',
+        // api key editor
+        keyCard: 'API key',
+        keyHint: 'Paste a key directly when the browser sign-in is impractical (remote host, SSH, no browser)',
+        keyOrPaste: 'Or paste an API key:',
+        keyConfigured: 'configured',
+        keyMissing: 'not configured',
+        keyPlaceholder: 'Paste a Tako API key (cr_…)',
+        keySave: 'Save and verify',
+        keySaving: 'Verifying…',
+        keySaved: 'API key saved; the account view has been refreshed',
+        keyInvalid: 'The key was rejected',
+        keyClear: 'Remove the local key',
+        keyClearing: 'Removing…',
+        keyCleared: 'Removed from the dsh credentials',
+        keyClearExternal: 'This key comes from an environment variable or .env; remove it there instead',
+        keyClearNone: 'No Tako key is stored',
+        keyShow: 'Show',
+        keyHide: 'Hide',
+        keySource: 'source',
+        endpointLabel: 'endpoint',
+        credentialLabel: 'credential',
+        // catalog toolbar
+        catalogSummary: '{count} models · {vision} vision · {long} long-context · {reasoning} reasoning',
+        catalogSearch: 'Filter by model name…',
+        catalogFilterAll: 'All',
+        catalogFilterVision: 'Vision',
+        catalogFilterLong: 'Long context',
+        catalogFilterReasoning: 'Reasoning',
+        catalogNoMatch: 'No models match',
+        catalogShown: 'showing {shown} / {total}',
+        catalogReasoningBadge: 'reasoning',
       },
     }
 
@@ -375,6 +438,78 @@ window.__ModuleLoader__.load({
       return children.length === 0 ? null : h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } }, children)
     }
 
+    /**
+     * Compact "paste a key" row for the Models-page provider card, so a key
+     * can be configured without the browser round trip. Same host route as the
+     * console page's key editor.
+     */
+    function PasteKeyRow(props) {
+      const t = props.t ?? fallbackT
+      const [value, setValue] = useState('')
+      const [busy, setBusy] = useState(false)
+      const [note, setNote] = useState(undefined)
+      const alive = useRef(true)
+      useEffect(() => () => { alive.current = false }, [])
+      const save = async () => {
+        const key = value.trim()
+        if (key === '' || busy) return
+        setBusy(true)
+        setNote(undefined)
+        try {
+          const result = await call('POST', KEY_ROUTE, { key })
+          if (!alive.current) return
+          if (result !== undefined && result.ok === true) {
+            setValue('')
+            setNote({ tone: 'ok', text: t('keySaved') })
+            notifyCredential()
+          } else {
+            const detail = result === undefined ? 'unknown' : (result.message || result.code || 'unknown')
+            setNote({ tone: 'error', text: `${t('keyInvalid')}: ${detail}` })
+          }
+        } catch (error) {
+          if (alive.current) setNote({ tone: 'error', text: `${t('keyInvalid')}: ${String(error && error.message || error)}` })
+        } finally {
+          if (alive.current) setBusy(false)
+        }
+      }
+      const children = [
+        h('div', { key: 'label', style: { fontSize: '0.85em', opacity: 0.72 } }, t('keyOrPaste')),
+        h('div', { key: 'row', style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
+          h('input', {
+            key: 'input',
+            type: 'password',
+            value,
+            placeholder: t('keyPlaceholder'),
+            autoComplete: 'off',
+            spellCheck: false,
+            'data-testid': 'dsh-tako-paste-key-input',
+            onChange: event => setValue(event.target.value),
+            onKeyDown: event => { if (event.key === 'Enter') void save() },
+            style: { font: 'inherit', padding: '4px 8px', borderRadius: '6px', border: '1px solid currentColor', background: 'transparent', color: 'inherit', minWidth: '220px', flex: '1 1 220px' },
+          }),
+          h('button', {
+            key: 'save',
+            type: 'button',
+            disabled: busy || value.trim() === '',
+            onClick: save,
+            'data-testid': 'dsh-tako-paste-key-save',
+            style: { font: 'inherit', padding: '4px 12px', borderRadius: '6px', border: '1px solid currentColor', background: 'transparent', color: 'inherit', cursor: busy || value.trim() === '' ? 'default' : 'pointer', opacity: busy || value.trim() === '' ? 0.5 : 1 },
+          }, busy ? t('keySaving') : t('keySave'))),
+      ]
+      if (note !== undefined) {
+        children.push(h('div', {
+          key: 'note',
+          role: note.tone === 'error' ? 'alert' : 'status',
+          style: {
+            fontSize: '0.85em',
+            overflowWrap: 'anywhere',
+            color: note.tone === 'error' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-success-primary)',
+          },
+        }, note.text))
+      }
+      return h('div', { 'data-testid': 'dsh-tako-paste-key', style: { display: 'flex', flexDirection: 'column', gap: '6px' } }, children)
+    }
+
     function TakoSignIn(props) {
       const provider = props.provider
       const t = props.t ?? fallbackT
@@ -394,7 +529,8 @@ window.__ModuleLoader__.load({
       ))
       const progress = LoginProgress({ state: login.state, t })
       if (progress !== null) children.push(h('div', { key: 'progress' }, progress))
-      return h('div', { 'data-dsh-tako': 'sign-in', style: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' } }, children)
+      children.push(h(PasteKeyRow, { key: 'paste', t }))
+      return h('div', { 'data-dsh-tako': 'sign-in', style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' } }, children)
     }
 
     // ---------------------------------------------------------------- console panel
@@ -516,6 +652,15 @@ window.__ModuleLoader__.load({
         '.dsh-tako-ghost{font:inherit;padding:5px 12px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:inherit;cursor:pointer;transition:border-color .15s ease,color .15s ease}',
         '.dsh-tako-ghost:hover{border-color:' + CLAY + ';color:' + CLAY + '}',
         '.dsh-tako-cardfoot{display:flex;gap:14px;flex-wrap:wrap;margin-top:4px}',
+        '.dsh-tako-model{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 0;border-bottom:0.5px solid var(--dsw-alias-border-l2)}',
+        '.dsh-tako-model-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+        '.dsh-tako-toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}',
+        '.dsh-tako-input{font:inherit;font-size:13px;padding:5px 9px;border-radius:6px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:inherit;min-width:0;flex:1 1 160px}',
+        '.dsh-tako-input:focus{outline:none;border-color:' + CLAY + '}',
+        '.dsh-tako-chip{font:inherit;font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2);background:transparent;color:inherit;cursor:pointer}',
+        '.dsh-tako-chip[data-active="true"]{border-color:' + CLAY + ';color:' + CLAY + '}',
+        '.dsh-tako-summary{font-size:12px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums}',
+        '.dsh-tako-tag{font-size:11px;padding:1px 6px;border-radius:4px;border:0.5px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);flex:none}',
         '.dsh-tako-badge{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:' + CLAY + '}',
         '.dsh-tako-footer{display:flex;align-items:center;gap:10px;width:100%;padding:6px 2px;border:none;background:transparent;color:inherit;text-align:left;cursor:pointer}',
         '.dsh-tako-footer .frac{font-variant-numeric:tabular-nums;font-size:13px;font-weight:500}',
@@ -564,6 +709,116 @@ window.__ModuleLoader__.load({
       return minutes <= 0 ? t('refreshSoon') : t('refreshIn', { minutes })
     }
 
+    /**
+     * Paste-a-key fallback for the browser sign-in: the host verifies the key
+     * against `/api/desktop/me` before storing it, so a typo cannot silently
+     * break the route. The input is cleared once the key is accepted; the
+     * displayed value always comes back masked from `/api/tako.status`.
+     */
+    function KeyEditor(props) {
+      const t = props.t ?? fallbackT
+      const configured = props.status !== undefined && props.status.configured === true
+      const [value, setValue] = useState('')
+      const [reveal, setReveal] = useState(false)
+      const [busy, setBusy] = useState(false)
+      const [note, setNote] = useState(undefined)
+      const alive = useRef(true)
+      useEffect(() => () => { alive.current = false }, [])
+
+      const save = async () => {
+        const key = value.trim()
+        if (key === '' || busy) return
+        setBusy(true)
+        setNote(undefined)
+        try {
+          const result = await call('POST', KEY_ROUTE, { key })
+          if (!alive.current) return
+          if (result !== undefined && result.ok === true) {
+            setValue('')
+            setNote({ tone: 'ok', text: t('keySaved') })
+            props.onChanged?.()
+          } else {
+            const detail = result === undefined ? 'unknown' : (result.message || result.code || 'unknown')
+            setNote({ tone: 'error', text: `${t('keyInvalid')}: ${detail}` })
+          }
+        } catch (error) {
+          if (alive.current) setNote({ tone: 'error', text: `${t('keyInvalid')}: ${String(error && error.message || error)}` })
+        } finally {
+          if (alive.current) setBusy(false)
+        }
+      }
+
+      const clear = async () => {
+        if (busy) return
+        setBusy(true)
+        setNote(undefined)
+        try {
+          const result = await call('POST', KEY_ROUTE, { action: 'clear' })
+          if (!alive.current) return
+          const action = result === undefined ? 'none' : result.action
+          if (action === 'removed') setNote({ tone: 'ok', text: t('keyCleared') })
+          else if (action === 'external') setNote({ tone: 'muted', text: t('keyClearExternal') })
+          else if (action === 'not-configured') setNote({ tone: 'muted', text: t('keyClearNone') })
+          else setNote({ tone: 'error', text: `${t('failed')}: ${result && result.message ? result.message : 'unknown'}` })
+          if (action === 'removed' || action === 'external') props.onChanged?.()
+        } catch (error) {
+          if (alive.current) setNote({ tone: 'error', text: `${t('failed')}: ${String(error && error.message || error)}` })
+        } finally {
+          if (alive.current) setBusy(false)
+        }
+      }
+
+      const input = h('input', {
+        key: 'input',
+        type: reveal ? 'text' : 'password',
+        value,
+        placeholder: t('keyPlaceholder'),
+        autoComplete: 'off',
+        spellCheck: false,
+        'data-testid': 'dsh-tako-key-input',
+        onChange: event => setValue(event.target.value),
+        onKeyDown: event => { if (event.key === 'Enter') void save() },
+        className: 'dsh-tako-input',
+      })
+      const row = h('div', { key: 'row', className: 'dsh-tako-toolbar' },
+        input,
+        h('button', { key: 'toggle', type: 'button', onClick: () => setReveal(v => !v), style: quietButton, 'data-testid': 'dsh-tako-key-toggle' }, reveal ? t('keyHide') : t('keyShow')),
+        h('button', {
+          key: 'save',
+          type: 'button',
+          disabled: busy || value.trim() === '',
+          onClick: save,
+          'data-testid': 'dsh-tako-key-save',
+          style: { ...buttonStyle, opacity: busy || value.trim() === '' ? 0.5 : 1 },
+        }, busy ? t('keySaving') : t('keySave')),
+        configured
+          ? h('button', { key: 'clear', type: 'button', disabled: busy, onClick: clear, 'data-testid': 'dsh-tako-key-clear', style: { ...quietButton, color: 'var(--dsw-alias-state-error-primary)' } }, busy ? t('keyClearing') : t('keyClear'))
+          : null)
+
+      const children = [
+        h('div', { key: 'head', className: 'dsh-tako-kicker' },
+          t('keyCard'),
+          h('span', { className: 'dsh-tako-extra' }, configured ? t('keyConfigured') : t('keyMissing'))),
+        row,
+        h('div', { key: 'hint', className: 'dsh-tako-sub' }, t('keyHint')),
+      ]
+      if (note !== undefined) {
+        children.push(h('div', {
+          key: 'note',
+          role: note.tone === 'error' ? 'alert' : 'status',
+          'data-testid': 'dsh-tako-key-note',
+          style: {
+            fontSize: '0.85em',
+            overflowWrap: 'anywhere',
+            color: note.tone === 'error'
+              ? 'var(--dsw-alias-state-error-primary)'
+              : note.tone === 'ok' ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-tertiary)',
+          },
+        }, note.text))
+      }
+      return h('div', { 'data-dsh-tako-card': 'key', style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px', paddingTop: '12px', borderTop: '0.5px solid var(--dsw-alias-border-l2)' } }, children)
+    }
+
     function AccountCard(props) {
       const status = props.status
       const login = props.login
@@ -582,6 +837,12 @@ window.__ModuleLoader__.load({
       } else if (maskedKey !== undefined) {
         body.push(h('div', { key: 'sub', className: 'dsh-tako-sub' },
           h('span', { key: 'key', 'data-testid': 'dsh-tako-console-key', style: mono }, maskedKey)))
+      }
+      if (configured && (status.baseURL !== undefined || status.credential !== undefined)) {
+        const parts = []
+        if (status.baseURL !== undefined) parts.push(`${t('endpointLabel')} ${status.baseURL}`)
+        if (status.credential !== undefined) parts.push(`${t('credentialLabel')} ${status.credential}`)
+        body.push(h('div', { key: 'endpoint', className: 'dsh-tako-sub', 'data-testid': 'dsh-tako-console-endpoint', style: { ...mono, fontSize: '0.78em', overflowWrap: 'anywhere' } }, parts.join(' · ')))
       }
       if (configured && status.meError !== undefined) {
         body.push(h('div', { key: 'meerr', role: 'status', style: { fontSize: '0.85em', color: 'var(--dsw-alias-state-warn-primary)', overflowWrap: 'anywhere' } }, `${t('whoamiFailed')}: ${status.meError}`))
@@ -602,6 +863,7 @@ window.__ModuleLoader__.load({
       if (props.logoutNote !== undefined) {
         body.push(h('div', { key: 'note', role: 'status', style: { fontSize: '0.85em', overflowWrap: 'anywhere' } }, props.logoutNote))
       }
+      body.push(h(KeyEditor, { key: 'key-editor', status, t, onChanged: props.onKeyChanged }))
       return h('header', { className: 'dsh-tako-head', 'data-dsh-tako-card': 'account' },
         TakoMark(32),
         h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 } }, ...body))
@@ -891,11 +1153,18 @@ window.__ModuleLoader__.load({
       })
     }
 
+    /** Context windows at or above this count as long-context in the catalog filter. */
+    const LONG_CONTEXT = 500_000
+    /** Rows shown before "show all"; the toolbar still counts the whole catalog. */
+    const CATALOG_PREVIEW = 6
+
     function CatalogCard(props) {
       const catalog = props.catalog
       const t = props.t ?? fallbackT
       const origin = props.origin ?? DEFAULT_TAKO_ORIGIN
       const [open, setOpen] = useState(false)
+      const [query, setQuery] = useState('')
+      const [filter, setFilter] = useState('all')
       const children = []
       if (catalog === undefined) {
         children.push(h('div', { key: 'x', style: muted }, props.error === undefined ? '…' : `${t('loadFailed')}: ${props.error}`))
@@ -905,29 +1174,90 @@ window.__ModuleLoader__.load({
         const models = catalog.models
         children.push(h('div', { key: 'links', className: 'dsh-tako-cardfoot', style: { marginTop: 0 } },
           h(TakoChip, { href: origin + '/pricing', label: t('plazaLink') })))
-        const hidden = Math.max(0, models.length - 3)
-        const shown = open || hidden === 0 ? models : models.slice(0, 3)
+        const hasVision = model => (model.input || []).includes('image')
+        const hasLong = model => typeof model.contextWindow === 'number' && model.contextWindow >= LONG_CONTEXT
+        const hasReasoning = model => model.reasoningEfforts !== false
+        const stats = {
+          vision: models.filter(hasVision).length,
+          long: models.filter(hasLong).length,
+          reasoning: models.filter(hasReasoning).length,
+        }
+        const needle = query.trim().toLowerCase()
+        const filtering = needle !== '' || filter !== 'all'
+        const matched = models.filter(model => {
+          if (filter === 'vision' && !hasVision(model)) return false
+          if (filter === 'long' && !hasLong(model)) return false
+          if (filter === 'reasoning' && !hasReasoning(model)) return false
+          return needle === '' || model.id.toLowerCase().includes(needle)
+        })
+        const expanded = open || filtering
+        const shown = expanded ? matched : matched.slice(0, CATALOG_PREVIEW)
+
+        children.push(h('div', { key: 'summary', className: 'dsh-tako-summary', 'data-testid': 'dsh-tako-catalog-summary' },
+          t('catalogSummary', { count: models.length, vision: stats.vision, long: stats.long, reasoning: stats.reasoning })))
+
+        const chips = [
+          ['all', t('catalogFilterAll')],
+          ['vision', t('catalogFilterVision')],
+          ['long', t('catalogFilterLong')],
+          ['reasoning', t('catalogFilterReasoning')],
+        ]
+        children.push(h('div', { key: 'toolbar', className: 'dsh-tako-toolbar' },
+          h('input', {
+            type: 'search',
+            value: query,
+            placeholder: t('catalogSearch'),
+            'data-testid': 'dsh-tako-catalog-search',
+            onChange: event => setQuery(event.target.value),
+            className: 'dsh-tako-input',
+          }),
+          ...chips.map(([id, label]) => h('button', {
+            key: id,
+            type: 'button',
+            'data-filter': id,
+            'data-active': String(filter === id),
+            'data-testid': `dsh-tako-catalog-filter-${id}`,
+            onClick: () => setFilter(current => current === id ? 'all' : id),
+            className: 'dsh-tako-chip',
+          }, label))))
+
+        if (shown.length === 0) {
+          children.push(h('div', { key: 'nomatch', style: { ...muted, padding: '6px 0' }, 'data-testid': 'dsh-tako-catalog-nomatch' }, t('catalogNoMatch')))
+        }
         for (const model of shown) {
-          const vision = (model.input || []).includes('image')
+          const vision = hasVision(model)
           children.push(h('div', { key: model.id, className: 'dsh-tako-model', 'data-model': model.id },
             h('a', {
+              className: 'dsh-tako-model-name',
+              style: mono,
+              title: model.id,
               href: `${origin}/pricing?search=${encodeURIComponent(model.id)}`,
               target: '_blank',
               rel: 'noopener noreferrer',
-              style: mono,
             }, model.id),
-            h('span', { style: { display: 'flex', gap: '8px', alignItems: 'baseline', flex: 'none' } },
-              h('span', { style: muted }, compactContext(model.contextWindow)),
-              vision ? h('span', { className: 'dsh-tako-badge' }, t('visionBadge')) : null)))
+            h('span', { style: { display: 'flex', gap: '6px', alignItems: 'baseline', flex: 'none' } },
+              h('span', { style: { ...muted, fontVariantNumeric: 'tabular-nums' } }, compactContext(model.contextWindow)),
+              vision ? h('span', { className: 'dsh-tako-tag', 'data-badge': 'vision' }, t('visionBadge')) : null,
+              model.reasoningEfforts !== false ? h('span', { className: 'dsh-tako-tag', 'data-badge': 'reasoning' }, t('catalogReasoningBadge')) : null)))
         }
-        if (hidden > 0) {
+        if (!expanded && matched.length > shown.length) {
           children.push(h('button', {
             key: 'more',
             type: 'button',
             'data-testid': 'dsh-tako-catalog-more',
             onClick: () => setOpen(value => !value),
             style: { ...quietButton, alignSelf: 'flex-start' },
-          }, open ? t('catalogLess') : t('catalogMore', { count: hidden })))
+          }, t('catalogMore', { count: matched.length - shown.length })))
+        } else if (filtering) {
+          children.push(h('div', { key: 'shown', className: 'dsh-tako-summary', 'data-testid': 'dsh-tako-catalog-shown' }, t('catalogShown', { shown: shown.length, total: models.length })))
+        } else if (open && expanded && matched.length > CATALOG_PREVIEW) {
+          children.push(h('button', {
+            key: 'less',
+            type: 'button',
+            'data-testid': 'dsh-tako-catalog-more',
+            onClick: () => setOpen(value => !value),
+            style: { ...quietButton, alignSelf: 'flex-start' },
+          }, t('catalogLess')))
         }
       }
       if (catalog?.status && catalog.status !== 'ready') {
@@ -1050,7 +1380,15 @@ window.__ModuleLoader__.load({
 
       ensureTakoTheme()
       const children = [
-        AccountCard({ status, login, busyLogout, onLogout: logout, logoutNote, t }),
+        AccountCard({
+          status,
+          login,
+          busyLogout,
+          onLogout: logout,
+          logoutNote,
+          t,
+          onKeyChanged: async () => { await loadStatus(); notifyCredential() },
+        }),
         Tentacle(),
       ]
       if (statusError !== undefined) {
