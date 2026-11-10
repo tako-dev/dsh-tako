@@ -17,7 +17,7 @@
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
-import type { TakoModel } from './catalog.ts'
+import type { TakoModel, TakoModelCard } from './catalog.ts'
 import type { BrowserLoginHandle, BrowserLoginOptions, TakoIdentity } from './login.ts'
 import { defaultDeviceName, fetchMe, fetchUserQuota, maskKey, revokeKey, startBrowserLogin, TakoLoginError, type TakoPlanQuota } from './login.ts'
 import { refreshTakoSearchPin } from './search.ts'
@@ -50,6 +50,16 @@ export const UPDATE_ROUTE = '/api/tako.update'
  * without revoking it on Tako.
  */
 export const KEY_ROUTE = '/api/tako.key'
+/** Console route: the stored key's own recent request log on Tako. */
+export const LOGS_ROUTE = '/api/tako.logs'
+/** Console route: token quota detail plus today's spend and per-model usage. */
+export const USAGE_ROUTE = '/api/tako.usage'
+/** Console route: the site's public announcements; no key is involved. */
+export const NOTICE_ROUTE = '/api/tako.notice'
+/** Console route: read or patch the plugin's own settings row and the search pin. */
+export const CONFIG_ROUTE = '/api/tako.config'
+/** Console route: ask the sync loop for an immediate catalog refresh. */
+export const SYNC_ROUTE = '/api/tako.sync'
 
 /** Same grammar the settings controller enforces for credential references. */
 const CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/u
@@ -186,7 +196,7 @@ function pluginManagerOf(ctx: Context): PluginManagerLike | undefined {
 }
 
 /** Mount the routes while the Web connection and the credential service are both up. */
-export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: string }, web: { catalog: () => CatalogState } = { catalog: () => emptyCatalogState() }): void {
+export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: string }, web: { catalog: () => CatalogState, requestSync?: () => void } = { catalog: () => emptyCatalogState() }): void {
   ctx.inject(['connection', 'credentials'], inner => {
     const connection = (inner as unknown as { connection: ConnectionLike }).connection
     const onCredentialChange = (): void => {
@@ -208,6 +218,8 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
       catalog: web.catalog,
       logger: inner.logger,
       onCredentialChange,
+      settings: ctx.settings as ConsoleSettings | undefined,
+      requestSync: web.requestSync,
     })
     const updateService = createUpdateService({
       logger: inner.logger,
@@ -252,6 +264,36 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
           requestBody: 'buffered',
           fetch: request => request.method === 'POST' ? updateService.handleInstall() : updateService.handleUpdate(),
         }),
+        connection.fetch.register({
+          path: LOGS_ROUTE,
+          methods: ['GET'],
+          requestBody: 'buffered',
+          fetch: request => consoleService.handleLogs(request),
+        }),
+        connection.fetch.register({
+          path: USAGE_ROUTE,
+          methods: ['GET'],
+          requestBody: 'buffered',
+          fetch: () => consoleService.handleUsage(),
+        }),
+        connection.fetch.register({
+          path: NOTICE_ROUTE,
+          methods: ['GET'],
+          requestBody: 'buffered',
+          fetch: () => consoleService.handleNotice(),
+        }),
+        connection.fetch.register({
+          path: CONFIG_ROUTE,
+          methods: ['GET', 'POST'],
+          requestBody: 'buffered',
+          fetch: request => consoleService.handleConfig(request),
+        }),
+        connection.fetch.register({
+          path: SYNC_ROUTE,
+          methods: ['POST'],
+          requestBody: 'buffered',
+          fetch: () => consoleService.handleSync(),
+        }),
       ]
       return async () => {
         service.dispose()
@@ -270,6 +312,8 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
 export interface CatalogState {
   /** The filtered catalog of the last successful sync; empty before the first. */
   models: readonly TakoModel[]
+  /** Display-only plaza cards paired with `models`; absent on hosts synced before cards existed. */
+  cards?: readonly TakoModelCard[]
   /** When that sync finished, in epoch ms; `null` before the first. */
   lastSyncAt: number | null
   /** Next recovery or regular refresh in epoch ms; `null` when no further attempt is scheduled. */
@@ -316,6 +360,13 @@ export type { TakoPlanQuota }
 /** How long a `whoami` answer stays fresh, so opening the panel does not hit Tako each time. */
 export const STATUS_CACHE_MS = 45_000
 
+/** The slice of the installation's settings service the config route uses. */
+export interface ConsoleSettings {
+  describe: () => readonly { ns: string, value?: unknown, user?: unknown }[]
+  mutate: (ns: string, ops: readonly { op: 'set', path: readonly string[], value: unknown }[]) => Promise<void>
+  writable?: boolean
+}
+
 export interface ConsoleServiceOptions {
   baseURL: string
   apiKeyEnv: string
@@ -328,6 +379,10 @@ export interface ConsoleServiceOptions {
   now?: () => number
   /** After a file-source key is unset, so search can restore the bundle default. */
   onCredentialChange?: () => void
+  /** The settings service; absent on hosts where it was not injected. */
+  settings?: ConsoleSettings
+  /** Kick an immediate catalog sync when the console asks for one. */
+  requestSync?: () => void
 }
 
 interface StatusCache {
@@ -343,7 +398,17 @@ interface StatusCache {
  * The console panel's route handlers. One service instance per Web
  * connection; the resolved key only travels as `maskKey()` output.
  */
-export function createConsoleService(options: ConsoleServiceOptions): { handleStatus: () => Promise<Response>, handleLogout: () => Promise<Response>, handleCatalog: () => Promise<Response>, handleKey: (request: Request) => Promise<Response> } {
+export function createConsoleService(options: ConsoleServiceOptions): {
+  handleStatus: () => Promise<Response>
+  handleLogout: () => Promise<Response>
+  handleCatalog: () => Promise<Response>
+  handleKey: (request: Request) => Promise<Response>
+  handleLogs: (request: Request) => Promise<Response>
+  handleUsage: () => Promise<Response>
+  handleNotice: () => Promise<Response>
+  handleConfig: (request: Request) => Promise<Response>
+  handleSync: () => Promise<Response>
+} {
   const origin = normalizeOrigin(options.baseURL)
   const cacheMs = options.statusCacheMs ?? STATUS_CACHE_MS
   const now = options.now ?? Date.now
@@ -480,7 +545,324 @@ export function createConsoleService(options: ConsoleServiceOptions): { handleSt
     return json({ ok: true, maskedKey: maskKey(candidate), credential: options.apiKeyEnv, me })
   }
 
-  return { handleStatus, handleLogout, handleCatalog, handleKey }
+  /** The stored key's plaintext, or undefined when the console cannot answer authenticated routes. */
+  const resolveKey = async (): Promise<{ value: string } | undefined> => {
+    const credentials = options.credentials()
+    if (credentials === undefined) return undefined
+    try {
+      return await credentials.resolve(options.apiKeyEnv)
+    } catch (error: unknown) {
+      options.logger.warn('resolving %s failed: %s', options.apiKeyEnv, error instanceof Error ? error.message : String(error))
+      return undefined
+    }
+  }
+
+  const fetchJson = async (url: string, init: RequestInit = {}): Promise<Record<string, unknown>> => {
+    const response = await (options.fetch ?? fetch)(url, {
+      ...init,
+      headers: { accept: 'application/json', ...init.headers as Record<string, string> },
+      signal: AbortSignal.timeout(20_000),
+    })
+    let body: Record<string, unknown> | undefined
+    try {
+      body = await response.json() as Record<string, unknown>
+    } catch {
+      body = undefined
+    }
+    if (!response.ok || body === undefined) throw new Error(`HTTP ${response.status}`)
+    return body
+  }
+
+  const bearer = (key: string): RequestInit => ({ headers: { authorization: `Bearer ${key}` } })
+  const post = (payload: unknown): RequestInit => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+
+  /**
+   * `GET /api/log/token` answers with this key's own recent requests; the
+   * `other` blob and the user_* columns carry host internals and never reach
+   * the page. The key itself stays on the host: it only rides the upstream
+   * Authorization header.
+   */
+  const handleLogs = async (request: Request): Promise<Response> => {
+    const current = await resolveKey()
+    if (current === undefined) return json({ ok: false, code: 'not-configured' })
+    const model = new URL(request.url).searchParams.get('model')
+    try {
+      const body = await fetchJson(`${origin}/api/log/token`, bearer(current.value))
+      const rows = Array.isArray(body.data) ? body.data : []
+      const logs = rows
+        .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+        .map(row => ({
+          id: row.id,
+          createdAt: row.created_at,
+          type: row.type,
+          modelName: row.model_name,
+          promptTokens: row.prompt_tokens,
+          completionTokens: row.completion_tokens,
+          quota: row.quota,
+          useTime: row.use_time,
+          isStream: row.is_stream,
+          requestId: row.request_id,
+          channelName: row.channel_name,
+          ip: row.ip,
+          tokenName: row.token_name,
+          group: row.group,
+        }))
+        .filter(row => model === null || model === '' || row.modelName === model)
+      return json({ ok: true, logs })
+    } catch (error: unknown) {
+      return json({ ok: false, code: 'upstream', message: error instanceof Error ? error.message : String(error) }, 502)
+    }
+  }
+
+  /**
+   * Three independent views of the same key: `/api/usage/token` (quota,
+   * model allowlist, expiry), and the apiStats `user-stats`/`user-model-stats`
+   * aggregate (today's spend per model). Each leg degrades to its own error
+   * field so one flaky endpoint does not blank the others.
+   */
+  const handleUsage = async (): Promise<Response> => {
+    const current = await resolveKey()
+    if (current === undefined) return json({ ok: false, code: 'not-configured' })
+    const out: Record<string, unknown> = { ok: true }
+
+    const usageToken = (async () => {
+      const body = await fetchJson(`${origin}/api/usage/token`, bearer(current.value))
+      const data = typeof body.data === 'object' && body.data !== null ? body.data as Record<string, unknown> : {}
+      out.token = {
+        name: data.name,
+        granted: data.total_granted,
+        used: data.total_used,
+        available: data.total_available,
+        grantedUsd: typeof data.total_granted === 'number' ? data.total_granted / QUOTA_PER_UNIT : undefined,
+        usedUsd: typeof data.total_used === 'number' ? data.total_used / QUOTA_PER_UNIT : undefined,
+        availableUsd: typeof data.total_available === 'number' ? data.total_available / QUOTA_PER_UNIT : undefined,
+        unlimitedQuota: data.unlimited_quota,
+        modelLimits: data.model_limits,
+        modelLimitsEnabled: data.model_limits_enabled,
+        expiresAt: data.expires_at,
+      }
+    })().catch((error: unknown) => { out.token = null; out.tokenError = error instanceof Error ? error.message : String(error) })
+
+    const stats = (async () => {
+      const idBody = await fetchJson(`${origin}/apiStats/api/get-key-id`, post({ apiKey: current.value }))
+      const id = typeof idBody.data === 'object' && idBody.data !== null ? (idBody.data as Record<string, unknown>).id : undefined
+      if (id === undefined) throw new Error('key-id returned no id')
+      const daily = (async () => {
+        const body = await fetchJson(`${origin}/apiStats/api/user-stats`, post({ apiId: String(id) }))
+        const total = typeof body.data === 'object' && body.data !== null
+          ? (body.data as Record<string, unknown>).usage : undefined
+        const cost = typeof total === 'object' && total !== null
+          ? (total as Record<string, unknown>).total : undefined
+        const usd = typeof cost === 'object' && cost !== null ? (cost as Record<string, unknown>).cost : undefined
+        if (typeof usd === 'number') out.dailyCostUsd = usd
+      })().catch((error: unknown) => { out.statsError = error instanceof Error ? error.message : String(error) })
+      const perModel = (async () => {
+        const body = await fetchJson(`${origin}/apiStats/api/user-model-stats`, post({ apiId: String(id), period: 'daily' }))
+        const rows = Array.isArray(body.data) ? body.data : []
+        out.models = rows
+          .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+          .map(row => ({
+            model: row.model,
+            requests: row.requests,
+            inputTokens: row.inputTokens,
+            outputTokens: row.outputTokens,
+            costUsd: typeof row.costs === 'object' && row.costs !== null ? (row.costs as Record<string, unknown>).total : undefined,
+          }))
+      })().catch((error: unknown) => { out.modelStatsError = error instanceof Error ? error.message : String(error) })
+      await Promise.all([daily, perModel])
+    })().catch((error: unknown) => {
+      out.statsError = error instanceof Error ? error.message : String(error)
+      out.modelStatsError = out.statsError
+    })
+
+    await Promise.all([usageToken, stats])
+    return json(out)
+  }
+
+  /** Site announcements are public; cached briefly so opening the panel stays cheap. */
+  let noticeCache: { at: number, announcements: { content: string, date?: string }[] } | undefined
+  const handleNotice = async (): Promise<Response> => {
+    if (noticeCache !== undefined && now() - noticeCache.at < NOTICE_CACHE_MS) {
+      return json({ ok: true, announcements: noticeCache.announcements })
+    }
+    try {
+      const body = await fetchJson(`${origin}/api/status`)
+      const data = typeof body.data === 'object' && body.data !== null ? body.data as Record<string, unknown> : {}
+      const rows = Array.isArray(data.announcements) ? data.announcements : []
+      const announcements = rows
+        .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+        .map(row => {
+          const item: { content: string, id?: number | string, type?: string, publishDate?: string, popup?: boolean, date?: string } = { content: typeof row.content === 'string' ? row.content : '' }
+          if (typeof row.id === 'number' || typeof row.id === 'string') item.id = row.id
+          if (typeof row.type === 'string' && row.type !== '') item.type = row.type
+          if (typeof row.publishDate === 'string' && row.publishDate !== '') item.publishDate = row.publishDate
+          if (row.popup === true) item.popup = true
+          if (typeof row.date === 'string' && row.date !== '') item.date = row.date
+          return item
+        })
+        .filter(row => row.content !== '')
+      noticeCache = { at: now(), announcements }
+      return json({ ok: true, announcements })
+    } catch (error: unknown) {
+      return json({ ok: false, code: 'upstream', message: error instanceof Error ? error.message : String(error) }, 502)
+    }
+  }
+
+  /**
+   * Read and patch this plugin's settings row (`ns: 'tako'`) plus the host's
+   * `web.searchProvider` pin. Only the documented fields are writable; every
+   * value is validated here before `mutate` sees it, and read-only profiles
+   * refuse writes instead of throwing.
+   */
+  const handleConfig = async (request: Request): Promise<Response> => {
+    const settings = options.settings
+    if (settings === undefined) return json({ ok: false, code: 'unavailable', message: 'this dsh profile mounts no settings service' }, 503)
+
+    const section = settings.describe().find(descriptor => descriptor.ns === 'tako')
+    if (section === undefined) return json({ ok: false, code: 'no-entry' })
+    const webSection = settings.describe().find(descriptor => descriptor.ns === 'web')
+    const resolved = typeof section.value === 'object' && section.value !== null ? section.value as Record<string, unknown> : {}
+    const webSearchProvider = typeof webSection?.value === 'object' && webSection.value !== null
+      ? (webSection.value as Record<string, unknown>).searchProvider : undefined
+    const config = {
+      baseURL: resolved.baseURL,
+      refreshIntervalMs: resolved.refreshIntervalMs,
+      syncRetryDelaysMs: resolved.syncRetryDelaysMs,
+      defaultContextWindow: resolved.defaultContextWindow,
+      pinned: resolved.pinned,
+      include: resolved.include,
+      exclude: resolved.exclude,
+      includeClaudeCodeOnly: resolved.includeClaudeCodeOnly,
+      overrides: resolved.overrides,
+    }
+
+    if (request.method === 'GET') {
+      return json({ ok: true, writable: settings.writable !== false, config, webSearchProvider })
+    }
+
+    if (settings.writable === false) return json({ ok: false, code: 'read-only' }, 403)
+    let body: { set?: unknown }
+    try {
+      body = await request.json() as { set?: unknown }
+    } catch {
+      return json({ ok: false, code: 'bad-request', message: 'invalid JSON body' }, 400)
+    }
+    const set = typeof body.set === 'object' && body.set !== null ? body.set as Record<string, unknown> : undefined
+    if (set === undefined) return json({ ok: false, code: 'bad-request', message: 'expected { set: { … } }' }, 400)
+
+    const ops: { op: 'set', path: string[], value: unknown }[] = []
+    const webOps: { op: 'set', path: string[], value: unknown }[] = []
+    const bad = (field: string, why: string): Response => json({ ok: false, code: 'bad-request', message: `${field}: ${why}` }, 400)
+    const stringArray = (value: unknown): string[] | undefined =>
+      Array.isArray(value) && value.every(item => typeof item === 'string') ? value as string[] : undefined
+
+    for (const [field, value] of Object.entries(set)) {
+      switch (field) {
+        case 'refreshIntervalMs': {
+          if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) return bad(field, 'a non-negative integer (ms)')
+          ops.push({ op: 'set', path: [field], value })
+          break
+        }
+        case 'syncRetryDelaysMs': {
+          if (!Array.isArray(value) || !value.every(item => typeof item === 'number' && Number.isInteger(item) && item >= 1)) return bad(field, 'an array of positive integers (ms)')
+          ops.push({ op: 'set', path: [field], value })
+          break
+        }
+        case 'defaultContextWindow': {
+          if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return bad(field, 'a positive integer')
+          ops.push({ op: 'set', path: [field], value })
+          break
+        }
+        case 'includeClaudeCodeOnly': {
+          if (typeof value !== 'boolean') return bad(field, 'a boolean')
+          ops.push({ op: 'set', path: [field], value })
+          break
+        }
+        case 'pinned': case 'include': case 'exclude': {
+          const list = stringArray(value)
+          if (list === undefined) return bad(field, 'an array of strings')
+          ops.push({ op: 'set', path: [field], value: list })
+          break
+        }
+        case 'baseURL': {
+          if (typeof value !== 'string' || value.trim() === '') return bad(field, 'a non-empty URL')
+          ops.push({ op: 'set', path: [field], value: value.trim() })
+          break
+        }
+        case 'overrides': {
+          const problem = overridesProblem(value)
+          if (problem !== undefined) return bad(field, problem)
+          ops.push({ op: 'set', path: [field], value })
+          break
+        }
+        case 'webSearchProvider': {
+          if (value !== 'tako' && value !== 'deepseek-official') return bad(field, `'tako' or 'deepseek-official'`)
+          webOps.push({ op: 'set', path: ['searchProvider'], value })
+          break
+        }
+        default:
+          return bad(field, 'unknown field')
+      }
+    }
+
+    if (ops.length > 0) await settings.mutate('tako', ops)
+    if (webOps.length > 0) await settings.mutate('web', webOps)
+    // Model-list related edits take effect on the next sync; kick one now.
+    if (ops.length > 0) options.requestSync?.()
+    return json({ ok: true })
+  }
+
+  /** Manual catalog refresh: the sync loop owns the work, this only pokes it. */
+  const handleSync = async (): Promise<Response> => {
+    if (options.requestSync === undefined) return json({ ok: false, code: 'unavailable' })
+    options.requestSync()
+    return json({ ok: true })
+  }
+
+  return { handleStatus, handleLogout, handleCatalog, handleKey, handleLogs, handleUsage, handleNotice, handleConfig, handleSync }
+}
+
+/** How long the announcements answer stays fresh. */
+export const NOTICE_CACHE_MS = 10 * 60_000
+
+const REASONING_LEVEL = /^(off|minimal|low|medium|high|xhigh|max)$/u
+
+/**
+ * Field-level validation for a per-model override object, mirroring the
+ * runtime `Config` schema: partial objects are fine, unknown keys and bad
+ * value shapes are not. Kept here so the web module does not import the
+ * config schema from `index.ts` (a circular module edge).
+ */
+function overridesProblem(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'a model-id → override object map'
+  for (const [id, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return `overrides.${id}: an object`
+    for (const [key, field] of Object.entries(entry as Record<string, unknown>)) {
+      switch (key) {
+        case 'name':
+          if (typeof field !== 'string') return `overrides.${id}.name: a string`
+          break
+        case 'contextWindow': case 'maxTokens':
+          if (typeof field !== 'number' || !Number.isInteger(field) || field < 1) return `overrides.${id}.${key}: a positive integer`
+          break
+        case 'input':
+          if (!Array.isArray(field) || !field.every(item => item === 'text' || item === 'image')) return `overrides.${id}.input: an array of 'text'|'image'`
+          break
+        case 'reasoningEfforts': {
+          if (field === false) break
+          if (typeof field !== 'object' || field === null || Array.isArray(field)) return `overrides.${id}.reasoningEfforts: false or a level map`
+          for (const [level, wire] of Object.entries(field as Record<string, unknown>)) {
+            if (!REASONING_LEVEL.test(level)) return `overrides.${id}.reasoningEfforts: unknown level ${JSON.stringify(level)}`
+            if (wire !== null && typeof wire !== 'string') return `overrides.${id}.reasoningEfforts.${level}: a string or null`
+          }
+          break
+        }
+        default:
+          return `overrides.${id}: unknown field ${JSON.stringify(key)}`
+      }
+    }
+  }
+  return undefined
 }
 
 /**

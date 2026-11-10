@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { TakoModel, TakoPricingModel, TakoPricingResponse } from '../src/catalog.ts'
-import { buildCatalog, contextFromTags, DEFAULT_REASONING_EFFORTS, isChatModel, parseTags, reasoningCapabilityReport, toModel } from '../src/catalog.ts'
+import { buildCards, buildCatalog, contextFromTags, DEFAULT_REASONING_EFFORTS, isChatModel, parseTags, reasoningCapabilityReport, toModel } from '../src/catalog.ts'
 
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/pricing-2026-10-25.json', import.meta.url), 'utf8')) as TakoPricingResponse
 const data = fixture.data ?? []
@@ -215,5 +215,51 @@ describe('contextFromTags', () => {
     expect(contextFromTags(['31B', 'Open model'])).toBeUndefined()
     expect(contextFromTags(['272K tokens'])).toBeUndefined()
     expect(contextFromTags([])).toBeUndefined()
+  })
+})
+
+describe('buildCards', () => {
+  it('pairs display fields with the filtered models in route order', () => {
+    const data: TakoPricingModel[] = [
+      { model_name: 'b-model', kind: 'chat', description: 'Beta', tags: '272K', vendor_id: 7 },
+      { model_name: 'a-model', kind: 'chat', icon: 'alpha', tags: 'Vision,1M', context_length: 1_000_000,
+        supported_endpoint_types: ['openai', 'anthropic'], enable_groups: ['default'],
+        model_ratio: 2, completion_ratio: 4,
+        channels: [
+          { channel_name: 'fast', channel_tag: '安全', realized_price_per_million: 6.5, cache_hit_rate: 0.8 },
+          { channel_name: 'cheap', realized_price_per_million: 3.2 },
+        ] },
+      { model_name: 'tool', kind: 'image-generation' },
+    ]
+    const models = buildCatalog(data, { pinned: ['b-model'] })
+    const cards = buildCards(data, models)
+    expect(models.map(m => m.id)).toEqual(['b-model', 'a-model'])
+    expect(cards.map(c => c.id)).toEqual(['b-model', 'a-model'])
+    const a = cards[1]!
+    expect(a.vendor).toBe('alpha')
+    expect(cards[0]!.description).toBe('Beta')
+    expect(a.description).toBeUndefined()
+    expect(a.contextWindow).toBe(1_000_000)
+    expect(a.vision).toBe(true)
+    expect(a.reasoning).toBe(true)
+    expect(a.endpoints).toEqual(['openai', 'anthropic'])
+    expect(a.groups).toEqual(['default'])
+    expect(a.standardPriceUsdPerMillion).toBe(4)
+    expect(a.realizedPriceUsdPerMillion).toBe(3.2)
+    expect(a.cacheHitRate).toBe(0.8)
+    expect(a.channelCount).toBe(2)
+    expect(a.channelTag).toBe('安全')
+    expect(a.outputRatio).toBe(4)
+  })
+
+  it('falls back to a sparse card for models without a pricing row and skips non-chat rows', () => {
+    const data: TakoPricingModel[] = [{ model_name: 'kept', kind: 'chat' }, { model_name: 'dropped', kind: 'image-generation' }]
+    const models = buildCatalog(data)
+    expect(models.map(m => m.id)).toEqual(['kept'])
+    const cards = buildCards([{ model_name: 'other' }], models)
+    expect(cards).toHaveLength(1)
+    expect(cards[0]!.id).toBe('kept')
+    expect(cards[0]!.channelCount).toBe(0)
+    expect(cards[0]!.tags).toEqual([])
   })
 })

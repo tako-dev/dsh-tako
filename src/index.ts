@@ -13,8 +13,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
-import type { CatalogOptions, TakoModel, TakoModelOverride, TakoPricingResponse, TakoReasoningEfforts } from './catalog.ts'
-import { buildCatalog, DEFAULT_REASONING_EFFORTS } from './catalog.ts'
+import type { CatalogOptions, TakoModel, TakoModelCard, TakoModelOverride, TakoPricingResponse, TakoReasoningEfforts } from './catalog.ts'
+import { buildCards, buildCatalog, DEFAULT_REASONING_EFFORTS } from './catalog.ts'
 import { applySearch } from './search.ts'
 import { applyTakoSkills } from './skills.ts'
 import { DEFAULT_API_KEY_ENV, DEFAULT_BASE_URL, normalizeOrigin } from './shared.ts'
@@ -201,6 +201,8 @@ export interface SyncDeps {
   sectionRetryMs?: number
   /** How many times to re-check for the section before giving up until the next refresh. */
   sectionRetries?: number
+  /** Receives a trigger that runs one sync immediately (the console's refresh route). */
+  exposeTrigger?: (fn: () => void) => void
 }
 
 /**
@@ -252,11 +254,12 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
   }
 
   /** Keep the console route's view of the catalog current after each sync. */
-  const record = (models: readonly TakoModel[]): void => {
+  const record = (models: readonly TakoModel[], cards: readonly TakoModelCard[] = []): void => {
     if (deps.catalog === undefined || controller.signal.aborted) return
     deps.catalog.status = 'ready'
     deps.catalog.lastError = null
     deps.catalog.models = models.map(model => ({ ...model }))
+    deps.catalog.cards = cards.map(card => ({ ...card }))
     deps.catalog.lastSyncAt = Date.now()
     deps.catalog.nextSyncAt = config.refreshIntervalMs > 0 ? deps.catalog.lastSyncAt + config.refreshIntervalMs : null
   }
@@ -316,10 +319,12 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
   const attemptSync = async (sectionAttempt: number, recoveryAttempt: number, retry: () => void): Promise<void> => {
     const signal = controller.signal
     let models: TakoModel[] | undefined
+    let cards: TakoModelCard[] = []
     let fetchError: unknown
     try {
       const directory = await fetchDirectory(config.baseURL, signal, fetchImpl)
       models = buildCatalog(directory.data ?? [], catalogOptions)
+      cards = buildCards(directory.data ?? [], models)
     } catch (error: unknown) {
       fetchError = error
     }
@@ -350,7 +355,7 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
           failed('empty-catalog')
           return
         }
-        if (await write(section, models)) record(models)
+        if (await write(section, models)) record(models, cards)
         else failed('read-only')
         return
       }
@@ -371,6 +376,7 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
   }
 
   void sync()
+  deps.exposeTrigger?.(() => { void sync() })
   return () => {
     controller.abort()
     for (const timer of timers) clearTimeout(timer)
@@ -389,8 +395,13 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
  */
 export function apply(ctx: Context, config: Config): void {
   const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: null }
-  ctx.effect(() => start(ctx, config, { catalog }))
-  applyWeb(ctx, config, { catalog: () => catalog })
+  // The console's refresh route reaches the loop's sync through this slot.
+  const web: { catalog: () => CatalogState, requestSync?: () => void } = { catalog: () => catalog }
+  ctx.effect(() => start(ctx, config, {
+    catalog,
+    exposeTrigger: fn => { web.requestSync = fn },
+  }))
+  applyWeb(ctx, config, web)
   applySearch(ctx, config)
   applyTakoSkills(ctx)
   applyTakoTools(ctx, config)

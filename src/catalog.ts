@@ -21,6 +21,30 @@ export interface TakoPricingModel {
   reasoning_levels?: string[]
   kind?: string
   client_restriction?: string | null
+  /** Vendor mark; `vendor_icon` is the legacy name for the same slot. */
+  icon?: string
+  vendor_icon?: string
+  vendor_id?: number
+  /** List price multiplier; the site's standard price is `model_ratio × 2` USD per million tokens. */
+  model_ratio?: number
+  /** Output-side multiplier over the input price. */
+  completion_ratio?: number
+  cache_ratio?: number
+  /** The site's own list price per million input tokens, when published. */
+  standard_load_price_per_million?: number
+  /** Per-channel pricing rows, when the directory publishes them. */
+  channels?: TakoPricingChannel[]
+}
+
+/** One channel row inside a pricing card. */
+export interface TakoPricingChannel {
+  channel_name: string
+  channel_tag?: string
+  channel_ratio?: number
+  /** What this channel actually charges per million input tokens. */
+  realized_price_per_million?: number
+  standard_load_price_per_million?: number
+  cache_hit_rate?: number
 }
 
 /** `GET /api/pricing` response. */
@@ -233,4 +257,100 @@ export function buildCatalog(data: readonly TakoPricingModel[], options: Catalog
     return index === -1 ? pinned.length : index
   }
   return models.sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id))
+}
+
+// ---------------------------------------------------------------- model cards
+
+/**
+ * The display-only card the console renders next to each route model. These
+ * carry the fields the Tako plaza shows (description, tags, channel pricing)
+ * that never enter `providers.tako`.
+ */
+export interface TakoModelCard {
+  id: string
+  description?: string
+  /** Vendor identifier for the monogram chip: the icon string, else the numeric vendor id. */
+  vendor?: string
+  icon?: string
+  tags: string[]
+  endpoints: string[]
+  groups: string[]
+  contextWindow?: number
+  vision: boolean
+  reasoning: boolean
+  claudeCodeOnly: boolean
+  /** Site list price per million input tokens; `model_ratio × 2` when unpublished. */
+  standardPriceUsdPerMillion?: number
+  /** Cheapest channel's realized price per million input tokens. */
+  realizedPriceUsdPerMillion?: number
+  /** Best channel cache-hit rate, between 0 and 1. */
+  cacheHitRate?: number
+  channelCount: number
+  /** First channel's tag (e.g. a stability or vendor label), when published. */
+  channelTag?: string
+  /** Output-side multiplier over the input price; omitted when 1. */
+  outputRatio?: number
+}
+
+/**
+ * Project one directory card onto a filtered route model for the console.
+ * @param card - the pricing row the model came from.
+ * @param model - the resulting route model (override-applied), for display flags.
+ */
+export function toModelCard(card: TakoPricingModel, model: TakoModel): TakoModelCard {
+  const tags = parseTags(card.tags)
+  const channels = Array.isArray(card.channels) ? card.channels : []
+  const realized = channels
+    .map(channel => typeof channel.realized_price_per_million === 'number' && Number.isFinite(channel.realized_price_per_million)
+      ? channel.realized_price_per_million : undefined)
+    .filter((value): value is number => value !== undefined)
+  const cacheHits = channels
+    .map(channel => typeof channel.cache_hit_rate === 'number' && Number.isFinite(channel.cache_hit_rate) ? channel.cache_hit_rate : undefined)
+    .filter((value): value is number => value !== undefined)
+  const vendor = typeof card.icon === 'string' && card.icon !== '' ? card.icon
+    : typeof card.vendor_icon === 'string' && card.vendor_icon !== '' ? card.vendor_icon
+    : typeof card.vendor_id === 'number' ? String(card.vendor_id) : undefined
+  const standard = typeof card.standard_load_price_per_million === 'number' && Number.isFinite(card.standard_load_price_per_million)
+    ? card.standard_load_price_per_million
+    : typeof card.model_ratio === 'number' && Number.isFinite(card.model_ratio) ? card.model_ratio * 2 : undefined
+  const restricted = card.client_restriction !== undefined
+    ? card.client_restriction !== null
+    : tags.includes(CLAUDE_CODE_ONLY_TAG)
+  return {
+    id: model.id,
+    ...typeof card.description === 'string' && card.description !== '' ? { description: card.description } : {},
+    ...vendor === undefined ? {} : { vendor },
+    ...vendor === undefined || typeof card.icon !== 'string' || card.icon === '' ? {} : { icon: card.icon },
+    tags,
+    endpoints: Array.isArray(card.supported_endpoint_types) ? card.supported_endpoint_types.filter(type => typeof type === 'string') : [],
+    groups: Array.isArray(card.enable_groups) ? card.enable_groups.filter(group => typeof group === 'string') : [],
+    ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
+    vision: (model.input ?? []).includes('image'),
+    reasoning: model.reasoningEfforts !== false,
+    claudeCodeOnly: restricted,
+    ...standard === undefined ? {} : { standardPriceUsdPerMillion: standard },
+    ...realized.length === 0 ? {} : { realizedPriceUsdPerMillion: Math.min(...realized) },
+    ...cacheHits.length === 0 ? {} : { cacheHitRate: Math.max(...cacheHits) },
+    channelCount: channels.length,
+    ...typeof channels[0]?.channel_tag === 'string' && channels[0].channel_tag !== '' ? { channelTag: channels[0].channel_tag } : {},
+    ...typeof card.completion_ratio === 'number' && Number.isFinite(card.completion_ratio) && card.completion_ratio !== 1 ? { outputRatio: card.completion_ratio } : {},
+  }
+}
+
+/**
+ * Build the console's card list in route order. Cards are skipped when their
+ * pricing row cannot be matched back, so the client can fall back to the plain
+ * model rows for those ids.
+ */
+export function buildCards(data: readonly TakoPricingModel[], models: readonly TakoModel[]): TakoModelCard[] {
+  const cardsById = new Map<string, TakoModelCard>()
+  for (const card of data) {
+    const id = card.model_name.trim()
+    if (id === '' || cardsById.has(id)) continue
+    cardsById.set(id, toModelCard(card, { ...toModel(card), id }))
+  }
+  return models.map(model => {
+    const card = cardsById.get(model.id)
+    return card === undefined ? toModelCard({ model_name: model.id }, model) : { ...card, vision: model.input?.includes('image') === true, reasoning: model.reasoningEfforts !== false, ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow } }
+  })
 }
