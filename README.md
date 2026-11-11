@@ -70,6 +70,8 @@ dsh web
 
 插件装进 profile 后由 pnpm 管理。启用 profile 配置/清单 HMR 时，新增组合包可以热加载；这只说明插件已挂载，不代表模型目录同步完成。更新已加载插件的代码不保证重新 import，更新完成后重启 dsh 才加载新版本；未启用 HMR 时，新增插件也需重启。
 
+如果新版 Client 在旧 Host 模块退出前先被热加载，控制台会读取轻量的 `/api/tako.catalog` 协议版本：版本缺失或不匹配时保留旧版概览，停止请求新版 `key`／`logs`／`usage`／`notice`／`config`／`sync` 路由，并明确提示重启，而不是让整页出现 404。重启后才启用完整六标签控制台。
+
 - **控制台（推荐）**：打开「Tako 控制台」的「更新」卡，落后时点「立即更新」。插件会把最新版装进当前 profile，装完提示重启 dsh。
 - **命令行**：`npx dsh-tako update [--profile web]`，同样会安装并打印重启提示。
 - **退路**：仍可复制并手动执行 `dsh plugin --profile web add dsh-tako`（锁版本写 `dsh-tako@0.4.0`；用 GitHub Release 的 tgz URL 安装的，换成新版本的 URL 即可）。
@@ -266,6 +268,8 @@ Set the key in **Settings → Models → Tako** (stored as `TAKO_API_KEY` in `$D
 ### Updating
 
 The plugin is installed into the profile by pnpm. With profile configuration/manifest HMR enabled, adding a new bundle can hot-load it; activation does not mean the model catalog has synced. Updating already-loaded plugin code does not guarantee a fresh import: restart dsh after updating. Without HMR, restart after adding a plugin too. There is no silent self-upgrade on startup.
+
+If a new Client hot-loads before the previous Host module exits, the console reads the protocol version from the lightweight `/api/tako.catalog` response. A missing or mismatched version keeps the legacy overview available, suppresses requests to the new `key`, `logs`, `usage`, `notice`, `config`, and `sync` routes, and asks for a restart instead of rendering a page of 404 errors. The complete six-tab console activates after the restart.
 
 Catalog fetch/write failures use bounded recovery delays (`syncRetryDelaysMs`, default `[1000, 5000, 30000]`) before the regular `refreshIntervalMs` schedule. The console catalog response exposes phase, attempts, configured interval and a safe stage-specific `lastError`; failures retain prior successful models. Legacy HMR's nested-transaction rejection is labelled `runtime-transaction`, with a restart action if recovery keeps failing; the plugin cannot repair its host's transaction implementation. The mounted panel reads pending state every two seconds, at most30times, then retains any advertised future refresh deadline and offers explicit status refresh. Overdue deadlines are checked at least one minute apart. After success it reads near the next scheduled refresh; unmount cancels pending reads. `refreshIntervalMs: 0` disables regular refresh, not the initial attempt or bounded recovery.
 
