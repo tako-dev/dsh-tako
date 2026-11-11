@@ -60,6 +60,8 @@ export const NOTICE_ROUTE = '/api/tako.notice'
 export const CONFIG_ROUTE = '/api/tako.config'
 /** Console route: ask the sync loop for an immediate catalog refresh. */
 export const SYNC_ROUTE = '/api/tako.sync'
+/** Browser/Host console protocol implemented by this running plugin instance. */
+export const CONSOLE_API_VERSION = 2
 
 /** Same grammar the settings controller enforces for credential references. */
 const CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/u
@@ -416,20 +418,21 @@ export function createConsoleService(options: ConsoleServiceOptions): {
 
   const handleStatus = async (): Promise<Response> => {
     const credentials = options.credentials()
-    if (credentials === undefined) return json({ configured: false })
+    if (credentials === undefined) return json({ consoleApiVersion: CONSOLE_API_VERSION, configured: false })
     let current: { value: string, source: string } | undefined
     try {
       current = await credentials.resolve(options.apiKeyEnv)
     } catch (error: unknown) {
       options.logger.warn('resolving %s failed: %s', options.apiKeyEnv, error instanceof Error ? error.message : String(error))
-      return json({ configured: false })
+      return json({ consoleApiVersion: CONSOLE_API_VERSION, configured: false })
     }
-    if (current === undefined) return json({ configured: false })
+    if (current === undefined) return json({ consoleApiVersion: CONSOLE_API_VERSION, configured: false })
     const maskedKey = maskKey(current.value)
     const fingerprint = createHash('sha256').update(current.value).digest('hex')
     // A display mask is not an account identity. Neither the key nor its fingerprint leaves the host.
     if (cache !== undefined && cache.fingerprint === fingerprint && now() - cache.at < cacheMs) {
       return json({
+        consoleApiVersion: CONSOLE_API_VERSION,
         configured: true, origin, baseURL: origin, maskedKey, credential: options.apiKeyEnv, me: cache.me, plan: cache.plan,
         ...(cache.meError === undefined ? {} : { meError: cache.meError }),
         ...(cache.planError === undefined ? {} : { planError: cache.planError }),
@@ -451,6 +454,7 @@ export function createConsoleService(options: ConsoleServiceOptions): {
     }
     cache = { fingerprint, at: now(), me, meError, plan, planError }
     return json({
+      consoleApiVersion: CONSOLE_API_VERSION,
       configured: true, origin, baseURL: origin, maskedKey, credential: options.apiKeyEnv, me, plan,
       ...(meError === undefined ? {} : { meError }),
       ...(planError === undefined ? {} : { planError }),
@@ -489,7 +493,7 @@ export function createConsoleService(options: ConsoleServiceOptions): {
 
   const handleCatalog = async (): Promise<Response> => {
     const state = options.catalog()
-    return json({ ...state, models: state.models.map(model => ({ ...model })) })
+    return json({ consoleApiVersion: CONSOLE_API_VERSION, ...state, models: state.models.map(model => ({ ...model })) })
   }
 
   /**

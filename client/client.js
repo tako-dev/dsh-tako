@@ -39,6 +39,8 @@ window.__ModuleLoader__.load({
     const NOTICE_ROUTE = 'api/tako.notice'
     const CONFIG_ROUTE = 'api/tako.config'
     const SYNC_ROUTE = 'api/tako.sync'
+    /** New 0.6 console routes require this running Host protocol. */
+    const CONSOLE_API_VERSION = 2
     /** The command the update card offers: re-running the install upgrades the plugin. */
     const UPGRADE_COMMAND = 'dsh plugin --profile web add dsh-tako'
     const PI_AI_NS = 'llm-pi-ai'
@@ -116,6 +118,7 @@ window.__ModuleLoader__.load({
         refreshOnlyAtStartup: '只在启动时刷新',
         loadFailed: '加载失败',
         retry: '重试',
+        consoleRestartRequired: '控制台已更新，但 Host 仍在运行旧版插件。请重启 dsh 后使用全部功能。',
         // update card
         updateCard: '更新',
         updateAvailable: '有新版本',
@@ -327,6 +330,7 @@ window.__ModuleLoader__.load({
         refreshOnlyAtStartup: 'refreshed at startup only',
         loadFailed: 'Could not load',
         retry: 'Retry',
+        consoleRestartRequired: 'The console was updated while the Host is still running the previous plugin. Restart dsh to use every feature.',
         // update card
         updateCard: 'Update',
         updateAvailable: 'Update available:',
@@ -521,6 +525,27 @@ window.__ModuleLoader__.load({
       return data
     }
 
+    /** Read the lightweight catalog route to classify the running Host before exposing 0.6-only controls. */
+    function useConsoleApiVersion() {
+      const [version, setVersion] = useState(undefined)
+      useEffect(() => {
+        let alive = true
+        let timer
+        const probe = async () => {
+          try {
+            const value = await call('GET', CATALOG_ROUTE)
+            if (alive) setVersion(value && value.consoleApiVersion === CONSOLE_API_VERSION ? CONSOLE_API_VERSION : 0)
+          } catch {
+            // Transport failure is not evidence of an old Host. Keep safe controls visible and retry locally.
+            if (alive) timer = setTimeout(probe, 2000)
+          }
+        }
+        void probe()
+        return () => { alive = false; clearTimeout(timer) }
+      }, [])
+      return version
+    }
+
     /**
      * The browser sign-in flow, shared by the Models-page card and the console
      * panel: start (opens the tab inside the click so popup blockers allow it)
@@ -691,6 +716,7 @@ window.__ModuleLoader__.load({
       const provider = props.provider
       const t = props.t ?? fallbackT
       const login = useTakoLogin()
+      const consoleApiVersion = useConsoleApiVersion()
       if (provider === undefined || provider.provider !== PROVIDER) return null
 
       const children = []
@@ -706,7 +732,11 @@ window.__ModuleLoader__.load({
       ))
       const progress = LoginProgress({ state: login.state, t })
       if (progress !== null) children.push(h('div', { key: 'progress' }, progress))
-      children.push(h(PasteKeyRow, { key: 'paste', t }))
+      if (consoleApiVersion === CONSOLE_API_VERSION) children.push(h(PasteKeyRow, { key: 'paste', t }))
+      else if (consoleApiVersion === 0) children.push(h('div', {
+        key: 'restart-required', role: 'alert', 'data-testid': 'dsh-tako-sign-in-restart-required',
+        style: { fontSize: '0.85em', color: 'var(--dsw-alias-state-warn-primary)' },
+      }, t('consoleRestartRequired')))
       return h('div', { 'data-dsh-tako': 'sign-in', style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' } }, children)
     }
 
@@ -1120,7 +1150,7 @@ window.__ModuleLoader__.load({
       if (props.logoutNote !== undefined) {
         body.push(h('div', { key: 'note', role: 'status', style: { fontSize: '0.85em', overflowWrap: 'anywhere' } }, props.logoutNote))
       }
-      body.push(h(KeyEditor, { key: 'key-editor', status, t, onChanged: props.onKeyChanged }))
+      if (props.allowKeyEditor !== false) body.push(h(KeyEditor, { key: 'key-editor', status, t, onChanged: props.onKeyChanged }))
       const wrap = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, flex: 1 } }, ...body)
       if (compact) return h('section', { className: 'dsh-tako-section', 'data-dsh-tako-card': 'account' },
         h('div', { className: 'dsh-tako-kicker' }, t('accountCard')), wrap)
@@ -1739,7 +1769,8 @@ window.__ModuleLoader__.load({
           ? h(NoticeList, { key: 'notice', notice: props.notice, dismissed: props.dismissed || [], onDismiss: props.onDismiss, t })
           : null,
         AccountCard({ status: props.status, login: props.login, busyLogout: props.busyLogout, compact: true,
-          onLogout: props.onLogout, logoutNote: props.logoutNote, t, onKeyChanged: props.onKeyChanged }),
+          onLogout: props.onLogout, logoutNote: props.logoutNote, t, onKeyChanged: props.onKeyChanged,
+          allowKeyEditor: props.allowKeyEditor }),
         QuotaCard({ status: props.status, origin: props.origin, t }),
         ServicesCard({ origin: props.origin, t }),
         h(UpdateCard, { key: 'update', t }))
@@ -2145,6 +2176,7 @@ window.__ModuleLoader__.load({
 
       useEffect(() => { void loadStatus() }, [])
       useEffect(() => {
+        if (catalog === undefined || catalog.consoleApiVersion !== CONSOLE_API_VERSION) return
         void (async () => {
           try {
             const result = await call('GET', NOTICE_ROUTE)
@@ -2153,7 +2185,7 @@ window.__ModuleLoader__.load({
             if (alive.current) setNotice({ ok: false })
           }
         })()
-      }, [])
+      }, [catalog && catalog.consoleApiVersion])
       useEffect(() => {
         let disposed = false
         let timer
@@ -2232,7 +2264,13 @@ window.__ModuleLoader__.load({
           status && status.maskedKey ? h('span', { className: 'dsh-tako-hero-meta', style: mono }, status.maskedKey) : null),
         h('span', { className: 'dsh-tako-hero-spacer' }),
         h('button', { type: 'button', className: 'dsh-tako-btn', 'data-testid': 'dsh-tako-copy-diagnostics', onClick: () => { void copyDiagnostics() } }, diagCopied ? t('diagCopied') : t('diagCopy')))
-      const tabs = h('div', { key: 'tabs', className: 'dsh-tako-tabs', role: 'tablist' },
+      const renderPage = children => h('div', {
+        'data-testid': 'dsh-tako-console-page',
+        style: { height: '100%', minHeight: 0, overflowY: 'auto', fontSize: '14px', lineHeight: '22px' },
+      }, h('div', { className: 'dsh-tako-sheet' }, children))
+      const protocolPending = catalog === undefined
+      const legacyHost = catalog !== undefined && catalog.consoleApiVersion !== CONSOLE_API_VERSION
+      const tabs = protocolPending || legacyHost ? undefined : h('div', { key: 'tabs', className: 'dsh-tako-tabs', role: 'tablist' },
         TABS.map(([id, key]) => h('button', {
           key: id,
           type: 'button',
@@ -2242,7 +2280,30 @@ window.__ModuleLoader__.load({
           'data-testid': `dsh-tako-tab-${id}`,
           onClick: () => setTab(id),
         }, t(key))))
-      const children = [hero, tabs]
+      const children = tabs === undefined ? [hero] : [hero, tabs]
+      if (protocolPending || legacyHost) {
+        if (legacyHost) children.push(h('div', {
+          key: 'restart-required', role: 'alert', className: 'dsh-tako-section',
+          'data-testid': 'dsh-tako-console-restart-required',
+          style: { color: 'var(--dsw-alias-state-warn-primary)' },
+        }, t('consoleRestartRequired')))
+        else if (catalogError !== undefined) children.push(h('div', {
+          key: 'catalog-error', role: 'alert', className: 'dsh-tako-section',
+          style: { color: 'var(--dsw-alias-state-error-primary)' },
+        }, `${t('loadFailed')}: ${catalogError}`,
+        h('button', { type: 'button', onClick: () => { void loadCatalog() }, className: 'dsh-tako-ghost' }, t('retry'))))
+        else children.push(h('div', { key: 'protocol-loading', style: muted }, '…'))
+        children.push(h(OverviewTab, {
+          key: 'overview', t, status, login, busyLogout, onLogout: logout, logoutNote,
+          onKeyChanged: async () => {}, allowKeyEditor: false, origin, notice: undefined,
+          dismissed: [], onDismiss: () => {},
+        }))
+        if (catalog !== undefined) children.push(h(CatalogCard, {
+          key: 'catalog', t, catalog, error: catalogError, origin,
+          onRefresh: () => { void loadCatalog() },
+        }))
+        return renderPage(children)
+      }
       if (statusError !== undefined) {
         children.push(h('div', { key: 'err', role: 'alert', style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: '0.9em', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
           `${t('loadFailed')}: ${statusError}`,
@@ -2255,11 +2316,7 @@ window.__ModuleLoader__.load({
       else if (tab === 'models') children.push(h(ModelsTab, { key: 'models', t, catalog, catalogError, origin, onRefresh: () => { void loadCatalog() } }))
       else if (tab === 'key') children.push(h(KeyTab, { key: 'key', t, status, configured: status !== undefined && status.configured === true, onKeyChanged }))
       else if (tab === 'config') children.push(h(ConfigTab, { key: 'config', t }))
-      return h('div', {
-        'data-testid': 'dsh-tako-console-page',
-        style: { height: '100%', minHeight: 0, overflowY: 'auto', fontSize: '14px', lineHeight: '22px' },
-      },
-        h('div', { className: 'dsh-tako-sheet' }, children))
+      return renderPage(children)
     }
 
     return {

@@ -31,7 +31,7 @@ const EXPECTED_KEYS = [
   'catalogCard', 'catalogModel', 'catalogContext', 'catalogVision', 'visionBadge', 'yes', 'no', 'catalogDefault', 'catalogEmpty',
   'catalogMore', 'catalogLess', 'catalogSyncing', 'catalogRetrying', 'catalogFailed', 'catalogAttempts', 'catalogReadAgain',
   'catalogDirectoryError', 'catalogSettingsError', 'catalogWriteError', 'catalogReadOnlyError', 'catalogEmptyError', 'catalogTransactionError',
-  'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry',
+  'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry', 'consoleRestartRequired',
   'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'pluginVersion', 'copy', 'copied', 'updateFailed',
   'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
   'footerRemain', 'footerUsed', 'windowHours', 'weeklyShort', 'walletBalance', 'planWindows',
@@ -264,7 +264,7 @@ describe('client i18n: registration', () => {
     const previous = win.location.hostname
     win.location.hostname = 'app'
     win.__DSH_TAKO_PROFILE__ = true
-    hookStates = [{ status: 'pending', id: '1', url: 'https://tako.example/app/authorize' }, '', false, false, undefined]
+    hookStates = [{ status: 'pending', id: '1', url: 'https://tako.example/app/authorize' }, 2, '', false, false, undefined]
     try {
       const { plugin } = materialize()
       const { ctx, entries, runInjections } = stubCtx()
@@ -280,6 +280,67 @@ describe('client i18n: registration', () => {
     } finally {
       win.location.hostname = previous
       delete win.__DSH_TAKO_PROFILE__
+      hookStates = []
+    }
+  })
+
+  it('keeps browser sign-in but blocks the 0.6-only paste route on a previous Host', async () => {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const face = localeService()
+    const { ctx, entries, runInjections } = stubCtx({ locale: face })
+    plugin.apply(ctx)
+    runInjections()
+    const SignIn = entries.find(entry => entry.slot === 'settings.models.provider-card')!.component
+    try {
+      face.setActive('en')
+      hookStates = [{ status: 'idle' }, 0]
+      const legacy = render(SignIn, { provider: { provider: 'tako' }, keyConfigured: false, t: face.bind() }) as Element
+      expect(findByTestId(legacy, 'dsh-tako-sign-in')).toBeDefined()
+      expect(findByTestId(legacy, 'dsh-tako-paste-key')).toBeUndefined()
+      expect(findByTestId(legacy, 'dsh-tako-sign-in-restart-required')).toBeDefined()
+      hookStates = [{ status: 'idle' }, 2, '', false, undefined]
+      const current = render(SignIn, { provider: { provider: 'tako' }, keyConfigured: false, t: face.bind() }) as Element
+      expect(findByTestId(current, 'dsh-tako-paste-key')).toBeDefined()
+      expect(findByTestId(current, 'dsh-tako-sign-in-restart-required')).toBeUndefined()
+    } finally { hookStates = [] }
+  })
+
+  it('retries the Host protocol probe after a transient catalog failure', async () => {
+    await loadModuleRow()
+    vi.useFakeTimers()
+    const effects: (() => void | (() => void))[] = []
+    const updates: Array<{ index: number, value: unknown }> = []
+    const { plugin, render } = materialize({
+      effect: callback => { effects.push(callback) },
+      setState: (index, value) => { updates.push({ index, value }) },
+    })
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    const SignIn = entries.find(entry => entry.slot === 'settings.models.provider-card')!.component
+    let calls = 0
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (!String(input).includes('tako.catalog')) return new Response(null, { status: 404 })
+      calls++
+      if (calls === 1) throw new Error('temporary connection loss')
+      return Response.json({ consoleApiVersion: 2, models: [] })
+    }))
+    const disposers: (() => void)[] = []
+    try {
+      hookStates = [{ status: 'idle' }, undefined]
+      render(SignIn, { provider: { provider: 'tako' }, keyConfigured: false })
+      for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
+      await vi.advanceTimersByTimeAsync(0)
+      expect(calls).toBe(1)
+      expect(updates.some(update => update.index === 1)).toBe(false)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(calls).toBe(2)
+      expect(updates).toContainEqual({ index: 1, value: 2 })
+    } finally {
+      for (const dispose of disposers) dispose()
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
       hookStates = []
     }
   })
@@ -351,7 +412,7 @@ describe('client i18n: fallback without the locale service', () => {
     plugin.apply(ctx)
     runInjections()
     const page = entries.find(entry => entry.slot === 'main')!.component
-    const catalog = { models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] }], nextSyncAt: Date.now() + 5 * 60_000 }
+    const catalog = { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] }], nextSyncAt: Date.now() + 5 * 60_000 }
     // useState order in TakoConsolePage: status, statusError, catalog, catalogError,
     // busyLogout, logoutNote, tab, notice, dismissedNotice, diagCopied, then
     // useTakoLogin's login state (index 10). Components the stub inlines share
@@ -389,7 +450,7 @@ describe('client i18n: fallback without the locale service', () => {
       expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), '模型')).toBe('模型')
       expect(findText(rendered, '分钟后刷新')).toBe('约 5 分钟后刷新')
 
-      hookStates = [{ configured: false }, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, { status: 'idle' }, '', false, false, undefined]
+      hookStates = [{ consoleApiVersion: 2, configured: false }, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, { status: 'idle' }, '', false, false, undefined]
       rendered = render(page, { t: face.bind() }) as Element
       expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
       expect(findText(rendered, '钥匙走')).toBe('登录后，额度、模型和搜索会跟这把钥匙走')
@@ -398,6 +459,7 @@ describe('client i18n: fallback without the locale service', () => {
       expect(findByTestId(rendered, 'dsh-tako-tabpanel-models')).toBeUndefined()
 
       hookStates = [{
+        consoleApiVersion: 2,
         configured: true,
         maskedKey: 'cr_****abcd',
         me: { userName: 'Ada', planName: 'Pro' },
@@ -416,6 +478,85 @@ describe('client i18n: fallback without the locale service', () => {
     }
   })
 
+  it('keeps a previous Host usable and blocks 0.6-only routes until restart', async () => {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const face = localeService()
+    const { ctx, entries, runInjections } = stubCtx({ locale: face })
+    plugin.apply(ctx)
+    runInjections()
+    const page = entries.find(entry => entry.slot === 'main')!.component
+    const catalog = { models: [{ id: 'existing-model' }], nextSyncAt: null }
+    hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined, catalog, undefined,
+      false, undefined, 'requests', undefined, undefined, false, { status: 'idle' }]
+    try {
+      face.setActive('en')
+      const rendered = render(page, { t: face.bind() }) as Element
+      expect(findByTestId(rendered, 'dsh-tako-console-restart-required')).toBeDefined()
+      expect(JSON.stringify(rendered)).toContain('Restart dsh')
+      expect(findByTestId(rendered, 'dsh-tako-tabpanel-requests')).toBeUndefined()
+      expect(findByTestId(rendered, 'dsh-tako-console-sign-out')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-key-input')).toBeUndefined()
+    } finally { hookStates = [] }
+  })
+
+  it('keeps legacy-safe cards visible while the protocol catalog is unavailable', async () => {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const face = localeService()
+    const { ctx, entries, runInjections } = stubCtx({ locale: face })
+    plugin.apply(ctx)
+    runInjections()
+    const page = entries.find(entry => entry.slot === 'main')!.component
+    hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined, undefined, 'HTTP 503',
+      false, undefined, 'requests', undefined, undefined, false, { status: 'idle' }]
+    try {
+      face.setActive('en')
+      const rendered = render(page, { t: face.bind() }) as Element
+      expect(findByAttr(rendered, 'data-dsh-tako-card', 'account')).toBeDefined()
+      expect(findByAttr(rendered, 'data-dsh-tako-card', 'services')).toBeDefined()
+      expect(findByAttr(rendered, 'data-dsh-tako-card', 'update')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-console-restart-required')).toBeUndefined()
+      expect(findByTestId(rendered, 'dsh-tako-tabpanel-requests')).toBeUndefined()
+      expect(JSON.stringify(rendered)).toContain('HTTP 503')
+    } finally { hookStates = [] }
+  })
+
+  it('never calls 0.6-only routes while a previous Host is still running', async () => {
+    await loadModuleRow()
+    const effects: (() => void | (() => void))[] = []
+    const { plugin, render } = materialize({ effect: callback => { effects.push(callback) } })
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    const fetchImpl = vi.fn(async (input: string) => {
+      const url = String(input)
+      if (url.includes('tako.status')) return Response.json({ configured: true, maskedKey: 'cr_****abcd' })
+      if (url.includes('tako.catalog')) return Response.json({ models: [], lastSyncAt: 1, nextSyncAt: null, status: 'ready' })
+      if (url.includes('tako.update')) return Response.json({ current: '0.5.22', latest: '0.6.0', upToDate: false })
+      return new Response(null, { status: 404 })
+    })
+    vi.stubGlobal('fetch', fetchImpl)
+    const disposers: (() => void)[] = []
+    try {
+      hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined,
+        { models: [], lastSyncAt: 1, nextSyncAt: null, status: 'ready' }, undefined,
+        false, undefined, 'overview', undefined, undefined, false, { status: 'idle' }]
+      render(entries.find(entry => entry.slot === 'main')!.component, {})
+      for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
+      await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3))
+      const routes = fetchImpl.mock.calls.map(([input]) => String(input))
+      expect(routes).toEqual(expect.arrayContaining(['/api/tako.status', '/api/tako.catalog', '/api/tako.update']))
+      for (const route of ['/api/tako.key', '/api/tako.logs', '/api/tako.usage', '/api/tako.notice', '/api/tako.config', '/api/tako.sync']) {
+        expect(routes).not.toContain(route)
+      }
+    } finally {
+      for (const dispose of disposers) dispose()
+      vi.unstubAllGlobals()
+      hookStates = []
+    }
+  })
+
   it('shows safe retry failure and the real interval before a first successful catalog sync', async () => {
     await loadModuleRow()
     const { plugin, render } = materialize()
@@ -423,7 +564,7 @@ describe('client i18n: fallback without the locale service', () => {
     plugin.apply(ctx)
     runInjections()
     const page = entries.find(entry => entry.slot === 'main')!.component
-    hookStates = [undefined, undefined, { models: [], lastSyncAt: null, nextSyncAt: null, refreshIntervalMs: 1800000,
+    hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: null, refreshIntervalMs: 1800000,
       status: 'failed', attempts: 4, lastError: { code: 'write-failed', message: 'untrusted-payload', at: 10 } },
     undefined, false, undefined, 'models', undefined, undefined, false, { status: 'idle' }]
     try {
@@ -451,10 +592,10 @@ describe('client i18n: fallback without the locale service', () => {
     const page = entries.find(entry => entry.slot === 'main')!.component
     let calls = 0
     vi.stubGlobal('fetch', vi.fn(async (input: string) => {
-      if (!String(input).includes('tako.catalog')) return Response.json({ configured: false })
+      if (!String(input).includes('tako.catalog')) return Response.json({ consoleApiVersion: 2, configured: false })
       calls++
-      return Response.json(calls === 1 ? { models: [], lastSyncAt: null, nextSyncAt: Date.now() + 1000, status: 'retrying' }
-        : { models: [{ id: 'recovered' }], lastSyncAt: Date.now(), nextSyncAt: null, status: 'ready' })
+      return Response.json(calls === 1 ? { consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: Date.now() + 1000, status: 'retrying' }
+        : { consoleApiVersion: 2, models: [{ id: 'recovered' }], lastSyncAt: Date.now(), nextSyncAt: null, status: 'ready' })
     }))
     const disposers: (() => void)[] = []
     try {
@@ -490,10 +631,10 @@ describe('client i18n: fallback without the locale service', () => {
     let calls = 0
     let signal: AbortSignal | undefined
     vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit) => {
-      if (!String(input).includes('tako.catalog')) return Response.json({ configured: false })
+      if (!String(input).includes('tako.catalog')) return Response.json({ consoleApiVersion: 2, configured: false })
       calls++
       signal = init.signal ?? undefined
-      return Response.json({ models: [], lastSyncAt: null, nextSyncAt: null, status: 'failed' })
+      return Response.json({ consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: null, status: 'failed' })
     }))
     const disposers: (() => void)[] = []
     try {
@@ -529,10 +670,10 @@ describe('client i18n: fallback without the locale service', () => {
     const deadline = Date.now() + 1800000
     let calls = 0
     vi.stubGlobal('fetch', vi.fn(async (input: string) => {
-      if (!String(input).includes('tako.catalog')) return Response.json({ configured: false })
+      if (!String(input).includes('tako.catalog')) return Response.json({ consoleApiVersion: 2, configured: false })
       calls++
-      return Response.json(Date.now() < deadline ? { models: [], lastSyncAt: null, nextSyncAt: deadline, status: 'failed' }
-        : { models: [{ id: 'later-success' }], lastSyncAt: Date.now(), nextSyncAt: null, status: 'ready' })
+      return Response.json(Date.now() < deadline ? { consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: deadline, status: 'failed' }
+        : { consoleApiVersion: 2, models: [{ id: 'later-success' }], lastSyncAt: Date.now(), nextSyncAt: null, status: 'ready' })
     }))
     const disposers: (() => void)[] = []
     try {
@@ -561,13 +702,14 @@ describe('client i18n: fallback without the locale service', () => {
     runInjections()
     const page = entries.find(entry => entry.slot === 'main')!.component
     const status = {
+      consoleApiVersion: 2,
       configured: true,
       origin: 'https://tako.example',
       maskedKey: 'cr_****WXYZ',
       me: { userName: 'u', planName: 'Pro', quotaRemainUsd: 2 },
       plan: { windowMinutes: 300, windowCost: 12, windowCostLimit: 200, weeklyCost: 80, weeklyCostLimit: 930 },
     }
-    const catalog = { models: [{ id: 'swe-2', contextWindow: 262000, input: ['text', 'image'] }], nextSyncAt: null }
+    const catalog = { consoleApiVersion: 2, models: [{ id: 'swe-2', contextWindow: 262000, input: ['text', 'image'] }], nextSyncAt: null }
     // Overview mounts KeyEditor (4) and UpdateCard (5); the models tab mounts
     // ModelsTab (3) then CatalogCard (3) then Countdown (1).
     hookStates = [status, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, { status: 'idle' }, '', false, false, undefined]
@@ -597,6 +739,7 @@ describe('client i18n: fallback without the locale service', () => {
     runInjections()
     const page = entries.find(entry => entry.slot === 'main')!.component
     const catalog = {
+      consoleApiVersion: 2,
       models: [
         { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] },
         { id: 'deepseek-v4-pro', contextWindow: 1_050_000 },
@@ -666,6 +809,7 @@ describe('client TakoMark', () => {
 })
 describe('client console surfaces', () => {
   const catalog = {
+    consoleApiVersion: 2,
     models: [
       { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'], reasoningEfforts: { high: 'high' } },
       { id: 'deepseek-v4-pro', contextWindow: 1_050_000, input: ['text'] },
@@ -874,12 +1018,12 @@ describe('client console surfaces', () => {
         config: { refreshIntervalMs: 1_800_000, syncRetryDelaysMs: [1000, 5000], defaultContextWindow: 128_000, pinned: ['tako-auto'], include: [], exclude: [], includeClaudeCodeOnly: false, overrides: {} },
         webSearchProvider: 'tako',
       })
-      if (url.includes('tako.catalog')) return Response.json({ models: [], lastSyncAt: null, nextSyncAt: null })
-      return Response.json({ configured: false })
+      if (url.includes('tako.catalog')) return Response.json({ consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: null })
+      return Response.json({ consoleApiVersion: 2, configured: false })
     }))
     const disposers: (() => void)[] = []
     try {
-      hookStates = [undefined, undefined, { models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, { status: 'idle' }]
+      hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, { status: 'idle' }]
       render(page, {})
       for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
       await vi.advanceTimersByTimeAsync(0)
@@ -888,7 +1032,7 @@ describe('client console surfaces', () => {
       expect(form?.refreshMinutes).toBe('30')
       expect(form?.retryDelays).toBe('1000, 5000')
       // Replay the recorded states for a second render so the form is mounted.
-      hookStates = [undefined, undefined, { models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, { status: 'idle' }, setStates[11], setStates[12], setStates[13]]
+      hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, { status: 'idle' }, setStates[11], setStates[12], setStates[13]]
       const rendered = render(page, {}) as Element
       const save = findByTestId(rendered, 'dsh-tako-config-save')
       expect(save).toBeDefined()

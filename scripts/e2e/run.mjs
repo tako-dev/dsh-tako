@@ -724,8 +724,9 @@ await testCase('n', 'console routes: /api/tako.status + /api/tako.catalog + /api
     const headers = { cookie, origin, 'content-type': 'application/json' }
     const api = (method, path, body) => fetch(`${origin}/${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }).then(response => response.json())
     const status0 = await api('GET', 'api/tako.status')
-    check(detail, JSON.stringify(status0) === '{"configured":false}', `status without a key -> ${JSON.stringify(status0)}`)
+    check(detail, status0.configured === false && status0.consoleApiVersion === 2, `status without a key -> ${JSON.stringify(status0)}`)
     const catalog = await api('GET', 'api/tako.catalog')
+    check(detail, catalog.consoleApiVersion === 2, `catalog console protocol -> ${JSON.stringify(catalog.consoleApiVersion)}`)
     const expected = await expectedModels()
     check(detail, JSON.stringify(catalog.models.map(model => model.id)) === JSON.stringify(expected.map(model => model.id)), `catalog lists the ${catalog.models.length} synced models in catalog order`)
     check(detail, typeof catalog.lastSyncAt === 'number' && catalog.nextSyncAt - catalog.lastSyncAt === 30 * 60_000, `catalog lastSyncAt -> nextSyncAt = ${catalog.nextSyncAt - catalog.lastSyncAt}ms (refreshIntervalMs default)`)

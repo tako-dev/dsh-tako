@@ -102,12 +102,14 @@ const ReactDOM = window.ReactDOM
 const FIXTURES = {
   'signed-in': {
     status: {
+      consoleApiVersion: 2,
       configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
       maskedKey: 'cr_****K4Z8', credential: 'TAKO_API_KEY',
       me: { userName: 'shiroha', planName: 'Pro', quotaRemain: 6_250_000, quotaRemainUsd: 12.5, quotaUsed: 2_100_000, quotaUsedUsd: 4.2 },
       plan: { windowMinutes: 300, windowCost: 38.4, windowCostLimit: 200, dailyCost: 41.2, dailyCostLimit: 300, weeklyCost: 121.6, weeklyCostLimit: 930 },
     },
     catalog: {
+      consoleApiVersion: 2,
       models: [
         { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'], reasoningEfforts: { off:'off', low:'low', high:'high' } },
         { id: 'deepseek-v4-pro', contextWindow: 1_050_000, input: ['text'], reasoningEfforts: { off:'off', low:'low', high:'high' } },
@@ -162,8 +164,8 @@ const FIXTURES = {
     update: { current: '0.5.22', latest: '0.5.22', upToDate: true },
   },
   'signed-out': {
-    status: { configured: false },
-    catalog: { models: [], lastSyncAt: null, nextSyncAt: null, status: 'syncing' },
+    status: { consoleApiVersion: 2, configured: false },
+    catalog: { consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: null, status: 'syncing' },
     notice: { ok: false },
     logs: { ok: false, code: 'not-configured' },
     usage: { ok: false, code: 'not-configured' },
@@ -172,11 +174,12 @@ const FIXTURES = {
   },
   'failed': {
     status: {
+      consoleApiVersion: 2,
       configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
       maskedKey: 'cr_****K4Z8', credential: 'TAKO_API_KEY',
       me: { userName: 'shiroha', planName: 'Pro', quotaRemainUsd: 12.5 }, plan: null,
     },
-    catalog: { models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }],
+    catalog: { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }],
       lastSyncAt: Date.now() - 3600_000, nextSyncAt: Date.now() + 24_000,
       refreshIntervalMs: 1800_000, status: 'retrying', attempts: 4,
       lastError: { code: 'write-failed', message: 'transaction conflict', at: Date.now() - 60_000 } },
@@ -188,11 +191,12 @@ const FIXTURES = {
   },
   'plan-less': {
     status: {
+      consoleApiVersion: 2,
       configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
       maskedKey: 'cr_****K4Z8', credential: 'TAKO_API_KEY',
       me: { userName: 'shiroha', planName: 'PayGo', quotaRemainUsd: 12.5, quotaUsedUsd: 4.2 }, plan: {},
     },
-    catalog: { models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }], lastSyncAt: Date.now()-600_000, nextSyncAt: Date.now()+1200_000, refreshIntervalMs: 1800_000, status: 'ready' },
+    catalog: { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }], lastSyncAt: Date.now()-600_000, nextSyncAt: Date.now()+1200_000, refreshIntervalMs: 1800_000, status: 'ready' },
     notice: { ok: true, announcements: [] },
     logs: { ok: true, logs: [] },
     usage: { ok: true, token: { name: 'dsh-tako@macbook', granted: 0, used: 0, available: 0, unlimitedQuota: true, modelLimits: {}, modelLimitsEnabled: false, expiresAt: 0 }, dailyCostUsd: 0, models: [] },
@@ -200,10 +204,10 @@ const FIXTURES = {
     update: { current: '0.5.22', latest: '0.5.22', upToDate: true },
   },
   'update': {
-    status: { configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
+    status: { consoleApiVersion: 2, configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
       maskedKey: 'cr_****K4Z8', credential: 'TAKO_API_KEY',
       me: { userName: 'shiroha', planName: 'Pro', quotaRemainUsd: 12.5 }, plan: { windowMinutes: 300, windowCost: 38.4, windowCostLimit: 200, weeklyCost: 121.6, weeklyCostLimit: 930 } },
-    catalog: { models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }], lastSyncAt: Date.now()-600_000, nextSyncAt: Date.now()+1200_000, refreshIntervalMs: 1800_000, status: 'ready' },
+    catalog: { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }], lastSyncAt: Date.now()-600_000, nextSyncAt: Date.now()+1200_000, refreshIntervalMs: 1800_000, status: 'ready' },
     notice: { ok: true, announcements: [] },
     logs: { ok: true, logs: [] },
     usage: { ok: true, token: { name: 'dsh-tako@macbook', granted: 50_000_000, used: 8_400_000, available: 41_600_000, unlimitedQuota: false, modelLimits: {}, modelLimitsEnabled: false, expiresAt: 0 }, dailyCostUsd: 4.61, models: [] },

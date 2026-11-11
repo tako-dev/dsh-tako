@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createConsoleService, emptyCatalogState, QUOTA_PER_UNIT, type CatalogState, type ConsoleServiceOptions } from '../src/web.ts'
+import { CONSOLE_API_VERSION, createConsoleService, emptyCatalogState, QUOTA_PER_UNIT, type CatalogState, type ConsoleServiceOptions } from '../src/web.ts'
 
 const KEY = 'cr_0123456789abcdefWXYZ'
 
@@ -146,7 +146,7 @@ describe('console route /api/tako.status', () => {
     const { svc, tako } = service()
     const response = await svc.handleStatus()
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ configured: false })
+    expect(await response.json()).toEqual({ consoleApiVersion: CONSOLE_API_VERSION, configured: false })
     expect(tako.fetchImpl).not.toHaveBeenCalled()
   })
 
@@ -154,6 +154,7 @@ describe('console route /api/tako.status', () => {
     const { svc } = service({ resolved: { value: KEY, source: 'file' } })
     const body = await (await svc.handleStatus()).json()
     expect(body).toEqual({
+      consoleApiVersion: CONSOLE_API_VERSION,
       configured: true,
       origin: 'https://tako.test',
       maskedKey: 'cr_****WXYZ',
@@ -232,7 +233,7 @@ describe('console route /api/tako.status', () => {
     expect(body.me.userName).toBe('account-b')
     expect(body.maskedKey).toBe('cr_****SAME')
     expect(fetchImpl).toHaveBeenCalledTimes(6)
-    expect(Object.keys(body).sort()).toEqual(['baseURL', 'configured', 'credential', 'maskedKey', 'me', 'origin', 'plan'])
+    expect(Object.keys(body).sort()).toEqual(['baseURL', 'configured', 'consoleApiVersion', 'credential', 'maskedKey', 'me', 'origin', 'plan'])
     expect(JSON.stringify(body)).not.toContain('fixture-account')
     await svc.handleStatus()
     expect(fetchImpl).toHaveBeenCalledTimes(6)
@@ -307,12 +308,12 @@ describe('console route /api/tako.catalog', () => {
     const catalog: CatalogState = { models: [], lastSyncAt: null, nextSyncAt: 1234, refreshIntervalMs: 1800000,
       status: 'retrying', attempts: 2, lastError: { code: 'write-failed', message: 'The model settings update did not complete.', at: 1200 } }
     const { svc } = service({ catalogState: catalog })
-    expect(await (await svc.handleCatalog()).json()).toEqual(catalog)
+    expect(await (await svc.handleCatalog()).json()).toEqual({ consoleApiVersion: CONSOLE_API_VERSION, ...catalog })
   })
 
   it('answers empty before the first sync instead of failing', async () => {
     const { svc } = service()
-    expect(await (await svc.handleCatalog()).json()).toEqual({ models: [], lastSyncAt: null, nextSyncAt: null })
+    expect(await (await svc.handleCatalog()).json()).toEqual({ consoleApiVersion: CONSOLE_API_VERSION, models: [], lastSyncAt: null, nextSyncAt: null })
   })
 
   it('returns the synced models with their timestamps, as a copy', async () => {
@@ -327,6 +328,7 @@ describe('console route /api/tako.catalog', () => {
     const { svc } = service({ catalogState: catalog })
     const body = await (await svc.handleCatalog()).json()
     expect(body).toEqual({
+      consoleApiVersion: CONSOLE_API_VERSION,
       models: [
         { id: 'deepseek-v4.1-flash', name: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] },
         { id: 'tako-auto' },
