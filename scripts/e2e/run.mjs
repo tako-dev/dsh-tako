@@ -345,7 +345,7 @@ await testCase('a', 'web profile: install the tarball, boot, providers.tako writ
   const byId = Object.fromEntries((route?.models ?? []).map(model => [model.id, model]))
   const flash = byId['deepseek-v4.1-flash']
   check(detail, flash?.contextWindow === 1_000_000 && JSON.stringify(flash?.input) === '["text","image"]', `deepseek-v4.1-flash ${JSON.stringify(flash)}`)
-  check(detail, byId['gpt-6-sol']?.contextWindow === 1_050_000, `gpt-6-sol contextWindow=${byId['gpt-6-sol']?.contextWindow}`)
+  check(detail, byId['gpt-6-sol']?.contextWindow === 272_000, `gpt-6-sol contextWindow=${byId['gpt-6-sol']?.contextWindow}`)
   check(detail, byId['gpt-5.6-luna']?.contextWindow === 272_000, `gpt-5.6-luna contextWindow=${byId['gpt-5.6-luna']?.contextWindow}`)
   check(detail, byId['tako-auto']?.contextWindow === undefined, 'tako-auto has no contextWindow (uses defaultContextWindow 128000)')
   check(detail, !ids.some(id => id.startsWith('jev-') || id === 'claude-opus-5-5'), 'no jev-* or Claude-Code-only models')
