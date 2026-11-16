@@ -169,6 +169,19 @@ function positiveInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined
 }
 
+/**
+ * The gpt-6 / gpt-6.1 family actually serves 272k; the directory still labels
+ * the cards `1.05M`, so the family gets a corrective default instead of the
+ * tag. An explicit `context_length` still wins over this default.
+ */
+const FAMILY_DEFAULT_CONTEXT: ReadonlyArray<{ pattern: RegExp, contextWindow: number }> = [
+  { pattern: /^gpt-6(?:[.-]|$)/, contextWindow: 272_000 },
+]
+
+function familyDefaultContext(id: string): number | undefined {
+  return FAMILY_DEFAULT_CONTEXT.find(entry => entry.pattern.test(id))?.contextWindow
+}
+
 /** Whether a card describes a chat model DSH can call through the OpenAI-compatible route. */
 export function isChatModel(model: TakoPricingModel, options: Pick<CatalogOptions, 'includeClaudeCodeOnly'> = {}): boolean {
   const id = model.model_name.trim()
@@ -206,7 +219,7 @@ function withoutBlankInput(override: TakoModelOverride): TakoModelOverride {
 export function toModel(model: TakoPricingModel): TakoModel {
   const tags = parseTags(model.tags)
   const id = model.model_name.trim()
-  const contextWindow = positiveInteger(model.context_length) ?? contextFromTags(tags)
+  const contextWindow = positiveInteger(model.context_length) ?? familyDefaultContext(id) ?? contextFromTags(tags)
   const maxTokens = positiveInteger(model.max_output_tokens)
   const vision = model.input_modalities !== undefined
     ? model.input_modalities.includes('image')

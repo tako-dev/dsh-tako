@@ -140,7 +140,7 @@ describe('sync', () => {
     expect(route.models.every(model => model.reasoningEfforts !== undefined)).toBe(true)
     expect(route.models).toHaveLength(35)
     expect(route.models.slice(0, 3).map(model => model.id)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto'])
-    expect(route.models.find(model => model.id === 'gpt-6-sol')?.contextWindow).toBe(1_050_000)
+    expect(route.models.find(model => model.id === 'gpt-6-sol')?.contextWindow).toBe(272_000)
     expect(fake.logger.info).toHaveBeenCalledWith('Tako route updated with %d models', 35)
   })
 

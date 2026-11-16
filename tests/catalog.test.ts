@@ -40,9 +40,19 @@ describe('fixture catalog', () => {
   it('reads context windows from size tags', () => {
     expect(byId(models, 'deepseek-v4.1-flash')?.contextWindow).toBe(1_000_000)
     expect(byId(models, 'gpt-5.6')?.contextWindow).toBe(272_000)
-    expect(byId(models, 'gpt-6-sol')?.contextWindow).toBe(1_050_000)
+    expect(byId(models, 'gpt-6-sol')?.contextWindow).toBe(272_000)
     expect(byId(models, 'hy3')?.contextWindow).toBe(256_000)
     expect(byId(models, 'claude-haiku-4-5')?.contextWindow).toBe(200_000)
+  })
+
+  it('corrects the gpt-6 family default to 272k', () => {
+    for (const id of ['gpt-6-sol', 'gpt-6-astra', 'gpt-6-luna', 'gpt-6.1-sol'])
+      expect(byId(models, id)?.contextWindow).toBe(272_000)
+    // An explicit context_length still wins over the family default.
+    expect(toModel({ model_name: 'gpt-6-sol', tags: '1.05M', context_length: 500_000 }).contextWindow).toBe(500_000)
+    // Per-model user overrides win last.
+    const overridden = buildCatalog(data, { overrides: { 'gpt-6-sol': { contextWindow: 128_000 } } })
+    expect(byId(overridden, 'gpt-6-sol')?.contextWindow).toBe(128_000)
   })
 
   it('ignores a parameter-count tag', () => {
