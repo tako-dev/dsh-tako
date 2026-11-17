@@ -195,6 +195,8 @@ window.__ModuleLoader__.load({
         noticeEmpty: '暂无公告',
         noticeExpand: '展开',
         noticeCollapse: '收起',
+        noticeHistory: '历史公告 ({count})',
+        noticeHistoryHide: '收起历史',
         // model cards
         cardChannels: '渠道',
         cardEndpoints: '端点',
@@ -407,6 +409,8 @@ window.__ModuleLoader__.load({
         noticeEmpty: 'No announcements',
         noticeExpand: 'Expand',
         noticeCollapse: 'Collapse',
+        noticeHistory: 'History ({count})',
+        noticeHistoryHide: 'Hide history',
         // model cards
         cardChannels: 'channels',
         cardEndpoints: 'endpoints',
@@ -890,6 +894,10 @@ window.__ModuleLoader__.load({
         '.dsh-tako-notice-body code{font-family:ui-monospace,"IBM Plex Mono",monospace;font-size:12px;background:var(--dsw-alias-interactive-bg-hover);padding:0 4px;border-radius:4px}',
         '.dsh-tako-notice-body a{color:' + CLAY + '}',
         '.dsh-tako-notice-x{flex:none;font-size:11px;color:var(--dsw-alias-label-tertiary)}',
+        '.dsh-tako-notice-history{display:flex;justify-content:flex-end}',
+        '.dsh-tako-notice-history>button{font:inherit;font-size:11px;padding:3px 10px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:999px;background:transparent;color:var(--dsw-alias-label-tertiary);cursor:pointer;transition:border-color .15s ease,color .15s ease}',
+        '.dsh-tako-notice-history>button:hover{border-color:' + CLAY + ';color:' + CLAY + '}',
+        '.dsh-tako-notice-read{opacity:.72}',
         // model cards
         '.dsh-tako-model-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}',
         '@media (max-width:560px){.dsh-tako-model-grid{grid-template-columns:1fr}}',
@@ -1735,7 +1743,7 @@ window.__ModuleLoader__.load({
       const date = item.publishDate !== undefined ? String(item.publishDate).slice(0, 10) : item.date
       // <details>/<summary> gives the expand/collapse for free, no hook slot.
       return h('details', {
-        className: 'dsh-tako-notice-item',
+        className: 'dsh-tako-notice-item' + (props.read === true ? ' dsh-tako-notice-read' : ''),
         'data-testid': 'dsh-tako-notice-item',
       },
         h('summary', { className: 'dsh-tako-notice-summary' },
@@ -1751,22 +1759,67 @@ window.__ModuleLoader__.load({
         h('div', { className: 'dsh-tako-notice-body', 'data-testid': 'dsh-tako-notice-body' }, mdLite(item.content)))
     }
 
+    /**
+     * Compact announcements: only the newest unread notice takes vertical space
+     * up front; everything else lives behind a collapsed "history" toggle so a
+     * long notice feed can no longer push the account and quota cards off the
+     * first screen. Dismissed ids persist in localStorage via props.dismissed.
+     */
     function NoticeList(props) {
       const t = props.t ?? fallbackT
       const items = (props.notice && props.notice.announcements) || []
-      const visible = items.filter(item => item && (props.dismissed || []).includes(noticeId(item)) === false)
-      if (visible.length === 0) return null
+      const dismissed = props.dismissed || []
+      const valid = items.filter(item => !!item)
+      const unread = valid.filter(item => dismissed.includes(noticeId(item)) === false)
+      const newest = unread[0]
+      const historyCount = valid.length - (newest === undefined ? 0 : 1)
+      const historyOpen = props.historyOpen === true
+      const history = historyOpen ? valid.filter(item => item !== newest) : []
+      if (newest === undefined && historyCount === 0) return null
       return h('div', { className: 'dsh-tako-notices', 'data-testid': 'dsh-tako-notice' },
-        visible.map(item => h(NoticeItem, { key: noticeId(item), item, t, onDismiss: props.onDismiss })))
+        newest === undefined ? null : h(NoticeItem, { key: noticeId(newest), item: newest, t, onDismiss: props.onDismiss }),
+        historyCount > 0
+          ? h('div', { className: 'dsh-tako-notice-history' },
+              h('button', {
+                type: 'button',
+                'data-testid': 'dsh-tako-notice-history-toggle',
+                'aria-expanded': String(historyOpen),
+                onClick: () => props.onToggleHistory && props.onToggleHistory(),
+              }, historyOpen ? t('noticeHistoryHide') : t('noticeHistory', { count: historyCount })))
+          : null,
+        history.map(item => h(NoticeItem, { key: noticeId(item), item, t, read: true, onDismiss: props.onDismiss })))
     }
 
     const noticeId = item => item.id !== undefined ? String(item.id) : String(item.publishDate ?? '') + ':' + String(item.content ?? '').slice(0, 40)
+
+    /** "Got it" is remembered per browser so dismissed notices stay out of the way. */
+    const NOTICE_DISMISSED_KEY = 'dsh-tako.notices.dismissed'
+    const noticeStorage = () => {
+      try {
+        const storage = typeof window === 'object' && window !== null ? window.localStorage : undefined
+        if (storage === undefined || typeof storage.getItem !== 'function') return undefined
+        return storage
+      } catch {
+        return undefined
+      }
+    }
+    const loadDismissedNotices = () => {
+      try {
+        const parsed = JSON.parse(noticeStorage()?.getItem(NOTICE_DISMISSED_KEY) ?? '[]')
+        return Array.isArray(parsed) ? parsed.map(String) : []
+      } catch {
+        return []
+      }
+    }
+    const saveDismissedNotices = ids => {
+      try { noticeStorage()?.setItem(NOTICE_DISMISSED_KEY, JSON.stringify(ids.slice(-200))) } catch { /* private mode */ }
+    }
 
     function OverviewTab(props) {
       const t = props.t
       return h('div', { 'data-testid': 'dsh-tako-tabpanel-overview', style: { display: 'flex', flexDirection: 'column', gap: '14px' } },
         props.notice !== undefined && props.notice.ok === true && Array.isArray(props.notice.announcements)
-          ? h(NoticeList, { key: 'notice', notice: props.notice, dismissed: props.dismissed || [], onDismiss: props.onDismiss, t })
+          ? h(NoticeList, { key: 'notice', notice: props.notice, dismissed: props.dismissed || [], onDismiss: props.onDismiss, historyOpen: props.noticeHistoryOpen, onToggleHistory: props.onToggleNoticeHistory, t })
           : null,
         AccountCard({ status: props.status, login: props.login, busyLogout: props.busyLogout, compact: true,
           onLogout: props.onLogout, logoutNote: props.logoutNote, t, onKeyChanged: props.onKeyChanged,
@@ -2130,8 +2183,9 @@ window.__ModuleLoader__.load({
       const [logoutNote, setLogoutNote] = useState(undefined)
       const [tab, setTab] = useState('overview')
       const [notice, setNotice] = useState(undefined)
-      const [dismissedNotice, setDismissedNotice] = useState(undefined)
+      const [dismissedNotice, setDismissedNotice] = useState(() => loadDismissedNotices())
       const [diagCopied, setDiagCopied] = useState(false)
+      const [noticeHistoryOpen, setNoticeHistoryOpen] = useState(false)
       const login = useTakoLogin()
 
       const alive = useRef(true)
@@ -2310,7 +2364,12 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, className: 'dsh-tako-ghost' }, t('retry'))))
       }
       const onKeyChanged = async () => { await loadStatus(); notifyCredential() }
-      if (tab === 'overview') children.push(h(OverviewTab, { key: 'overview', t, status, login, busyLogout, onLogout: logout, logoutNote, onKeyChanged, origin, notice, dismissed: dismissedNotice, onDismiss: item => setDismissedNotice([...(Array.isArray(dismissedNotice) ? dismissedNotice : []), noticeId(item)]) }))
+      const dismissNotice = item => {
+        const next = [...(Array.isArray(dismissedNotice) ? dismissedNotice : []), noticeId(item)]
+        saveDismissedNotices(next)
+        setDismissedNotice(next)
+      }
+      if (tab === 'overview') children.push(h(OverviewTab, { key: 'overview', t, status, login, busyLogout, onLogout: logout, logoutNote, onKeyChanged, origin, notice, dismissed: dismissedNotice, onDismiss: dismissNotice, noticeHistoryOpen, onToggleNoticeHistory: () => setNoticeHistoryOpen(!noticeHistoryOpen) }))
       else if (tab === 'requests') children.push(h(RequestsTab, { key: 'requests', t, catalog }))
       else if (tab === 'usage') children.push(h(UsageTab, { key: 'usage', t }))
       else if (tab === 'models') children.push(h(ModelsTab, { key: 'models', t, catalog, catalogError, origin, onRefresh: () => { void loadCatalog() } }))

@@ -138,6 +138,13 @@ const FIXTURES = {
       { id: 10, type: 'success', publishDate: '2026-11-08T09:30:00Z', content: '**K3 thinking** 已上架\n- 视觉 + 推理全开\n- [定价页](https://tako.shiroha.tech/pricing)' },
       { id: 9, type: 'error', publishDate: '2026-11-05T15:00:00Z', content: '11 月 5 日部分请求 503，已在 15:40 修复。' },
       { id: 8, type: 'ongoing', publishDate: '2026-11-01T00:00:00Z', content: '新客 8 折活动进行中。' },
+      { id: 7, type: 'warning', publishDate: '2026-10-28T18:00:00Z', content: '10 月 28 日晚高峰提款延迟，21:05 已全部补发。' },
+      { id: 6, type: 'success', publishDate: '2026-10-21T10:00:00Z', content: '**GPT-5.4-turbo** 上线 1M 上下文，首周 85 折。' },
+      { id: 5, type: 'error', publishDate: '2026-10-14T22:15:00Z', content: '10 月 14 日支付网关故障 22:40 恢复，受影响订单已自动重试。' },
+      { id: 4, type: 'ongoing', publishDate: '2026-10-07T00:00:00Z', content: '每周三 04:00–04:30 例行维护，期间请求可能短暂失败。' },
+      { id: 3, type: 'success', publishDate: '2026-09-30T12:00:00Z', content: 'Claude Sonnet 5.5 400K 上下文全量开放。' },
+      { id: 2, type: 'warning', publishDate: '2026-09-22T06:00:00Z', content: '旧版 `dsh-tako` <0.6 客户端将于 10 月底停止支持，请升级。' },
+      { id: 1, type: 'ongoing', publishDate: '2026-09-15T00:00:00Z', content: '推荐好友充值，双方各得 $5 钱包余额。' },
     ] },
     logs: { ok: true, logs: [
       { id: 101, createdAt: Math.floor(Date.now()/1000)-42, modelName: 'deepseek-v4.1-flash', promptTokens: 1280, completionTokens: 420, quota: 310, useTime: 2, isStream: true, requestId: 'chatcmpl-9f2c1', channelName: 'DS-官方', ip: '1.2.3.4', tokenName: 'dsh-tako@macbook', type: 2, group: 'default' },
@@ -216,8 +223,13 @@ const FIXTURES = {
   },
 }
 
-let scene = 'signed-in'
-let lang = 'zh'
+let scene = new URLSearchParams(location.search).get('scene') || 'signed-in'
+let lang = new URLSearchParams(location.search).get('lang') || 'zh'
+const noticesParam = new URLSearchParams(location.search).get('notices')
+if (noticesParam !== null) {
+  const keep = Number(noticesParam)
+  FIXTURES['signed-in'].notice = { ok: true, announcements: FIXTURES['signed-in'].notice.announcements.slice(0, keep) }
+}
 
 /* Route the plugin's relative fetch calls to fixtures. */
 const realFetch = window.fetch
@@ -291,6 +303,10 @@ document.getElementById('theme').addEventListener('click', e => {
 })
 </script>
 <script src="../client/client.js"></script>
-<script>mount()</script>
+<script>
+document.querySelectorAll('[data-scene]').forEach(b => b.dataset.active = String(b.dataset.scene === scene))
+document.querySelectorAll('[data-lang]').forEach(b => b.dataset.active = String(b.dataset.lang === lang))
+mount()
+</script>
 </body>
 </html>
