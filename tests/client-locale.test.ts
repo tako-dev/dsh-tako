@@ -45,6 +45,7 @@ const EXPECTED_KEYS = [
   // console tabs, diagnostics, announcements
   'tabOverview', 'tabRequests', 'tabUsage', 'tabModels', 'tabKey', 'tabConfig',
   'diagCopy', 'diagCopied', 'noticeDismiss', 'noticeTitle', 'noticeEmpty', 'noticeExpand', 'noticeCollapse',
+  'noticeHistory', 'noticeHistoryHide',
   'cardChannels', 'cardEndpoints', 'cardStandard', 'cardRealized', 'cardOutputRatio', 'cardClaude',
   // request logs
   'logsEmpty', 'logsNeedLogin', 'logsModel', 'logsRefresh', 'logsLoading',
@@ -100,7 +101,8 @@ function materialize(options: {
     useRef: (initial: unknown) => ({ current: initial }),
     useState: (initial: unknown) => {
       const index = hookIndex++
-      const value = hookStates[index] ?? initial
+      // Lazy initializers are invoked like real React does on first render.
+      const value = hookStates[index] ?? (typeof initial === 'function' ? (initial as () => unknown)() : initial)
       return [value, (next: unknown) => { options.setState?.(index, next) }]
     },
   }
@@ -414,11 +416,12 @@ describe('client i18n: fallback without the locale service', () => {
     const page = entries.find(entry => entry.slot === 'main')!.component
     const catalog = { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] }], nextSyncAt: Date.now() + 5 * 60_000 }
     // useState order in TakoConsolePage: status, statusError, catalog, catalogError,
-    // busyLogout, logoutNote, tab, notice, dismissedNotice, diagCopied, then
-    // useTakoLogin's login state (index 10). Components the stub inlines share
-    // the index stream: overview adds KeyEditor (4) and UpdateCard (5); the
-    // models tab adds ModelsTab (3), CatalogCard (3) and Countdown (1).
-    hookStates = [undefined, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, { status: 'idle' }]
+    // busyLogout, logoutNote, tab, notice, dismissedNotice, diagCopied,
+    // noticeHistoryOpen, then useTakoLogin's login state (index 11). Components
+    // the stub inlines share the index stream: overview adds KeyEditor (4) and
+    // UpdateCard (5); the models tab adds ModelsTab (3), CatalogCard (3) and
+    // Countdown (1).
+    hookStates = [undefined, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, false, { status: 'idle' }]
     try {
       // No `t` seat (an older host renders the entry without one): inline fallback.
       setDocumentLang('zh-CN')
@@ -450,7 +453,7 @@ describe('client i18n: fallback without the locale service', () => {
       expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), '模型')).toBe('模型')
       expect(findText(rendered, '分钟后刷新')).toBe('约 5 分钟后刷新')
 
-      hookStates = [{ consoleApiVersion: 2, configured: false }, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, { status: 'idle' }, '', false, false, undefined]
+      hookStates = [{ consoleApiVersion: 2, configured: false }, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, false, { status: 'idle' }, '', false, false, undefined]
       rendered = render(page, { t: face.bind() }) as Element
       expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
       expect(findText(rendered, '钥匙走')).toBe('登录后，额度、模型和搜索会跟这把钥匙走')
@@ -463,7 +466,7 @@ describe('client i18n: fallback without the locale service', () => {
         configured: true,
         maskedKey: 'cr_****abcd',
         me: { userName: 'Ada', planName: 'Pro' },
-      }, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, { status: 'idle' }, '', false, false, undefined]
+      }, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, false, { status: 'idle' }, '', false, false, undefined]
       rendered = render(page, { t: face.bind() }) as Element
       expect(findByTag(rendered, 'h1')?.children[0]).toBe('Ada')
       expect(findText(rendered, 'cr_****abcd')).toBe('cr_****abcd')
@@ -488,7 +491,7 @@ describe('client i18n: fallback without the locale service', () => {
     const page = entries.find(entry => entry.slot === 'main')!.component
     const catalog = { models: [{ id: 'existing-model' }], nextSyncAt: null }
     hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined, catalog, undefined,
-      false, undefined, 'requests', undefined, undefined, false, { status: 'idle' }]
+      false, undefined, 'requests', undefined, undefined, false, false, { status: 'idle' }]
     try {
       face.setActive('en')
       const rendered = render(page, { t: face.bind() }) as Element
@@ -509,7 +512,7 @@ describe('client i18n: fallback without the locale service', () => {
     runInjections()
     const page = entries.find(entry => entry.slot === 'main')!.component
     hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined, undefined, 'HTTP 503',
-      false, undefined, 'requests', undefined, undefined, false, { status: 'idle' }]
+      false, undefined, 'requests', undefined, undefined, false, false, { status: 'idle' }]
     try {
       face.setActive('en')
       const rendered = render(page, { t: face.bind() }) as Element
@@ -541,7 +544,7 @@ describe('client i18n: fallback without the locale service', () => {
     try {
       hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined,
         { models: [], lastSyncAt: 1, nextSyncAt: null, status: 'ready' }, undefined,
-        false, undefined, 'overview', undefined, undefined, false, { status: 'idle' }]
+        false, undefined, 'overview', undefined, undefined, false, false, { status: 'idle' }]
       render(entries.find(entry => entry.slot === 'main')!.component, {})
       for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
       await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3))
@@ -566,7 +569,7 @@ describe('client i18n: fallback without the locale service', () => {
     const page = entries.find(entry => entry.slot === 'main')!.component
     hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: null, refreshIntervalMs: 1800000,
       status: 'failed', attempts: 4, lastError: { code: 'write-failed', message: 'untrusted-payload', at: 10 } },
-    undefined, false, undefined, 'models', undefined, undefined, false, { status: 'idle' }]
+    undefined, false, undefined, 'models', undefined, undefined, false, false, { status: 'idle' }]
     try {
       setDocumentLang('zh-CN')
       const rendered = render(page, {})
@@ -712,7 +715,7 @@ describe('client i18n: fallback without the locale service', () => {
     const catalog = { consoleApiVersion: 2, models: [{ id: 'swe-2', contextWindow: 262000, input: ['text', 'image'] }], nextSyncAt: null }
     // Overview mounts KeyEditor (4) and UpdateCard (5); the models tab mounts
     // ModelsTab (3) then CatalogCard (3) then Countdown (1).
-    hookStates = [status, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, { status: 'idle' }, '', false, false, undefined]
+    hookStates = [status, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, false, { status: 'idle' }, '', false, false, undefined]
     try {
       let rendered = render(page, { t: face.bind() }) as Element
       let flat = JSON.stringify(rendered)
@@ -721,7 +724,7 @@ describe('client i18n: fallback without the locale service', () => {
       }
       expect(flat).not.toContain('pricing?search=swe-2')
 
-      hookStates = [status, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, { status: 'idle' }, undefined, false, undefined, false, '', 'all']
+      hookStates = [status, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, false, { status: 'idle' }, undefined, false, undefined, false, '', 'all']
       rendered = render(page, { t: face.bind() }) as Element
       flat = JSON.stringify(rendered)
       expect(flat).toContain('https://tako.example/pricing?search=swe-2')
@@ -752,10 +755,10 @@ describe('client i18n: fallback without the locale service', () => {
       ],
       nextSyncAt: Date.now() + 5 * 60_000,
     }
-    // CatalogCard's hooks land after TakoConsolePage's 11 and ModelsTab's 3
+    // CatalogCard's hooks land after TakoConsolePage's 12 and ModelsTab's 3
     // because the recording React stub inlines function components; the open
     // flag is the 4th index inside ModelsTab (pinned, syncBusy, syncNote, open).
-    const modelsHooks = (open = false) => [undefined, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, { status: 'idle' },
+    const modelsHooks = (open = false) => [undefined, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, false, { status: 'idle' },
       undefined, false, undefined, open]
     try {
       face.setActive('zh')
@@ -819,16 +822,16 @@ describe('client console surfaces', () => {
     nextSyncAt: null,
   }
   /**
-   * TakoConsolePage consumes 11 useState slots (status, statusError, catalog,
+   * TakoConsolePage consumes 12 useState slots (status, statusError, catalog,
    * catalogError, busyLogout, logoutNote, tab, notice, dismissedNotice,
-   * diagCopied, login). Inlined components share the stream afterwards:
-   * overview → KeyEditor(4) + UpdateCard(5); key tab → KeyTab(1) + KeyEditor(4);
-   * models tab → ModelsTab(3: pinned, syncBusy, syncNote) + CatalogCard(3: open,
-   * query, filter); requests → RequestsTab(4); usage → UsageTab(2);
-   * config → ConfigTab(5: config, error, form, saving, note).
+   * diagCopied, noticeHistoryOpen, login). Inlined components share the stream
+   * afterwards: overview → KeyEditor(4) + UpdateCard(5); key tab → KeyTab(1) +
+   * KeyEditor(4); models tab → ModelsTab(3: pinned, syncBusy, syncNote) +
+   * CatalogCard(3: open, query, filter); requests → RequestsTab(4);
+   * usage → UsageTab(2); config → ConfigTab(5: config, error, form, saving, note).
    */
-  const pageHooks = (options: { tab?: string, filter?: string, query?: string, open?: boolean, keyValue?: string, pinned?: string[] } = {}): unknown[] => {
-    const base = [undefined, undefined, catalog, undefined, false, undefined, options.tab ?? 'overview', undefined, undefined, false, { status: 'idle' }]
+  const pageHooks = (options: { tab?: string, filter?: string, query?: string, open?: boolean, keyValue?: string, pinned?: string[], historyOpen?: boolean } = {}): unknown[] => {
+    const base = [undefined, undefined, catalog, undefined, false, undefined, options.tab ?? 'overview', undefined, undefined, false, options.historyOpen ?? false, { status: 'idle' }]
     const tab = options.tab ?? 'overview'
     if (tab === 'models') return [...base, options.pinned, false, undefined, options.open ?? false, options.query ?? '', options.filter ?? 'all']
     if (tab === 'key') return [...base, undefined, options.keyValue ?? '', false, false, undefined]
@@ -934,7 +937,7 @@ describe('client console surfaces', () => {
   it('shows the notice list on the overview and keeps tab panels exclusive', async () => {
     try {
       const hooks = pageHooks()
-      hooks[7] = { ok: true, announcements: [{ id: 7, type: 'warning', publishDate: '2026-11-10T02:00:00Z', content: '## 波动\n服务波动\n- a\n- b' }, { id: 8, type: 'success', publishDate: '2026-11-09T00:00:00Z', content: '已恢复' }] }
+      hooks[7] = { ok: true, announcements: [{ id: 7, type: 'warning', publishDate: '2026-11-10T02:00:00Z', content: '## 波动\n服务波动\n- a\n- b' }] }
       const { rendered } = await renderPage(hooks)
       const notice = findByTestId(rendered, 'dsh-tako-notice')
       expect(notice).toBeDefined()
@@ -948,13 +951,125 @@ describe('client console surfaces', () => {
       expect(findByTestId(rendered, 'dsh-tako-tabpanel-overview')).toBeDefined()
       expect(findByTestId(rendered, 'dsh-tako-tabpanel-requests')).toBeUndefined()
 
-      // dismissed by id → the whole list hides when nothing is left
+      // dismissed by id → the pinned slot collapses to just the history toggle
       const next = pageHooks()
       next[7] = { ok: true, announcements: [{ id: 7, content: '## 波动\n服务波动' }] }
       next[8] = ['7']
       const second = await renderPage(next)
-      expect(findByTestId(second.rendered, 'dsh-tako-notice')).toBeUndefined()
+      expect(findByTestId(second.rendered, 'dsh-tako-notice-item')).toBeUndefined()
+      expect(findByTestId(second.rendered, 'dsh-tako-notice-history-toggle')).toBeDefined()
     } finally {
+      hookStates = []
+    }
+  })
+
+  it('pins only the newest unread notice and folds the rest behind a history toggle', async () => {
+    try {
+      const notice = {
+        ok: true,
+        announcements: [
+          { id: 9, type: 'warning', publishDate: '2026-11-10T02:00:00Z', content: '## 最新公告\n服务波动' },
+          { id: 8, type: 'success', publishDate: '2026-11-09T00:00:00Z', content: '已恢复' },
+          { id: 7, type: 'ongoing', publishDate: '2026-11-01T00:00:00Z', content: '新客活动' },
+        ],
+      }
+      // Collapsed by default: only the newest item renders.
+      let hooks = pageHooks()
+      hooks[7] = notice
+      let { rendered } = await renderPage(hooks)
+      const list = findByTestId(rendered, 'dsh-tako-notice')
+      expect(list).toBeDefined()
+      expect(findText(list, '最新公告')).toBeDefined()
+      expect(findText(list, '已恢复')).toBeUndefined()
+      expect(findText(list, '新客活动')).toBeUndefined()
+      const toggle = findByTestId(rendered, 'dsh-tako-notice-history-toggle')
+      expect(toggle).toBeDefined()
+      expect(toggle?.children[0]).toBe('历史公告 (2)')
+
+      // Expanded: all three items render; the newest keeps the accent, the rest are marked read-style.
+      hooks = pageHooks({ historyOpen: true })
+      hooks[7] = notice
+      rendered = (await renderPage(hooks)).rendered
+      const items = (function collect(node: unknown, out: Element[] = []): Element[] {
+        if (Array.isArray(node)) { for (const child of node) collect(child, out); return out }
+        if (typeof node !== 'object' || node === null) return out
+        const el = node as Element
+        if (el.props?.['data-testid'] === 'dsh-tako-notice-item') out.push(el)
+        for (const child of el.children ?? []) collect(child, out)
+        return out
+      })(rendered)
+      expect(items.length).toBe(3)
+      expect(String(items[0]?.props?.className)).toBe('dsh-tako-notice-item')
+      expect(String(items[1]?.props?.className)).toContain('dsh-tako-notice-read')
+      expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('收起历史')
+
+      // All read: the top slot collapses to just the history toggle.
+      hooks = pageHooks()
+      hooks[7] = notice
+      hooks[8] = ['9', '8', '7']
+      rendered = (await renderPage(hooks)).rendered
+      expect(findByTestId(rendered, 'dsh-tako-notice-item')).toBeUndefined()
+      expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('历史公告 (3)')
+
+      // Newest read but an older one unread: that unread one gets the top slot.
+      hooks = pageHooks()
+      hooks[7] = notice
+      hooks[8] = ['9', '7']
+      rendered = (await renderPage(hooks)).rendered
+      expect(findText(rendered, '已恢复')).toBeDefined()
+      expect(findText(rendered, '最新公告')).toBeUndefined()
+      expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('历史公告 (2)')
+    } finally {
+      hookStates = []
+    }
+  })
+
+  it('remembers dismissed notices in localStorage and skips them next mount', async () => {
+    const store = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, String(value)) },
+    }
+    const globals = globalThis as unknown as Record<string, unknown>
+    const original = (globals.window as Record<string, unknown> | undefined)?.localStorage
+    ;(globals.window as Record<string, unknown>).localStorage = storage
+    const setStates: Record<number, unknown> = {}
+    const { plugin, render } = materialize({
+      setState: (index, value) => { setStates[index] = value },
+    })
+    const face = localeService()
+    const { ctx, entries, runInjections } = stubCtx({ locale: face })
+    try {
+      plugin.apply(ctx)
+      runInjections()
+      face.setActive('zh')
+      const page = entries.find(entry => entry.slot === 'main')!.component
+      const notice = {
+        ok: true,
+        announcements: [
+          { id: 9, type: 'warning', publishDate: '2026-11-10T02:00:00Z', content: '## 最新公告\n服务波动' },
+          { id: 8, type: 'success', publishDate: '2026-11-09T00:00:00Z', content: '已恢复' },
+        ],
+      }
+      // The stub's useState ignores the lazy initializer, so the seed mirrors
+      // what the browser reads from storage on first mount.
+      store.set('dsh-tako.notices.dismissed', '["9"]')
+      hookStates = [undefined, undefined, catalog, undefined, false, undefined, 'overview', notice, ['9'], false, false, { status: 'idle' }]
+      let rendered = render(page, { t: face.bind() }) as Element
+      const list = findByTestId(rendered, 'dsh-tako-notice')
+      expect(findText(list, '最新公告')).toBeUndefined()
+      expect(findText(list, '已恢复')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('历史公告 (1)')
+      // Clicking 知道了 on the pinned notice appends id 8 to localStorage.
+      const dismiss = findByTestId(rendered, 'dsh-tako-notice-dismiss')
+      expect(dismiss).toBeDefined()
+      const event = { preventDefault: () => {}, stopPropagation: () => {} }
+      void ((dismiss!.props as { onClick: (e: unknown) => void }).onClick)(event)
+      expect(setStates[8]).toEqual(['9', '8'])
+      expect(store.get('dsh-tako.notices.dismissed')).toBe('["9","8"]')
+    } finally {
+      if (original === undefined) delete (globals.window as Record<string, unknown>).localStorage
+      else (globals.window as Record<string, unknown>).localStorage = original
       hookStates = []
     }
   })
@@ -1023,16 +1138,16 @@ describe('client console surfaces', () => {
     }))
     const disposers: (() => void)[] = []
     try {
-      hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, { status: 'idle' }]
+      hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, false, { status: 'idle' }]
       render(page, {})
       for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
       await vi.advanceTimersByTimeAsync(0)
-      // ConfigTab's form state (index 13) was written by the config GET.
-      const form = setStates[13] as Record<string, unknown> | undefined
+      // ConfigTab's form state (index 14) was written by the config GET.
+      const form = setStates[14] as Record<string, unknown> | undefined
       expect(form?.refreshMinutes).toBe('30')
       expect(form?.retryDelays).toBe('1000, 5000')
       // Replay the recorded states for a second render so the form is mounted.
-      hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, { status: 'idle' }, setStates[11], setStates[12], setStates[13]]
+      hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, false, { status: 'idle' }, setStates[12], setStates[13], setStates[14]]
       const rendered = render(page, {}) as Element
       const save = findByTestId(rendered, 'dsh-tako-config-save')
       expect(save).toBeDefined()
