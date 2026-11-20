@@ -560,33 +560,46 @@ window.__ModuleLoader__.load({
       const [state, setState] = useState({ status: 'idle' })
       const timer = useRef(undefined)
       const alive = useRef(true)
-      useEffect(() => () => {
-        alive.current = false
+      const controller = useRef(undefined)
+      const invalidate = () => {
         if (timer.current !== undefined) clearTimeout(timer.current)
+        controller.current?.abort()
+      }
+      useEffect(() => {
+        alive.current = true
+        return () => { alive.current = false; invalidate() }
       }, [])
 
-      const poll = id => {
+      const poll = (id, request) => {
         timer.current = setTimeout(async () => {
-          if (!alive.current) return
+          if (!alive.current || request.signal.aborted) return
           try {
-            const next = await fetch(`${hostPath(ROUTE)}?id=${encodeURIComponent(id)}`, { cache: 'no-store' }).then(r => r.json())
-            if (!alive.current) return
-            if (next.status === 'pending') { setState(next); poll(id); return }
+            const next = await call('GET', `${ROUTE}?id=${encodeURIComponent(id)}`, undefined, request.signal)
+            if (!alive.current || request.signal.aborted) return
+            if (next.status === 'pending') { setState(next); poll(id, request); return }
             const settled = next.status === 'idle' ? { status: 'error', code: 'failed', message: 'sign-in no longer pending' } : next
             setState(settled)
             if (settled.status === 'success') notifyCredential()
           } catch (error) {
-            if (alive.current) setState({ status: 'error', code: 'failed', message: String(error && error.message || error) })
+            if (alive.current && !request.signal.aborted) setState({ status: 'error', code: 'failed', message: String(error && error.message || error) })
           }
         }, POLL_MS)
       }
 
       const start = async () => {
+        if (!alive.current) return
+        invalidate()
+        const request = new AbortController()
+        controller.current = request
         // Open the tab inside the click so popup blockers allow it; point it at Tako once the URL is known.
         const tab = window.open('about:blank', '_blank')
         setState({ status: 'starting' })
         try {
-          const started = await call('POST', ROUTE, { action: 'start' })
+          const started = await call('POST', ROUTE, { action: 'start' }, request.signal)
+          if (!alive.current || request.signal.aborted) {
+            if (tab) tab.close()
+            return
+          }
           if (started.status !== 'pending') {
             if (tab) tab.close()
             setState(started)
@@ -600,20 +613,23 @@ window.__ModuleLoader__.load({
             window.open(started.url, '_blank')
           }
           setState(started)
-          poll(started.id)
+          poll(started.id, request)
         } catch (error) {
           if (tab) tab.close()
-          setState({ status: 'error', code: 'failed', message: String(error && error.message || error) })
+          if (alive.current && !request.signal.aborted) setState({ status: 'error', code: 'failed', message: String(error && error.message || error) })
         }
       }
       const cancel = async () => {
-        if (timer.current !== undefined) clearTimeout(timer.current)
-        try { await call('POST', ROUTE, { action: 'cancel' }) } catch {}
-        setState({ status: 'idle' })
+        invalidate()
+        const request = new AbortController()
+        controller.current = request
+        try { await call('POST', ROUTE, { action: 'cancel' }, request.signal) } catch {}
+        if (alive.current && !request.signal.aborted) setState({ status: 'idle' })
       }
 
+      const clearSuccess = () => { if (state.status === 'success') setState({ status: 'idle' }) }
       const busy = state.status === 'starting' || state.status === 'pending'
-      return { state, start, cancel, busy }
+      return { state, start, cancel, clearSuccess, busy }
     }
 
     /** The pending/success/error notes and the sign-in link, shared by both surfaces. */
@@ -1344,31 +1360,51 @@ window.__ModuleLoader__.load({
       }, h('i', { style: { width: `${percent}%` } }))
     }
 
+    /** Each view publishes only its latest status read; replacement and unload abort older reads. */
+    function useStatusReader(onStatus, onError) {
+      const controller = useRef(undefined)
+      const mounted = useRef(true)
+      const invalidate = () => { controller.current?.abort() }
+      useEffect(() => {
+        mounted.current = true
+        return () => { mounted.current = false; invalidate() }
+      }, [])
+      const load = async () => {
+        if (!mounted.current) return
+        invalidate()
+        const request = new AbortController()
+        controller.current = request
+        try {
+          const next = await call('GET', STATUS_ROUTE, undefined, request.signal)
+          if (!request.signal.aborted) onStatus(next)
+        } catch (error) {
+          if (!request.signal.aborted) onError(error)
+        }
+      }
+      return { load, invalidate }
+    }
+
+    /** Both account views refresh on credential changes and returning from browser authorization. */
+    function useStatusRefresh(load) {
+      useEffect(() => {
+        const refresh = () => { void load() }
+        window.addEventListener('dsh-tako-credential', refresh)
+        window.addEventListener('focus', refresh)
+        refresh()
+        return () => {
+          window.removeEventListener('dsh-tako-credential', refresh)
+          window.removeEventListener('focus', refresh)
+        }
+      }, [])
+    }
+
     function TakoFooter(props) {
       const wide = props.wide === true
       const t = props.t ?? fallbackT
       const [status, setStatus] = useState(undefined)
-      const alive = useRef(true)
-      useEffect(() => () => { alive.current = false }, [])
-      useEffect(() => {
-        ensureTakoTheme()
-        const load = async () => {
-          try {
-            const next = await call('GET', STATUS_ROUTE)
-            if (alive.current) setStatus(next)
-          } catch {
-            if (alive.current) setStatus({ configured: false })
-          }
-        }
-        const onCredential = () => { void load() }
-        void load()
-        window.addEventListener('dsh-tako-credential', onCredential)
-        window.addEventListener('focus', onCredential)
-        return () => {
-          window.removeEventListener('dsh-tako-credential', onCredential)
-          window.removeEventListener('focus', onCredential)
-        }
-      }, [])
+      const { load } = useStatusReader(setStatus, () => { setStatus({ configured: false }) })
+      useEffect(() => { ensureTakoTheme() }, [])
+      useStatusRefresh(load)
       const configured = status !== undefined && status.configured === true
       const plan = configured ? status.plan : undefined
       const onPlan = hasPlanQuota(plan)
@@ -2196,16 +2232,10 @@ window.__ModuleLoader__.load({
         return () => { alive.current = false; catalogController.current?.abort() }
       }, [])
 
-      const loadStatus = async () => {
-        try {
-          const next = await call('GET', STATUS_ROUTE)
-          if (!alive.current) return
-          setStatus(next)
-          setStatusError(undefined)
-        } catch (error) {
-          if (alive.current) setStatusError(String(error && error.message || error))
-        }
-      }
+      const { load: loadStatus, invalidate: invalidateStatus } = useStatusReader(next => {
+        setStatus(next)
+        setStatusError(undefined)
+      }, error => { setStatusError(String(error && error.message || error)) })
       const loadCatalog = () => {
         if (catalogRequest.current) return catalogRequest.current
         const controller = new AbortController()
@@ -2228,7 +2258,7 @@ window.__ModuleLoader__.load({
         return request
       }
 
-      useEffect(() => { void loadStatus() }, [])
+      useStatusRefresh(loadStatus)
       useEffect(() => {
         if (catalog === undefined || catalog.consoleApiVersion !== CONSOLE_API_VERSION) return
         void (async () => {
@@ -2263,20 +2293,21 @@ window.__ModuleLoader__.load({
         void poll()
         return () => { disposed = true; clearTimeout(timer); catalogController.current?.abort() }
       }, [])
-      // A finished sign-in changes the stored key; refresh the status card.
-      useEffect(() => { if (login.state.status === 'success') { setLogoutNote(undefined); void loadStatus() } }, [login.state.status])
+      useEffect(() => { if (login.state.status === 'success') setLogoutNote(undefined) }, [login.state.status])
 
       const logout = async () => {
+        invalidateStatus()
         setBusyLogout(true)
         setLogoutNote(undefined)
         try {
           const result = await call('POST', LOGOUT_ROUTE, {})
           if (!alive.current) return
+          if (result.ok !== true) throw new Error(result.error || result.message || t('failed'))
           if (result.action === 'revoked') setLogoutNote(t('logoutRevoked'))
           else if (result.action === 'removed') setLogoutNote(result.warning === undefined ? t('logoutRemoved') : `${t('logoutRemoved')}: ${result.warning}`)
           else if (result.action === 'external') setLogoutNote(t('logoutExternal'))
           else setLogoutNote(t('logoutNone'))
-          await loadStatus()
+          if (result.action !== 'external') login.clearSuccess()
           notifyCredential()
         } catch (error) {
           if (alive.current) setLogoutNote(`${t('failed')}: ${String(error && error.message || error)}`)
@@ -2363,7 +2394,7 @@ window.__ModuleLoader__.load({
           `${t('loadFailed')}: ${statusError}`,
           h('button', { type: 'button', onClick: () => { void loadStatus(); void loadCatalog() }, className: 'dsh-tako-ghost' }, t('retry'))))
       }
-      const onKeyChanged = async () => { await loadStatus(); notifyCredential() }
+      const onKeyChanged = () => { login.clearSuccess(); notifyCredential() }
       const dismissNotice = item => {
         const next = [...(Array.isArray(dismissedNotice) ? dismissedNotice : []), noticeId(item)]
         saveDismissedNotices(next)

@@ -67,7 +67,14 @@ let row: ModuleRow | undefined
 async function loadModuleRow(): Promise<ModuleRow> {
   if (row !== undefined) return row
   const globals = globalThis as unknown as Record<string, unknown>
-  globals.window = { __ModuleLoader__: { load: (m: ModuleRow) => { row = m } }, location: { hostname: '127.0.0.1' } }
+  const events = new EventTarget()
+  globals.window = {
+    __ModuleLoader__: { load: (m: ModuleRow) => { row = m } },
+    location: { hostname: '127.0.0.1' },
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events),
+  }
   globals.document = { documentElement: { lang: 'zh-CN' } }
   // Node exposes a getter-only `navigator`; the fallback only reads it when the
   // document language is empty, which these tests never leave it.
@@ -782,6 +789,221 @@ describe('client i18n: fallback without the locale service', () => {
     }
   })
 })
+
+describe('client account refresh ordering', () => {
+  async function mount(slot: 'main' | 'sidebar.footer.action') {
+    await loadModuleRow()
+    hookStates = []
+    const effects: (() => void | (() => void))[] = []
+    const updates: unknown[] = []
+    const errors: unknown[] = []
+    const { plugin, render } = materialize({ effect: effect => { effects.push(effect) },
+      setState: (index, value) => {
+        if (index === 0) updates.push(value)
+        if (index === 1) errors.push(value)
+      } })
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    const rendered = render(entries.find(entry => entry.slot === slot)!.component, { wide: true })
+    const pending: { resolve: (value: Response) => void, reject: (error: Error) => void, signal?: AbortSignal }[] = []
+    vi.stubGlobal('fetch', vi.fn((input: string, init: RequestInit) => {
+      if (!String(input).includes('tako.status')) return Promise.resolve(Response.json({ models: [], status: 'ready', lastSyncAt: 1 }))
+      return new Promise<Response>((resolve, reject) => { pending.push({ resolve, reject, signal: init.signal ?? undefined }) })
+    }))
+    const disposers = effects.map(effect => effect()).filter((dispose): dispose is () => void => typeof dispose === 'function')
+    return { rendered, updates, errors, pending, dispose: () => { disposers.forEach(dispose => dispose()) } }
+  }
+
+  for (const slot of ['main', 'sidebar.footer.action'] as const) {
+    it(`${slot} refreshes on credential change and ignores an older successful read`, async () => {
+      vi.useFakeTimers()
+      const view = await mount(slot)
+      try {
+        expect(view.pending).toHaveLength(1)
+        window.dispatchEvent(new Event('dsh-tako-credential'))
+        expect(view.pending).toHaveLength(2)
+        view.pending[1]!.resolve(Response.json({ configured: true, me: { userName: 'New account' } }))
+        await vi.advanceTimersByTimeAsync(0)
+        view.pending[0]!.resolve(Response.json({ configured: false }))
+        await vi.advanceTimersByTimeAsync(0)
+        expect(view.updates.at(-1)).toMatchObject({ configured: true, me: { userName: 'New account' } })
+      } finally { view.dispose(); vi.unstubAllGlobals(); vi.useRealTimers() }
+    })
+
+    it(`${slot} ignores an older failure after a newer read`, async () => {
+      vi.useFakeTimers()
+      const view = await mount(slot)
+      try {
+        window.dispatchEvent(new Event('focus'))
+        expect(view.pending).toHaveLength(2)
+        view.pending[1]!.resolve(Response.json({ configured: true, me: { userName: 'Current account' } }))
+        await vi.advanceTimersByTimeAsync(0)
+        const count = view.updates.length
+        view.pending[0]!.reject(new Error('old request failed'))
+        await vi.advanceTimersByTimeAsync(0)
+        expect(view.updates).toHaveLength(count)
+        expect(view.errors.every(error => error === undefined)).toBe(true)
+        expect(view.updates.at(-1)).toMatchObject({ configured: true })
+      } finally { view.dispose(); vi.unstubAllGlobals(); vi.useRealTimers() }
+    })
+
+    it(`${slot} aborts in-flight status reads and removes listeners on unload`, async () => {
+      vi.useFakeTimers()
+      const view = await mount(slot)
+      try {
+        view.dispose()
+        expect(view.pending[0]!.signal?.aborted).toBe(true)
+        window.dispatchEvent(new Event('focus'))
+        window.dispatchEvent(new Event('dsh-tako-credential'))
+        expect(view.pending).toHaveLength(1)
+        view.pending[0]!.resolve(Response.json({ configured: true }))
+        await vi.advanceTimersByTimeAsync(0)
+        expect(view.updates).toHaveLength(0)
+      } finally { view.dispose(); vi.unstubAllGlobals(); vi.useRealTimers() }
+    })
+  }
+})
+
+describe('client logout completion note', () => {
+  for (const outcome of ['revoked', 'removed', 'not-configured', 'external', 'network-error', 'http-error'] as const) {
+    it(`handles ${outcome} without erasing a sign-in that is still current`, async () => {
+      await loadModuleRow()
+      hookStates = [{ configured: true, me: { userName: 'Test account' } }, undefined, undefined, undefined, false, undefined,
+        'overview', undefined, undefined, false, false,
+        { status: 'success', user: 'Test account', key: 'cr_****test', credential: 'TAKO_API_KEY' }]
+      const changes: unknown[] = []
+      const notes: unknown[] = []
+      const { plugin, render } = materialize({ setState: (index, value) => {
+        if (index === 11) changes.push(value)
+        if (index === 5) notes.push(value)
+      } })
+      const { ctx, entries, runInjections } = stubCtx()
+      plugin.apply(ctx)
+      runInjections()
+      vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+        if (!String(input).includes('tako.logout')) return Response.json({ configured: false })
+        if (outcome === 'network-error') throw new Error('logout failed')
+        if (outcome === 'http-error') return Response.json({ ok: false, error: 'credential store unavailable' }, { status: 500 })
+        return Response.json({ ok: true, action: outcome })
+      }))
+      try {
+        const view = render(entries.find(entry => entry.slot === 'main')!.component, {})
+        const logout = findByTestId(view, 'dsh-tako-console-sign-out')?.props?.onClick
+        expect(typeof logout).toBe('function')
+        await (logout as () => Promise<void>)()
+        const cleared = ['revoked', 'removed', 'not-configured'].includes(outcome)
+        expect(changes).toEqual(cleared ? [{ status: 'idle' }] : [])
+        if (outcome.endsWith('error')) expect(String(notes.at(-1))).toMatch(/logout failed|credential store unavailable/)
+      } finally { hookStates = []; vi.unstubAllGlobals() }
+    })
+  }
+})
+
+describe('client primary browser sign-in button', () => {
+  for (const mode of ['browser-popup', 'desktop-denied-blank'] as const) {
+    it(`opens the authorization URL through the ${mode} path`, async () => {
+      await loadModuleRow()
+      vi.useFakeTimers()
+      hookStates = []
+      const tab = { location: { href: 'about:blank' }, opener: {}, close: vi.fn() }
+      const open = vi.fn(() => mode === 'browser-popup' ? tab : null)
+      vi.stubGlobal('window', { ...window, open })
+      vi.stubGlobal('fetch', vi.fn(async () => Response.json({ status: 'pending', id: 'test-login', url: 'https://tako.example/app/authorize' })))
+      const effects: (() => void | (() => void))[] = []
+      const { plugin, render } = materialize({ effect: callback => { effects.push(callback) } })
+      const { ctx, entries, runInjections } = stubCtx()
+      plugin.apply(ctx)
+      runInjections()
+      const view = render(entries.find(entry => entry.slot === 'settings.models.provider-card')!.component,
+        { provider: { provider: 'tako' }, keyConfigured: false })
+      const disposers = effects.map(effect => effect()).filter((dispose): dispose is () => void => typeof dispose === 'function')
+      try {
+        const start = findByTestId(view, 'dsh-tako-sign-in')?.props?.onClick
+        expect(typeof start).toBe('function')
+        await (start as () => Promise<void>)()
+        expect(open.mock.calls[0]).toEqual(['about:blank', '_blank'])
+        if (mode === 'browser-popup') {
+          expect(tab.location.href).toBe('https://tako.example/app/authorize')
+          expect(tab.opener).toBeNull()
+          expect(open).toHaveBeenCalledTimes(1)
+        } else {
+          expect(open.mock.calls[1]).toEqual(['https://tako.example/app/authorize', '_blank'])
+        }
+      } finally { disposers.forEach(dispose => dispose()); vi.unstubAllGlobals(); vi.useRealTimers() }
+    })
+  }
+})
+
+describe('client sign-in request lifetime', () => {
+  async function mount() {
+    await loadModuleRow()
+    hookStates = [{ status: 'pending', id: 'older-attempt', url: 'https://tako.example/app/authorize' }]
+    const effects: (() => void | (() => void))[] = []
+    const changes: unknown[] = []
+    const tab = { location: { href: 'about:blank' }, close: vi.fn() }
+    vi.stubGlobal('window', { ...window, open: vi.fn(() => tab) })
+    const pending: { init: RequestInit, resolve: (response: Response) => void }[] = []
+    vi.stubGlobal('fetch', vi.fn((input: string, init: RequestInit = {}) => {
+      if (!String(input).includes('tako.login')) return Promise.resolve(Response.json({ consoleApiVersion: 2 }))
+      if (init.body && JSON.parse(String(init.body)).action === 'cancel') return Promise.resolve(Response.json({ status: 'idle' }))
+      return new Promise<Response>(resolve => { pending.push({ init, resolve }) })
+    }))
+    const { plugin, render } = materialize({ effect: effect => { effects.push(effect) },
+      setState: (index, value) => { if (index === 0) changes.push(value) } })
+    const { ctx, entries, runInjections } = stubCtx()
+    plugin.apply(ctx)
+    runInjections()
+    const view = render(entries.find(entry => entry.slot === 'settings.models.provider-card')!.component,
+      { provider: { provider: 'tako' } })
+    const disposers = effects.map(effect => effect()).filter((dispose): dispose is () => void => typeof dispose === 'function')
+    return {
+      start: findByTestId(view, 'dsh-tako-sign-in')!.props!.onClick as () => Promise<void>,
+      cancel: findByTextButton(view, '取消')!.props!.onClick as () => Promise<void>,
+      pending, changes, tab, dispose: () => { disposers.forEach(dispose => dispose()) },
+    }
+  }
+
+  it('does not navigate or publish a delayed start after unmount', async () => {
+    vi.useFakeTimers()
+    const view = await mount()
+    try {
+      const starting = view.start()
+      view.dispose()
+      view.pending[0]!.resolve(Response.json({ status: 'pending', id: 'new-attempt', url: 'https://tako.example/app/authorize' }))
+      await starting
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(view.changes).toEqual([{ status: 'starting' }])
+      expect(view.tab.location.href).toBe('about:blank')
+      expect(view.tab.close).toHaveBeenCalled()
+      expect(view.pending).toHaveLength(1)
+    } finally { view.dispose(); hookStates = []; vi.unstubAllGlobals(); vi.useRealTimers() }
+  })
+
+  it('does not revive a cancelled attempt when an older poll finishes', async () => {
+    vi.useFakeTimers()
+    const view = await mount()
+    try {
+      const starting = view.start()
+      view.pending[0]!.resolve(Response.json({ status: 'pending', id: 'new-attempt', url: 'https://tako.example/app/authorize' }))
+      await starting
+      await vi.advanceTimersByTimeAsync(1500)
+      expect(view.pending).toHaveLength(2)
+      await view.cancel()
+      view.pending[1]!.resolve(Response.json({ status: 'success', id: 'new-attempt', key: 'cr_****test' }))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(view.changes.at(-1)).toEqual({ status: 'idle' })
+    } finally { view.dispose(); hookStates = []; vi.unstubAllGlobals(); vi.useRealTimers() }
+  })
+})
+
+function findByTextButton(node: unknown, text: string): Element | undefined {
+  if (Array.isArray(node)) return node.map(child => findByTextButton(child, text)).find(Boolean)
+  if (node === null || typeof node !== 'object') return undefined
+  const el = node as Element
+  if (el.tag === 'button' && findText(el, text) === text) return el
+  return findByTextButton(el.children ?? [], text)
+}
 
 describe('client TakoMark', () => {
   it('inlines the PNG as a data URL and never uses import.meta', () => {
