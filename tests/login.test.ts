@@ -308,3 +308,36 @@ describe('loopback flow', () => {
     await expect(startBrowserLogin({ origin: ORIGIN, port: free })).rejects.toMatchObject({ code: 'listen-failed' })
   })
 })
+
+describe('fetchUserQuota', () => {
+  it('sends apiKey and Authorization header to user-quota and parses reset fields', async () => {
+    const calls: { url: string, body: Record<string, unknown>, auth?: string }[] = []
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      calls.push({ url, body, auth: headers.authorization ?? headers.Authorization })
+      if (url.endsWith('/apiStats/api/get-key-id')) return jsonResponse({ success: true, data: { id: '42' } })
+      if (url.endsWith('/apiStats/api/user-quota')) {
+        return jsonResponse({
+          plan: { window_cost_limit: 200, window_minutes: 300, weekly_cost_limit: 930 },
+          usage: { windowCost: 56, weeklyCost: 418, window_reset_at: '2026-11-22T18:00:00Z' },
+        })
+      }
+      throw new Error(`unexpected url ${url}`)
+    }) as unknown as typeof fetch
+
+    const quota = await fetchUserQuota(ORIGIN, KEY, fetchImpl)
+    expect(quota).toEqual({
+      windowCost: 56,
+      windowCostLimit: 200,
+      windowMinutes: 300,
+      weeklyCost: 418,
+      weeklyCostLimit: 930,
+      windowResetAt: '2026-11-22T18:00:00Z',
+    })
+    const quotaCall = calls.find(c => c.url.endsWith('/apiStats/api/user-quota'))
+    expect(quotaCall?.body).toEqual({ apiId: '42', apiKey: KEY })
+    expect(quotaCall?.auth).toBe(`Bearer ${KEY}`)
+  })
+})

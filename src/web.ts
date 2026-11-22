@@ -60,8 +60,25 @@ export const NOTICE_ROUTE = '/api/tako.notice'
 export const CONFIG_ROUTE = '/api/tako.config'
 /** Console route: ask the sync loop for an immediate catalog refresh. */
 export const SYNC_ROUTE = '/api/tako.sync'
+/** Console route: read or set the host's default chat model (`agent-default-model`). */
+export const ACTIVE_MODEL_ROUTE = '/api/tako.model'
 /** Browser/Host console protocol implemented by this running plugin instance. */
 export const CONSOLE_API_VERSION = 2
+
+/** Persisted UI display preferences shared across model directory, console and sidebar footer. */
+export interface TakoUiPreferences {
+  priceMode?: 'detail' | 'avg'
+  currency?: 'cny' | 'usd'
+  tokenUnit?: 'M' | 'K'
+  layout?: 'card' | 'table'
+  sort?: 'rec' | 'price' | 'disc' | 'name'
+}
+
+/** Optional slice of the host's `agentDefaultModel` service. */
+export interface AgentDefaultModelLike {
+  currentSelection?: () => { provider?: string, model?: string, reasoningEffort?: string } | undefined
+  saveSelection?: (next: { provider: string, model: string }) => Promise<void>
+}
 
 /** Same grammar the settings controller enforces for credential references. */
 const CREDENTIAL_REF = /^[A-Za-z_][A-Za-z0-9_]*$/u
@@ -197,6 +214,19 @@ function pluginManagerOf(ctx: Context): PluginManagerLike | undefined {
   }
 }
 
+/** The host default-model service, if this profile mounted one. Read at request time. */
+function agentDefaultModelOf(ctx: Context): AgentDefaultModelLike | undefined {
+  try {
+    const fromGet = (ctx as unknown as { get?: (name: string) => unknown }).get?.('agentDefaultModel')
+    if (fromGet !== undefined && fromGet !== null) return fromGet as AgentDefaultModelLike
+  } catch { /* not mounted */ }
+  try {
+    return (ctx as unknown as { agentDefaultModel?: AgentDefaultModelLike }).agentDefaultModel
+  } catch {
+    return undefined
+  }
+}
+
 /** Mount the routes while the Web connection and the credential service are both up. */
 export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: string }, web: { catalog: () => CatalogState, requestSync?: () => void } = { catalog: () => emptyCatalogState() }): void {
   ctx.inject(['connection', 'credentials'], inner => {
@@ -222,6 +252,7 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
       onCredentialChange,
       settings: ctx.settings as ConsoleSettings | undefined,
       requestSync: web.requestSync,
+      agentDefaultModel: () => agentDefaultModelOf(ctx),
     })
     const updateService = createUpdateService({
       logger: inner.logger,
@@ -295,6 +326,12 @@ export function applyWeb(ctx: Context, config: { baseURL: string, apiKeyEnv: str
           methods: ['POST'],
           requestBody: 'buffered',
           fetch: () => consoleService.handleSync(),
+        }),
+        connection.fetch.register({
+          path: ACTIVE_MODEL_ROUTE,
+          methods: ['GET', 'POST'],
+          requestBody: 'buffered',
+          fetch: request => consoleService.handleModel(request),
         }),
       ]
       return async () => {
@@ -385,6 +422,8 @@ export interface ConsoleServiceOptions {
   settings?: ConsoleSettings
   /** Kick an immediate catalog sync when the console asks for one. */
   requestSync?: () => void
+  /** Optional host default-model service for one-click "Set as chat model". */
+  agentDefaultModel?: () => AgentDefaultModelLike | undefined
 }
 
 interface StatusCache {
@@ -410,6 +449,7 @@ export function createConsoleService(options: ConsoleServiceOptions): {
   handleNotice: () => Promise<Response>
   handleConfig: (request: Request) => Promise<Response>
   handleSync: () => Promise<Response>
+  handleModel: (request: Request) => Promise<Response>
 } {
   const origin = normalizeOrigin(options.baseURL)
   const cacheMs = options.statusCacheMs ?? STATUS_CACHE_MS
@@ -651,8 +691,13 @@ export function createConsoleService(options: ConsoleServiceOptions): {
       const idBody = await fetchJson(`${origin}/apiStats/api/get-key-id`, post({ apiKey: current.value }))
       const id = typeof idBody.data === 'object' && idBody.data !== null ? (idBody.data as Record<string, unknown>).id : undefined
       if (id === undefined) throw new Error('key-id returned no id')
+      const postOwned = (payload: Record<string, unknown>): RequestInit => ({
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${current.value}` },
+        body: JSON.stringify({ ...payload, apiKey: current.value }),
+      })
       const daily = (async () => {
-        const body = await fetchJson(`${origin}/apiStats/api/user-stats`, post({ apiId: String(id) }))
+        const body = await fetchJson(`${origin}/apiStats/api/user-stats`, postOwned({ apiId: String(id) }))
         const total = typeof body.data === 'object' && body.data !== null
           ? (body.data as Record<string, unknown>).usage : undefined
         const cost = typeof total === 'object' && total !== null
@@ -661,7 +706,7 @@ export function createConsoleService(options: ConsoleServiceOptions): {
         if (typeof usd === 'number') out.dailyCostUsd = usd
       })().catch((error: unknown) => { out.statsError = error instanceof Error ? error.message : String(error) })
       const perModel = (async () => {
-        const body = await fetchJson(`${origin}/apiStats/api/user-model-stats`, post({ apiId: String(id), period: 'daily' }))
+        const body = await fetchJson(`${origin}/apiStats/api/user-model-stats`, postOwned({ apiId: String(id), period: 'daily' }))
         const rows = Array.isArray(body.data) ? body.data : []
         out.models = rows
           .filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
@@ -738,6 +783,7 @@ export function createConsoleService(options: ConsoleServiceOptions): {
       exclude: resolved.exclude,
       includeClaudeCodeOnly: resolved.includeClaudeCodeOnly,
       overrides: resolved.overrides,
+      ...typeof resolved.ui === 'object' && resolved.ui !== null ? { ui: resolved.ui } : {},
     }
 
     if (request.method === 'GET') {
@@ -756,6 +802,7 @@ export function createConsoleService(options: ConsoleServiceOptions): {
 
     const ops: { op: 'set', path: string[], value: unknown }[] = []
     const webOps: { op: 'set', path: string[], value: unknown }[] = []
+    let needsCatalogSync = false
     const bad = (field: string, why: string): Response => json({ ok: false, code: 'bad-request', message: `${field}: ${why}` }, 400)
     const stringArray = (value: unknown): string[] | undefined =>
       Array.isArray(value) && value.every(item => typeof item === 'string') ? value as string[] : undefined
@@ -765,38 +812,52 @@ export function createConsoleService(options: ConsoleServiceOptions): {
         case 'refreshIntervalMs': {
           if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) return bad(field, 'a non-negative integer (ms)')
           ops.push({ op: 'set', path: [field], value })
+          needsCatalogSync = true
           break
         }
         case 'syncRetryDelaysMs': {
           if (!Array.isArray(value) || !value.every(item => typeof item === 'number' && Number.isInteger(item) && item >= 1)) return bad(field, 'an array of positive integers (ms)')
           ops.push({ op: 'set', path: [field], value })
+          needsCatalogSync = true
           break
         }
         case 'defaultContextWindow': {
           if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) return bad(field, 'a positive integer')
           ops.push({ op: 'set', path: [field], value })
+          needsCatalogSync = true
           break
         }
         case 'includeClaudeCodeOnly': {
           if (typeof value !== 'boolean') return bad(field, 'a boolean')
           ops.push({ op: 'set', path: [field], value })
+          needsCatalogSync = true
           break
         }
         case 'pinned': case 'include': case 'exclude': {
           const list = stringArray(value)
           if (list === undefined) return bad(field, 'an array of strings')
           ops.push({ op: 'set', path: [field], value: list })
+          needsCatalogSync = true
           break
         }
         case 'baseURL': {
           if (typeof value !== 'string' || value.trim() === '') return bad(field, 'a non-empty URL')
           ops.push({ op: 'set', path: [field], value: value.trim() })
+          needsCatalogSync = true
           break
         }
         case 'overrides': {
           const problem = overridesProblem(value)
           if (problem !== undefined) return bad(field, problem)
           ops.push({ op: 'set', path: [field], value })
+          needsCatalogSync = true
+          break
+        }
+        case 'ui': {
+          const problem = uiPreferencesProblem(value)
+          if (problem !== undefined) return bad(field, problem)
+          const existing = typeof resolved.ui === 'object' && resolved.ui !== null ? resolved.ui as Record<string, unknown> : {}
+          ops.push({ op: 'set', path: ['ui'], value: { ...existing, ...value as Record<string, unknown> } })
           break
         }
         case 'webSearchProvider': {
@@ -811,8 +872,8 @@ export function createConsoleService(options: ConsoleServiceOptions): {
 
     if (ops.length > 0) await settings.mutate('tako', ops)
     if (webOps.length > 0) await settings.mutate('web', webOps)
-    // Model-list related edits take effect on the next sync; kick one now.
-    if (ops.length > 0) options.requestSync?.()
+    // Only model-list related edits need a directory resync; UI display preference updates do not.
+    if (needsCatalogSync) options.requestSync?.()
     return json({ ok: true })
   }
 
@@ -823,7 +884,55 @@ export function createConsoleService(options: ConsoleServiceOptions): {
     return json({ ok: true })
   }
 
-  return { handleStatus, handleLogout, handleCatalog, handleKey, handleLogs, handleUsage, handleNotice, handleConfig, handleSync }
+  /**
+   * Read or update the host's default chat model via `agentDefaultModel`.
+   * When the host does not expose that service (or cannot persist edits),
+   * answers `{ ok: false, code: 'unsupported' }` so the client degrades
+   * cleanly to copying the model ID with guidance.
+   */
+  const handleModel = async (request: Request): Promise<Response> => {
+    const service = options.agentDefaultModel?.()
+    if (request.method === 'GET') {
+      if (service === undefined || typeof service.currentSelection !== 'function') {
+        return json({ ok: true, supported: false, writable: false })
+      }
+      try {
+        const current = service.currentSelection()
+        return json({
+          ok: true,
+          supported: true,
+          writable: typeof service.saveSelection === 'function' && options.settings?.writable !== false,
+          ...(typeof current?.provider === 'string' ? { provider: current.provider } : {}),
+          ...(typeof current?.model === 'string' ? { model: current.model } : {}),
+        })
+      } catch {
+        return json({ ok: true, supported: false, writable: false })
+      }
+    }
+
+    const current = await resolveKey()
+    if (current === undefined) return json({ ok: false, code: 'not-configured', message: 'sign in to Tako first' })
+    let body: { model?: unknown }
+    try {
+      body = await request.json() as { model?: unknown }
+    } catch {
+      return json({ ok: false, code: 'bad-request', message: 'invalid JSON body' }, 400)
+    }
+    const model = typeof body.model === 'string' ? body.model.trim() : ''
+    if (model === '') return json({ ok: false, code: 'bad-request', message: 'model: a non-empty model id' }, 400)
+    if (service === undefined || typeof service.saveSelection !== 'function' || options.settings?.writable === false) {
+      return json({ ok: false, code: 'unsupported', message: 'host does not support setting the default chat model directly' })
+    }
+    try {
+      await service.saveSelection({ provider: 'tako', model })
+      return json({ ok: true, provider: 'tako', model })
+    } catch (error: unknown) {
+      options.logger.warn('setting default Tako model %s failed: %s', model, error instanceof Error ? error.message : String(error))
+      return json({ ok: false, code: 'write-failed', message: error instanceof Error ? error.message : String(error) }, 500)
+    }
+  }
+
+  return { handleStatus, handleLogout, handleCatalog, handleKey, handleLogs, handleUsage, handleNotice, handleConfig, handleSync, handleModel }
 }
 
 /** How long the announcements answer stays fresh. */
@@ -865,6 +974,24 @@ function overridesProblem(value: unknown): string | undefined {
           return `overrides.${id}: unknown field ${JSON.stringify(key)}`
       }
     }
+  }
+  return undefined
+}
+
+/** Validate partial UI display preferences written via `/api/tako.config`. */
+function uiPreferencesProblem(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return 'an object of UI preferences'
+  const allowed: Record<string, readonly string[]> = {
+    priceMode: ['detail', 'avg'],
+    currency: ['cny', 'usd'],
+    tokenUnit: ['M', 'K'],
+    layout: ['card', 'table'],
+    sort: ['rec', 'price', 'disc', 'name'],
+  }
+  for (const [key, field] of Object.entries(value as Record<string, unknown>)) {
+    const choices = allowed[key]
+    if (choices === undefined) return `ui: unknown field ${JSON.stringify(key)}`
+    if (typeof field !== 'string' || !choices.includes(field)) return `ui.${key}: expected ${choices.join(' | ')}`
   }
   return undefined
 }

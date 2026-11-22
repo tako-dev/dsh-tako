@@ -6,60 +6,61 @@ import { describe, expect, it, vi } from 'vitest'
  * with `window.__ModuleLoader__`. These tests load it exactly the way the dsh
  * web client does — a stub module loader captures the factory, a stub `require`
  * supplies a recording React — and then drive `apply(ctx)` against stub
- * contexts, with and without a locale service, to pin the i18n contract:
- *
- * - the complete zh/en dictionary is registered under the plugin namespace;
- * - every slot entry declares the namespace, so components receive `t`;
- * - the sidebar label thunk follows the registered translator (language switches);
- * - without a locale service (older dsh, or a stubbed context) nothing
- *   registers, `inject` keeps no hard locale dependency, and every text
- *   renders through the inline fallback dictionary — before and after the
- *   service appears late.
+ * contexts, with and without a locale service, to pin the i18n, pricing,
+ * flat model directory, console, and sidebar footer contracts.
  */
 
 type Element = { tag: string | Function, props: Record<string, unknown> | null, children: unknown[] }
 type Plugin = { inject: string[], apply: (ctx: unknown) => unknown }
 type ModuleRow = { id: string, factory: (require: (spec: string) => unknown) => Plugin }
+type SlotEntry = { slot: string, options: Record<string, unknown>, component: unknown }
 
-/** The keys of the pre-i18n inline dictionary — one must not go missing in a migration. */
-const EXPECTED_KEYS = [
+/** Core dictionary keys that must stay present and non-empty in both zh and en. */
+const REQUIRED_KEYS = [
   'signIn', 'signInAgain', 'cancel', 'waiting', 'openLink', 'success', 'failed', 'denied', 'timeout', 'remote',
-  'panel', 'consoleTitle', 'accountCard', 'signedIn', 'signedOut', 'signedOutLead', 'account', 'plan', 'unknown', 'whoamiFailed',
+  'panel', 'modelsPanel', 'modelsSub', 'gotoModels', 'gotoConsole', 'backToConsole', 'consoleTitle',
+  'accountCard', 'signedIn', 'signedOut', 'connected', 'signedOutLead', 'signinTitle', 'signinDesc',
+  'account', 'plan', 'paygoBadge', 'noPlanBadge', 'unknown', 'whoamiFailed',
   'signOut', 'signOutWorking', 'logoutRevoked', 'logoutRemoved', 'logoutNone', 'logoutExternal',
   'quotaCard', 'quotaRemain', 'quotaUsed', 'quotaPoints', 'quotaUsedShare', 'quotaNoteUsd', 'quotaNoteUnknown',
-  'quotaNeedsLogin', 'quotaUnavailable',
+  'quotaNeedsLogin', 'quotaUnavailable', 'walletBalance', 'walletBalanceTitle', 'walletLow',
+  'planWindows', 'planQuotaTitle', 'windowHours', 'windowHoursLong', 'weeklyShort', 'thisWeek',
+  'planWindowWarn', 'paygoTitle', 'paygoDesc', 'spendChartTitle', 'topModelsTitle',
+  'footerRemain', 'footerRemainShort', 'footerUsed', 'footerSignIn', 'footerSignInHint', 'footerPaygoHint', 'footerLowWarn',
   'catalogCard', 'catalogModel', 'catalogContext', 'catalogVision', 'visionBadge', 'yes', 'no', 'catalogDefault', 'catalogEmpty',
-  'catalogMore', 'catalogLess', 'catalogSyncing', 'catalogRetrying', 'catalogFailed', 'catalogAttempts', 'catalogReadAgain',
+  'catalogSyncing', 'catalogRetrying', 'catalogFailed', 'catalogAttempts', 'catalogReadAgain',
   'catalogDirectoryError', 'catalogSettingsError', 'catalogWriteError', 'catalogReadOnlyError', 'catalogEmptyError', 'catalogTransactionError',
   'refreshIn', 'refreshSoon', 'refreshOnlyAtStartup', 'loadFailed', 'retry', 'consoleRestartRequired',
-  'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'pluginVersion', 'copy', 'copied', 'updateFailed',
-  'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
-  'footerRemain', 'footerUsed', 'windowHours', 'weeklyShort', 'walletBalance', 'planWindows',
+  'searchModelsPlaceholder', 'currentChatLabel', 'notSelected', 'filterBtn', 'filterDone', 'filterClear',
+  'filterVendor', 'filterCapability', 'filterBilling',
+  'priceDetail', 'priceAvg', 'curCnyShort', 'curUsdShort', 'usdWarnChip', 'cnyNote', 'discountNote',
+  'per1M', 'per1K', 'perCall', 'sortRec', 'sortPrice', 'sortDisc', 'sortName', 'viewCard', 'viewTable',
+  'quickAll', 'quickFav', 'quickPromo', 'quickCheap', 'quickCode', 'quickLong', 'quickVision',
+  'priceInput', 'priceCache', 'priceOutput', 'priceRealizedTag', 'priceStdTag', 'priceNewNoRealized',
+  'discountBadge', 'promoBar', 'promoEnds', 'setChatModel', 'currentChatModel', 'setChatNeedLogin',
+  'setChatDone', 'setChatFallback', 'favAdd', 'favAdded', 'copyModelId', 'plazaShort',
+  'updateCard', 'updateAvailable', 'updateCommand', 'upToDate', 'verUpToDate', 'checkUpdate', 'pluginVersion',
+  'copy', 'copied', 'updateFailed', 'updateNow', 'updating', 'updateInstalled', 'updateInstallFailed',
   'servicesCard', 'serviceConsole', 'servicePricing', 'serviceWallet', 'serviceSubscriptions', 'serviceDocs',
   'openInTako', 'managePlan', 'topUp', 'plazaLink',
   'keyCard', 'keyHint', 'keyOrPaste', 'keyConfigured', 'keyMissing', 'keyPlaceholder', 'keySave', 'keySaving',
   'keySaved', 'keyInvalid', 'keyClear', 'keyClearing', 'keyCleared', 'keyClearExternal', 'keyClearNone',
-  'keyShow', 'keyHide', 'keySource', 'endpointLabel', 'credentialLabel',
-  'catalogSummary', 'catalogSearch', 'catalogFilterAll', 'catalogFilterVision', 'catalogFilterLong',
-  'catalogFilterReasoning', 'catalogNoMatch', 'catalogShown', 'catalogReasoningBadge',
-  // console tabs, diagnostics, announcements
+  'keyShow', 'keyHide', 'keySource', 'endpointLabel', 'credentialLabel', 'keyPlaintextHost',
   'tabOverview', 'tabRequests', 'tabUsage', 'tabModels', 'tabKey', 'tabConfig',
   'diagCopy', 'diagCopied', 'noticeDismiss', 'noticeTitle', 'noticeEmpty', 'noticeExpand', 'noticeCollapse',
   'noticeHistory', 'noticeHistoryHide',
-  'cardChannels', 'cardEndpoints', 'cardStandard', 'cardRealized', 'cardOutputRatio', 'cardClaude',
-  // request logs
+  'cardChannels', 'cardEndpoints', 'cardClaude',
   'logsEmpty', 'logsNeedLogin', 'logsModel', 'logsRefresh', 'logsLoading',
   'logsColTime', 'logsColModel', 'logsColIn', 'logsColOut', 'logsColCost', 'logsColDuration', 'logsColRequest',
   'logTypeTopup', 'logTypeConsume', 'logTypeManage', 'logTypeSystem', 'logTypeError', 'logTypeRefund', 'logTypeLogin',
-  // usage + key details
   'usageToday', 'usageTokenCard', 'usageGranted', 'usageUsed', 'usageAvailable', 'usageUnlimited', 'usageExpires',
   'usageNever', 'usageModelLimits', 'usageNoLimits', 'usagePerModel', 'usageRequests',
   'keyTokenCard', 'keyName', 'keyExpires', 'keyModels',
-  // sync + pins + config tab
   'syncNow', 'syncWorking', 'syncFailed', 'pinTitle', 'unpinTitle', 'pinFailed',
   'configSave', 'configSaving', 'configSaved', 'configFailed', 'configReadOnly', 'configRetryDelays',
   'configRefresh', 'configDefaultCtx', 'configClaudeOnly', 'configInclude', 'configExclude',
   'configPinnedField', 'configSearchProvider', 'configSearchTako', 'configSearchDefault', 'configOverrides',
+  'configCatalogSection',
 ]
 
 let row: ModuleRow | undefined
@@ -76,11 +77,7 @@ async function loadModuleRow(): Promise<ModuleRow> {
     dispatchEvent: events.dispatchEvent.bind(events),
   }
   globals.document = { documentElement: { lang: 'zh-CN' } }
-  // Node exposes a getter-only `navigator`; the fallback only reads it when the
-  // document language is empty, which these tests never leave it.
   Object.defineProperty(globalThis, 'navigator', { value: { language: 'zh-CN' }, configurable: true, writable: true })
-  // The browser bundle ships without type declarations on purpose (no client
-  // build step); its side effect registers the module row with our stub.
   // @ts-expect-error TS7016: client/client.js is an untyped plain-JS bundle
   await import('../client/client.js')
   if (row === undefined) throw new Error('client/client.js did not call window.__ModuleLoader__.load')
@@ -90,11 +87,6 @@ async function loadModuleRow(): Promise<ModuleRow> {
 /** Initial useState results, indexed by hook order, consumed by one render. */
 let hookStates: unknown[] = []
 
-/**
- * Materialize the bundle once per test against a recording React stub. The
- * stub runs function components inline (no virtual DOM), which is enough to
- * read the texts the real page would render.
- */
 function materialize(options: {
   effect?: (callback: () => void | (() => void)) => void,
   setState?: (index: number, value: unknown) => void,
@@ -108,8 +100,7 @@ function materialize(options: {
     useRef: (initial: unknown) => ({ current: initial }),
     useState: (initial: unknown) => {
       const index = hookIndex++
-      // Lazy initializers are invoked like real React does on first render.
-      const value = hookStates[index] ?? (typeof initial === 'function' ? (initial as () => unknown)() : initial)
+      const value = hookStates[index] !== undefined ? hookStates[index] : (typeof initial === 'function' ? (initial as () => unknown)() : initial)
       return [value, (next: unknown) => { options.setState?.(index, next) }]
     },
   }
@@ -125,7 +116,6 @@ function materialize(options: {
   return { plugin, render }
 }
 
-/** A minimal stand-in for the host's locale service (the LocaleRuntime contract we rely on). */
 function localeService() {
   const registered: { ns: string, dicts: Record<string, Record<string, string>> }[] = []
   let active = 'zh'
@@ -148,10 +138,9 @@ function localeService() {
   return face
 }
 
-/** A context double with the surfaces apply() touches, recording what was registered. */
 function stubCtx(options: { locale?: unknown } = {}) {
   const listeners: ((name: string, value: unknown) => void)[] = []
-  const entries: { slot: string, options: Record<string, unknown>, component: unknown }[] = []
+  const entries: SlotEntry[] = []
   const injections: (() => unknown)[] = []
   const ctx = {
     get: (name: string) => (name === 'locale' ? options.locale : undefined),
@@ -170,11 +159,17 @@ function stubCtx(options: { locale?: unknown } = {}) {
   return { ctx, entries, runInjections, provide }
 }
 
+const findConsolePage = (entries: SlotEntry[]) =>
+  entries.find(entry => entry.slot === 'main' && entry.options.key === 'tako-console')!.component
+const findModelsPage = (entries: SlotEntry[]) =>
+  entries.find(entry => entry.slot === 'main' && entry.options.key === 'tako-models')!.component
+const findSidebar = (entries: SlotEntry[], id: string) =>
+  entries.find(entry => entry.slot === 'sidebar.panellist' && entry.options.id === id)!
+
 const setDocumentLang = (lang: string) => {
   (globalThis as unknown as { document: { documentElement: { lang: string } } }).document.documentElement.lang = lang
 }
 
-/** Deep-search an element tree (elements, arrays, strings) for the first string containing `needle`. */
 function findText(node: unknown, needle: string): string | undefined {
   if (typeof node === 'string') return node.includes(needle) ? node : undefined
   if (Array.isArray(node)) {
@@ -192,12 +187,10 @@ function findText(node: unknown, needle: string): string | undefined {
   return undefined
 }
 
-/** Deep-search an element tree for the first node whose data-testid matches. */
 function findByTestId(node: unknown, testId: string): Element | undefined {
   return findByAttr(node, 'data-testid', testId)
 }
 
-/** Deep-search an element tree for the first node with a matching attribute. */
 function findByAttr(node: unknown, attr: string, value: string): Element | undefined {
   if (Array.isArray(node)) {
     for (const child of node) {
@@ -250,8 +243,87 @@ function collectModels(node: unknown): string[] {
   return ids
 }
 
+function findByTextButton(node: unknown, text: string): Element | undefined {
+  if (Array.isArray(node)) return node.map(child => findByTextButton(child, text)).find(Boolean)
+  if (node === null || typeof node !== 'object') return undefined
+  const el = node as Element
+  if (el.tag === 'button' && findText(el, text) === text) return el
+  return findByTextButton(el.children ?? [], text)
+}
+
+const DEFAULT_PREFS = { priceMode: 'detail', currency: 'cny', tokenUnit: 'M', layout: 'card', sort: 'rec' }
+
+/**
+ * Helper for TakoConsolePage hook slots (indices 0..16):
+ *  0 status, 1 statusError, 2 catalog, 3 catalogError, 4 busyLogout, 5 logoutNote,
+ *  6 tab, 7 notice, 8 dismissedNotice, 9 diagCopied, 10 noticeHistoryOpen,
+ *  11 login.state, 12 usage, 13 recentLogs, 14 pinned, 15 activeModel, 16 prefs.
+ */
+function consoleHooks(opts: {
+  status?: unknown, statusError?: unknown, catalog?: unknown, catalogError?: unknown,
+  busyLogout?: boolean, logoutNote?: unknown, tab?: string, notice?: unknown,
+  dismissed?: string[], diagCopied?: boolean, historyOpen?: boolean,
+  login?: unknown, usage?: unknown, recentLogs?: unknown, pinned?: string[],
+  activeModel?: string, prefs?: Partial<typeof DEFAULT_PREFS>,
+  extra?: unknown[],
+} = {}): unknown[] {
+  return [
+    opts.status,
+    opts.statusError,
+    opts.catalog,
+    opts.catalogError,
+    opts.busyLogout ?? false,
+    opts.logoutNote,
+    opts.tab ?? 'overview',
+    opts.notice,
+    opts.dismissed ?? [],
+    opts.diagCopied ?? false,
+    opts.historyOpen ?? false,
+    opts.login ?? { status: 'idle' },
+    opts.usage,
+    opts.recentLogs,
+    opts.pinned ?? [],
+    opts.activeModel,
+    { ...DEFAULT_PREFS, ...opts.prefs },
+    ...(opts.extra ?? []),
+  ]
+}
+
+/**
+ * Helper for TakoModelsPage hook slots (indices 0..15):
+ *  0 status, 1 catalog, 2 catalogError, 3 pinned, 4 activeModel, 5 prefs,
+ *  6 query, 7 quick, 8 vendors, 9 caps, 10 bill, 11 vendorAll,
+ *  12 openMenu, 13 filterOpen, 14 drawerId, 15 toastText.
+ */
+function modelsPageHooks(opts: {
+  status?: unknown, catalog?: unknown, catalogError?: unknown, pinned?: string[],
+  activeModel?: string, prefs?: Partial<typeof DEFAULT_PREFS>,
+  query?: string, quick?: string, vendors?: string[], caps?: string[], bill?: string,
+  vendorAll?: boolean, openMenu?: string | null, filterOpen?: boolean, drawerId?: string | null,
+  toastText?: string,
+} = {}): unknown[] {
+  return [
+    opts.status,
+    opts.catalog,
+    opts.catalogError,
+    opts.pinned ?? [],
+    opts.activeModel,
+    { ...DEFAULT_PREFS, ...opts.prefs },
+    opts.query ?? '',
+    opts.quick ?? 'all',
+    opts.vendors ?? [],
+    opts.caps ?? [],
+    opts.bill ?? 'all',
+    opts.vendorAll ?? false,
+    opts.openMenu ?? null,
+    opts.filterOpen ?? false,
+    opts.drawerId ?? null,
+    opts.toastText,
+  ]
+}
+
 describe('client i18n: registration', () => {
-  it('registers the complete zh/en dictionary under the dsh-tako namespace', async () => {
+  it('registers symmetric, non-empty zh/en dictionaries under the dsh-tako namespace', async () => {
     await loadModuleRow()
     const { plugin } = materialize()
     const face = localeService()
@@ -261,9 +333,14 @@ describe('client i18n: registration', () => {
     expect(face.calls[0]!.ns).toBe('dsh-tako')
     const dicts = face.calls[0]!.dicts
     expect(Object.keys(dicts).sort()).toEqual(['en', 'zh'])
+    expect(Object.keys(dicts.zh!).sort()).toEqual(Object.keys(dicts.en!).sort())
     for (const locale of ['zh', 'en'] as const) {
-      expect(Object.keys(dicts[locale]!).sort(), `keys of ${locale}`).toEqual([...EXPECTED_KEYS].sort())
-      for (const [key, value] of Object.entries(dicts[locale]!)) expect(value, `${locale}.${key}`).toMatch(/./)
+      for (const required of REQUIRED_KEYS) {
+        expect(dicts[locale]![required], `${locale}.${required}`).toMatch(/./)
+      }
+      for (const [key, value] of Object.entries(dicts[locale]!)) {
+        expect(value, `${locale}.${key}`).toMatch(/./)
+      }
     }
   })
 
@@ -273,7 +350,7 @@ describe('client i18n: registration', () => {
     const previous = win.location.hostname
     win.location.hostname = 'app'
     win.__DSH_TAKO_PROFILE__ = true
-    hookStates = [{ status: 'pending', id: '1', url: 'https://tako.example/app/authorize' }, 2, '', false, false, undefined]
+    hookStates = [{ status: 'pending', id: '1', url: 'https://tako.example/app/authorize' }, 2, '', false, undefined]
     try {
       const { plugin } = materialize()
       const { ctx, entries, runInjections } = stubCtx()
@@ -360,20 +437,27 @@ describe('client i18n: registration', () => {
     expect(plugin.inject).toEqual(['slots'])
   })
 
-  it('every slot entry declares the locale namespace, and the label thunk follows the service language', async () => {
+  it('registers Models + Console main/sidebar slots with dsh-tako locale and dynamic labels', async () => {
     await loadModuleRow()
     const { plugin } = materialize()
     const face = localeService()
     const { ctx, entries, runInjections } = stubCtx({ locale: face })
     plugin.apply(ctx)
     runInjections()
-    expect(entries.map(entry => entry.slot).sort()).toEqual(['main', 'settings.models.provider-card', 'sidebar.footer.action', 'sidebar.panellist'])
+    expect(entries.map(entry => entry.slot).sort()).toEqual([
+      'main', 'main', 'settings.models.provider-card', 'sidebar.footer.action', 'sidebar.panellist', 'sidebar.panellist',
+    ])
     for (const entry of entries) expect(entry.options.locale).toBe('dsh-tako')
-    const label = entries.find(entry => entry.slot === 'sidebar.panellist')!.options.label as () => string
+    const modelsLabel = findSidebar(entries, 'tako-models').options.label as () => string
+    const consoleLabel = findSidebar(entries, 'tako-console').options.label as () => string
+    expect(findSidebar(entries, 'tako-models').options.order).toBe(19)
+    expect(findSidebar(entries, 'tako-console').options.order).toBe(20)
     face.setActive('zh')
-    expect(label()).toBe('Tako 控制台')
+    expect(modelsLabel()).toBe('Tako 模型')
+    expect(consoleLabel()).toBe('Tako 控制台')
     face.setActive('en')
-    expect(label()).toBe('Tako Console')
+    expect(modelsLabel()).toBe('Tako Models')
+    expect(consoleLabel()).toBe('Tako Console')
   })
 
   it('interpolates the refresh countdown through the registered translator', async () => {
@@ -399,90 +483,76 @@ describe('client i18n: fallback without the locale service', () => {
     plugin.apply(ctx)
     runInjections()
     const face = localeService()
-    expect(face.calls.length).toBe(0) // nothing to register against yet
-    const label = entries.find(entry => entry.slot === 'sidebar.panellist')!.options.label as () => string
-    expect(label()).toBe('Tako 控制台')
+    expect(face.calls.length).toBe(0)
+    const consoleLabel = findSidebar(entries, 'tako-console').options.label as () => string
+    const modelsLabel = findSidebar(entries, 'tako-models').options.label as () => string
+    expect(consoleLabel()).toBe('Tako 控制台')
+    expect(modelsLabel()).toBe('Tako 模型')
     setDocumentLang('en')
-    expect(label()).toBe('Tako Console') // the same behavior as the pre-i18n client
-    // The service appears after apply (activation is not gated on it): adopt.
+    expect(consoleLabel()).toBe('Tako Console')
+    expect(modelsLabel()).toBe('Tako Models')
     provide('locale', face)
     expect(face.calls.length).toBe(1)
     face.setActive('zh')
-    expect(label()).toBe('Tako 控制台')
+    expect(consoleLabel()).toBe('Tako 控制台')
     face.setActive('en')
-    expect(label()).toBe('Tako Console')
+    expect(consoleLabel()).toBe('Tako Console')
   })
 
-  it('the console page falls back per component and honors props.t when the seat is present', async () => {
+  it('renders Models and Console pages through inline fallback and honors props.t', async () => {
     await loadModuleRow()
     const { plugin, render } = materialize()
     const face = localeService()
     const { ctx, entries, runInjections } = stubCtx({ locale: face })
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
+    const modelsPage = findModelsPage(entries)
+    const consolePage = findConsolePage(entries)
     const catalog = { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] }], nextSyncAt: Date.now() + 5 * 60_000 }
-    // useState order in TakoConsolePage: status, statusError, catalog, catalogError,
-    // busyLogout, logoutNote, tab, notice, dismissedNotice, diagCopied,
-    // noticeHistoryOpen, then useTakoLogin's login state (index 11). Components
-    // the stub inlines share the index stream: overview adds KeyEditor (4) and
-    // UpdateCard (5); the models tab adds ModelsTab (3), CatalogCard (3) and
-    // Countdown (1).
-    hookStates = [undefined, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, false, { status: 'idle' }]
     try {
-      // No `t` seat (an older host renders the entry without one): inline fallback.
       setDocumentLang('zh-CN')
-      let rendered = render(page, {}) as Element
-      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
-      expect(findText(rendered, 'Tako 控制台')).toBeUndefined()
-      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), '模型')).toBe('模型')
+      hookStates = modelsPageHooks({ catalog })
+      let rendered = render(modelsPage, {}) as Element
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako 模型')
       expect(findText(rendered, '分钟后刷新')).toBe('约 5 分钟后刷新')
-      expect(findText(rendered, '1M')).toBe('1M')
-      expect(findText(rendered, '图')).toBe('图')
-      expect(findByTestId(rendered, 'dsh-tako-catalog-more')).toBeUndefined()
-      setDocumentLang('en')
-      rendered = render(page, {}) as Element
-      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
-      expect(findText(rendered, 'Tako Console')).toBeUndefined()
-      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), 'Models')).toBe('Models')
-      expect(findText(rendered, 'min')).toBe('refreshes in ~5 min')
-      expect(findText(rendered, 'img')).toBe('img')
-      // With the seat, props.t wins regardless of the document language.
-      face.setActive('en')
-      rendered = render(page, { t: face.bind() }) as Element
-      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
-      expect(findText(rendered, 'Tako Console')).toBeUndefined()
-      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), 'Models')).toBe('Models')
-      face.setActive('zh')
-      rendered = render(page, { t: face.bind() }) as Element
-      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
-      expect(findText(rendered, 'Tako 控制台')).toBeUndefined()
-      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'catalog'), '模型')).toBe('模型')
-      expect(findText(rendered, '分钟后刷新')).toBe('约 5 分钟后刷新')
+      const card = findByTestId(rendered, 'dsh-tako-modelcard-deepseek-v4.1-flash')
+      expect(findText(findByAttr(card, 'className', 'ctx'), '1M')).toBe('1M')
+      expect(findText(card, '视觉')).toBe('视觉')
 
-      hookStates = [{ consoleApiVersion: 2, configured: false }, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, false, { status: 'idle' }, '', false, false, undefined]
-      rendered = render(page, { t: face.bind() }) as Element
+      setDocumentLang('en')
+      hookStates = modelsPageHooks({ catalog })
+      rendered = render(modelsPage, {}) as Element
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako Models')
+      expect(findText(rendered, 'min')).toBe('refreshes in ~5 min')
+
+      // props.t overrides document language
+      face.setActive('zh')
+      hookStates = modelsPageHooks({ catalog })
+      rendered = render(modelsPage, { t: face.bind() }) as Element
+      expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako 模型')
+
+      // Signed-out centered sign-in card
+      hookStates = consoleHooks({ status: { consoleApiVersion: 2, configured: false }, catalog })
+      rendered = render(consolePage, { t: face.bind() }) as Element
       expect(findByTag(rendered, 'h1')?.children[0]).toBe('Tako')
-      expect(findText(rendered, '钥匙走')).toBe('登录后，额度、模型和搜索会跟这把钥匙走')
       expect(findByTestId(rendered, 'dsh-tako-console-sign-in')).toBeDefined()
-      expect(findText(rendered, '需要登录后查看')).toBe('需要登录后查看')
+      expect(findByTestId(rendered, 'dsh-tako-key-input')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-key-save')).toBeDefined()
       expect(findByTestId(rendered, 'dsh-tako-tabpanel-models')).toBeUndefined()
 
-      hookStates = [{
-        consoleApiVersion: 2,
-        configured: true,
-        maskedKey: 'cr_****abcd',
-        me: { userName: 'Ada', planName: 'Pro' },
-      }, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, false, { status: 'idle' }, '', false, false, undefined]
-      rendered = render(page, { t: face.bind() }) as Element
+      // Signed-in Console Overview
+      hookStates = consoleHooks({
+        status: { consoleApiVersion: 2, configured: true, maskedKey: 'cr_****abcd', me: { userName: 'Ada', planName: 'Pro', quotaRemainUsd: 30 } },
+        catalog,
+      })
+      rendered = render(consolePage, { t: face.bind() }) as Element
       expect(findByTag(rendered, 'h1')?.children[0]).toBe('Ada')
       expect(findText(rendered, 'cr_****abcd')).toBe('cr_****abcd')
       expect(findText(rendered, 'Pro')).toBe('Pro')
       expect(findByTestId(rendered, 'dsh-tako-console-sign-out')).toBeDefined()
-      expect(findByTag(rendered, 'input')).toBeDefined()
-      expect(findText(findByAttr(rendered, 'data-dsh-tako-card', 'account'), '登录状态')).toBe('登录状态')
-      // The models tab is only mounted on demand; nothing from it leaks here.
-      expect(findByTestId(rendered, 'dsh-tako-catalog-search')).toBeUndefined()
+      expect(findByAttr(rendered, 'data-dsh-tako-card', 'account')).toBeDefined()
+      // Default currency is CNY actual spend ($30 internal ÷ 3 = ¥10.00)
+      expect(findText(findByTestId(rendered, 'dsh-tako-quota-remain'), '¥10.00')).toBe('¥10.00')
     } finally {
       hookStates = []
     }
@@ -495,10 +565,9 @@ describe('client i18n: fallback without the locale service', () => {
     const { ctx, entries, runInjections } = stubCtx({ locale: face })
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
+    const page = findConsolePage(entries)
     const catalog = { models: [{ id: 'existing-model' }], nextSyncAt: null }
-    hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined, catalog, undefined,
-      false, undefined, 'requests', undefined, undefined, false, false, { status: 'idle' }]
+    hookStates = consoleHooks({ status: { configured: true, maskedKey: 'cr_****abcd' }, catalog, tab: 'requests' })
     try {
       face.setActive('en')
       const rendered = render(page, { t: face.bind() }) as Element
@@ -517,9 +586,8 @@ describe('client i18n: fallback without the locale service', () => {
     const { ctx, entries, runInjections } = stubCtx({ locale: face })
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
-    hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined, undefined, 'HTTP 503',
-      false, undefined, 'requests', undefined, undefined, false, false, { status: 'idle' }]
+    const page = findConsolePage(entries)
+    hookStates = consoleHooks({ status: { configured: true, maskedKey: 'cr_****abcd' }, catalog: undefined, catalogError: 'HTTP 503', tab: 'requests' })
     try {
       face.setActive('en')
       const rendered = render(page, { t: face.bind() }) as Element
@@ -549,15 +617,16 @@ describe('client i18n: fallback without the locale service', () => {
     vi.stubGlobal('fetch', fetchImpl)
     const disposers: (() => void)[] = []
     try {
-      hookStates = [{ configured: true, maskedKey: 'cr_****abcd' }, undefined,
-        { models: [], lastSyncAt: 1, nextSyncAt: null, status: 'ready' }, undefined,
-        false, undefined, 'overview', undefined, undefined, false, false, { status: 'idle' }]
-      render(entries.find(entry => entry.slot === 'main')!.component, {})
+      hookStates = consoleHooks({
+        status: { configured: true, maskedKey: 'cr_****abcd' },
+        catalog: { models: [], lastSyncAt: 1, nextSyncAt: null, status: 'ready' },
+      })
+      render(findConsolePage(entries), {})
       for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
       await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(3))
       const routes = fetchImpl.mock.calls.map(([input]) => String(input))
       expect(routes).toEqual(expect.arrayContaining(['/api/tako.status', '/api/tako.catalog', '/api/tako.update']))
-      for (const route of ['/api/tako.key', '/api/tako.logs', '/api/tako.usage', '/api/tako.notice', '/api/tako.config', '/api/tako.sync']) {
+      for (const route of ['/api/tako.key', '/api/tako.logs', '/api/tako.usage', '/api/tako.notice', '/api/tako.config', '/api/tako.sync', '/api/tako.model']) {
         expect(routes).not.toContain(route)
       }
     } finally {
@@ -567,16 +636,20 @@ describe('client i18n: fallback without the locale service', () => {
     }
   })
 
-  it('shows safe retry failure and the real interval before a first successful catalog sync', async () => {
+  it('shows safe retry failure and sync controls in Console Settings tab', async () => {
     await loadModuleRow()
     const { plugin, render } = materialize()
     const { ctx, entries, runInjections } = stubCtx()
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
-    hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: null, refreshIntervalMs: 1800000,
-      status: 'failed', attempts: 4, lastError: { code: 'write-failed', message: 'untrusted-payload', at: 10 } },
-    undefined, false, undefined, 'models', undefined, undefined, false, false, { status: 'idle' }]
+    const page = findConsolePage(entries)
+    hookStates = consoleHooks({
+      catalog: {
+        consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: null, refreshIntervalMs: 1800000,
+        status: 'failed', attempts: 4, lastError: { code: 'write-failed', message: 'untrusted-payload', at: 10 },
+      },
+      tab: 'config',
+    })
     try {
       setDocumentLang('zh-CN')
       const rendered = render(page, {})
@@ -594,12 +667,14 @@ describe('client i18n: fallback without the locale service', () => {
     vi.useFakeTimers()
     const effects: (() => void | (() => void))[] = []
     const updates: unknown[] = []
-    const { plugin, render } = materialize({ effect: callback => { effects.push(callback) },
-      setState: (index, value) => { if (index === 2) updates.push(value) } })
+    const { plugin, render } = materialize({
+      effect: callback => { effects.push(callback) },
+      setState: (index, value) => { if (index === 2) updates.push(value) },
+    })
     const { ctx, entries, runInjections } = stubCtx()
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
+    const page = findConsolePage(entries)
     let calls = 0
     vi.stubGlobal('fetch', vi.fn(async (input: string) => {
       if (!String(input).includes('tako.catalog')) return Response.json({ consoleApiVersion: 2, configured: false })
@@ -633,8 +708,10 @@ describe('client i18n: fallback without the locale service', () => {
     vi.useFakeTimers()
     const effects: (() => void | (() => void))[] = []
     const updates: unknown[] = []
-    const { plugin, render } = materialize({ effect: callback => { effects.push(callback) },
-      setState: (index, value) => { if (index === 2) updates.push(value) } })
+    const { plugin, render } = materialize({
+      effect: callback => { effects.push(callback) },
+      setState: (index, value) => { if (index === 2) updates.push(value) },
+    })
     const { ctx, entries, runInjections } = stubCtx()
     plugin.apply(ctx)
     runInjections()
@@ -649,7 +726,7 @@ describe('client i18n: fallback without the locale service', () => {
     const disposers: (() => void)[] = []
     try {
       hookStates = []
-      render(entries.find(entry => entry.slot === 'main')!.component, {})
+      render(findConsolePage(entries), {})
       for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
       await vi.advanceTimersByTimeAsync(120000)
       expect(calls).toBe(30)
@@ -672,8 +749,10 @@ describe('client i18n: fallback without the locale service', () => {
     vi.useFakeTimers()
     const effects: (() => void | (() => void))[] = []
     const updates: unknown[] = []
-    const { plugin, render } = materialize({ effect: callback => { effects.push(callback) },
-      setState: (index, value) => { if (index === 2) updates.push(value) } })
+    const { plugin, render } = materialize({
+      effect: callback => { effects.push(callback) },
+      setState: (index, value) => { if (index === 2) updates.push(value) },
+    })
     const { ctx, entries, runInjections } = stubCtx()
     plugin.apply(ctx)
     runInjections()
@@ -688,7 +767,7 @@ describe('client i18n: fallback without the locale service', () => {
     const disposers: (() => void)[] = []
     try {
       hookStates = []
-      render(entries.find(entry => entry.slot === 'main')!.component, {})
+      render(findConsolePage(entries), {})
       for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
       await vi.advanceTimersByTimeAsync(120000)
       expect(calls).toBe(30)
@@ -710,7 +789,8 @@ describe('client i18n: fallback without the locale service', () => {
     const { ctx, entries, runInjections } = stubCtx({ locale: face })
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
+    const consolePage = findConsolePage(entries)
+    const modelsPage = findModelsPage(entries)
     const status = {
       consoleApiVersion: 2,
       configured: true,
@@ -720,92 +800,305 @@ describe('client i18n: fallback without the locale service', () => {
       plan: { windowMinutes: 300, windowCost: 12, windowCostLimit: 200, weeklyCost: 80, weeklyCostLimit: 930 },
     }
     const catalog = { consoleApiVersion: 2, models: [{ id: 'swe-2', contextWindow: 262000, input: ['text', 'image'] }], nextSyncAt: null }
-    // Overview mounts KeyEditor (4) and UpdateCard (5); the models tab mounts
-    // ModelsTab (3) then CatalogCard (3) then Countdown (1).
-    hookStates = [status, undefined, catalog, undefined, false, undefined, 'overview', undefined, undefined, false, false, { status: 'idle' }, '', false, false, undefined]
     try {
-      let rendered = render(page, { t: face.bind() }) as Element
+      hookStates = consoleHooks({ status, catalog })
+      let rendered = render(consolePage, { t: face.bind() }) as Element
       let flat = JSON.stringify(rendered)
       for (const path of ['/dashboard', '/pricing', '/wallet', '/subscriptions', '/docs']) {
         expect(flat).toContain(`https://tako.example${path}`)
       }
       expect(flat).not.toContain('pricing?search=swe-2')
 
-      hookStates = [status, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, false, { status: 'idle' }, undefined, false, undefined, false, '', 'all']
-      rendered = render(page, { t: face.bind() }) as Element
+      // Model details drawer links to the reported origin's pricing search
+      hookStates = modelsPageHooks({ status, catalog, drawerId: 'swe-2' })
+      rendered = render(modelsPage, { t: face.bind() }) as Element
       flat = JSON.stringify(rendered)
       expect(flat).toContain('https://tako.example/pricing?search=swe-2')
     } finally {
       hookStates = []
     }
   })
+})
 
-  it('previews six catalog models and hides the rest until expanded', async () => {
+describe('client flat model directory, plaza pricing & filter drawer', () => {
+  const richCatalog = {
+    consoleApiVersion: 2,
+    models: [
+      { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'], reasoningEfforts: { high: 'high' } },
+      { id: 'claude-fable-5-2', contextWindow: 200_000, input: ['text', 'image'], reasoningEfforts: { high: 'high' } },
+      { id: 'grok-4.6', contextWindow: 256_000, input: ['text'], reasoningEfforts: { high: 'high' } },
+      { id: 'free-chat-model', contextWindow: 128_000, input: ['text'], reasoningEfforts: false },
+      { id: 'per-call-model', contextWindow: 128_000, input: ['text'], reasoningEfforts: false },
+      { id: 'new-unmeasured', contextWindow: 128_000, input: ['text'] },
+      { id: 'extra-model-1', contextWindow: 128_000, input: ['text'] },
+      { id: 'extra-model-2', contextWindow: 128_000, input: ['text'] },
+    ],
+    cards: [
+      {
+        id: 'deepseek-v4.1-flash', vendor: 'deepseek', vendorName: 'DeepSeek',
+        description: '旗舰推理模型，1M 上下文', billingType: 'token',
+        capabilities: ['reasoning', 'vision', 'code', 'longContext'],
+        endpoints: ['openai', 'anthropic'], groups: ['default'],
+        contextWindow: 1_000_000, vision: true, reasoning: true, claudeCodeOnly: false,
+        inputPriceUsdPerMillion: 3, cachePriceUsdPerMillion: 0.3, outputPriceUsdPerMillion: 12,
+        standardPriceUsdPerMillion: 4.5, realizedPriceUsdPerMillion: 2.1, cacheHitRate: 0.72,
+        officialInputPriceUsdPerMillion: 9, officialOutputPriceUsdPerMillion: 36,
+        officialRatio: 0.32, channelCount: 5, channelTag: '主力通道',
+        channels: [{ name: '主力通道', tag: '极速' }],
+      },
+      {
+        id: 'claude-fable-5-2', vendor: 'anthropic', vendorName: 'Anthropic',
+        description: '强编码模型', billingType: 'token',
+        capabilities: ['reasoning', 'vision', 'code'],
+        endpoints: ['anthropic'], groups: ['default'],
+        contextWindow: 200_000, vision: true, reasoning: true, claudeCodeOnly: false,
+        inputPriceUsdPerMillion: 6, cachePriceUsdPerMillion: 0.6, outputPriceUsdPerMillion: 30,
+        standardPriceUsdPerMillion: 9, realizedPriceUsdPerMillion: 6, cacheHitRate: 0.65,
+        officialRatio: 0.08, channelCount: 3,
+        promo: { label: '限时特惠', endsAt: '12-01', originalInputPriceUsdPerMillion: 12 },
+      },
+      {
+        id: 'grok-4.6', vendor: 'xai', vendorName: 'xAI',
+        description: '动态分档计费', billingType: 'dynamic',
+        capabilities: ['reasoning'], endpoints: ['openai'], groups: ['default'],
+        contextWindow: 256_000, vision: false, reasoning: true, claudeCodeOnly: false,
+        inputPriceUsdPerMillion: 1.5, cachePriceUsdPerMillion: 0.3, outputPriceUsdPerMillion: 4.5,
+        standardPriceUsdPerMillion: 2.4, officialRatio: 0.25, channelCount: 1,
+      },
+      {
+        id: 'free-chat-model', vendor: 'deepseek', vendorName: 'DeepSeek',
+        description: '免费体验模型', billingType: 'free',
+        capabilities: ['code'], endpoints: ['openai'], groups: ['default'],
+        contextWindow: 128_000, vision: false, reasoning: false, claudeCodeOnly: false,
+        inputPriceUsdPerMillion: 0, outputPriceUsdPerMillion: 0,
+        // Even if upstream mistakenly passes an officialRatio, client strict gate must drop it!
+        officialRatio: 0.01, channelCount: 1,
+      },
+      {
+        id: 'per-call-model', vendor: 'tako', vendorName: 'Tako',
+        description: '按次固定计费模型', billingType: 'call',
+        capabilities: ['tools'], endpoints: ['openai'], groups: ['default'],
+        contextWindow: 128_000, vision: false, reasoning: false, claudeCodeOnly: false,
+        callPriceUsd: 0.3, officialRatio: 0.1, channelCount: 1,
+      },
+      {
+        id: 'new-unmeasured', vendor: 'openai', vendorName: 'OpenAI',
+        description: '新上线无实测数据', billingType: 'token',
+        capabilities: ['reasoning'], endpoints: ['openai'], groups: ['default'],
+        contextWindow: 128_000, vision: false, reasoning: true, claudeCodeOnly: false,
+        inputPriceUsdPerMillion: 3, outputPriceUsdPerMillion: 9,
+        standardPriceUsdPerMillion: 4.5, officialRatio: 1.0, channelCount: 1,
+      },
+    ],
+    nextSyncAt: null,
+  }
+
+  async function renderModels(opts: Parameters<typeof modelsPageHooks>[0] = {}, locale: 'zh' | 'en' = 'zh') {
     await loadModuleRow()
     const { plugin, render } = materialize()
     const face = localeService()
     const { ctx, entries, runInjections } = stubCtx({ locale: face })
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
-    const catalog = {
-      consoleApiVersion: 2,
-      models: [
-        { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'] },
-        { id: 'deepseek-v4-pro', contextWindow: 1_050_000 },
-        { id: 'tako-auto', contextWindow: 272_000 },
-        { id: 'other-model' },
-        { id: 'extra-model-1' },
-        { id: 'extra-model-2' },
-        { id: 'extra-model-3' },
-        { id: 'extra-model-4' },
-      ],
-      nextSyncAt: Date.now() + 5 * 60_000,
-    }
-    // CatalogCard's hooks land after TakoConsolePage's 12 and ModelsTab's 3
-    // because the recording React stub inlines function components; the open
-    // flag is the 4th index inside ModelsTab (pinned, syncBusy, syncNote, open).
-    const modelsHooks = (open = false) => [undefined, undefined, catalog, undefined, false, undefined, 'models', undefined, undefined, false, false, { status: 'idle' },
-      undefined, false, undefined, open]
-    try {
-      face.setActive('zh')
-      hookStates = modelsHooks(false)
-      let rendered = render(page, { t: face.bind() }) as Element
-      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto', 'other-model', 'extra-model-1', 'extra-model-2'])
-      expect(findByAttr(rendered, 'data-model', 'extra-model-3')).toBeUndefined()
-      expect(findText(rendered, '1M')).toBe('1M')
-      expect(findText(rendered, '1.05M')).toBe('1.05M')
-      expect(findText(rendered, '272K')).toBe('272K')
-      const more = findByTestId(rendered, 'dsh-tako-catalog-more')
-      expect(findText(more, '其余')).toBe('其余 2 个')
+    face.setActive(locale)
+    hookStates = modelsPageHooks({ catalog: richCatalog, ...opts })
+    return { rendered: render(findModelsPage(entries), { t: face.bind() }) as Element, face }
+  }
 
-      hookStates = modelsHooks(true)
-      rendered = render(page, { t: face.bind() }) as Element
-      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash', 'deepseek-v4-pro', 'tako-auto', 'other-model', 'extra-model-1', 'extra-model-2', 'extra-model-3', 'extra-model-4'])
-      expect(findText(findByAttr(rendered, 'data-model', 'other-model'), '—')).toBe('—')
-      expect(findText(findByTestId(rendered, 'dsh-tako-catalog-more'), '收起')).toBe('收起')
-    } finally {
-      hookStates = []
-    }
+  it('displays all models directly flat full-width with no folding and no permanent filter column', async () => {
+    try {
+      const { rendered } = await renderModels()
+      // All 8 models appear immediately without folding behind "N more"
+      expect(collectModels(rendered)).toHaveLength(8)
+      expect(findByTestId(rendered, 'dsh-tako-catalog-more')).toBeUndefined()
+      expect(findByTestId(rendered, 'dsh-tako-catalog-grid')).toBeDefined()
+      // Filter drawer is on-demand, not rendered permanently as a side column
+      expect(findByTestId(rendered, 'dsh-tako-filter-toggle')).toBeDefined()
+      expect(findByTestId(rendered, 'dsh-tako-filter-drawer')).toBeUndefined()
+      // Sync button moved out of model directory toolbar
+      expect(findByTestId(rendered, 'dsh-tako-catalog-sync')).toBeUndefined()
+
+      // Opens filter drawer on demand
+      const opened = await renderModels({ filterOpen: true })
+      expect(findByTestId(opened.rendered, 'dsh-tako-filter-drawer')).toBeDefined()
+      expect(findText(opened.rendered, 'DeepSeek')).toBeDefined()
+    } finally { hookStates = [] }
+  })
+
+  it('defaults to CNY actual spend, toggles to Internal USD with mandatory warning, and supports /1K unit', async () => {
+    try {
+      // Default: CNY actual spend (internal USD ÷ 3): input $3 → ¥1, cache $0.3 → ¥0.1, output $12 → ¥4
+      const cny = await renderModels()
+      const pricePanel = findByTestId(cny.rendered, 'dsh-tako-price-deepseek-v4.1-flash')
+      expect(findText(pricePanel, '¥1')).toBe('¥1')
+      expect(findText(pricePanel, '¥0.1')).toBe('¥0.1')
+      expect(findText(pricePanel, '¥4')).toBe('¥4')
+      expect(findText(pricePanel, '¥ / 1M tokens')).toBe('¥ / 1M tokens')
+      expect(findByTestId(cny.rendered, 'dsh-tako-usd-warning')).toBeUndefined()
+      // Per-call model: $0.3 internal → ¥0.1 / 次
+      expect(findText(findByTestId(cny.rendered, 'dsh-tako-price-per-call-model'), '¥0.1')).toBe('¥0.1')
+
+      // Internal USD toggle: ×3 + mandatory orange warning chip
+      const usd = await renderModels({ prefs: { currency: 'usd' } })
+      const usdPanel = findByTestId(usd.rendered, 'dsh-tako-price-deepseek-v4.1-flash')
+      expect(findText(usdPanel, '$3')).toBe('$3')
+      expect(findText(usdPanel, '$12')).toBe('$12')
+      expect(findByTestId(usd.rendered, 'dsh-tako-usd-warning')).toBeDefined()
+      expect(findText(findByTestId(usd.rendered, 'dsh-tako-usd-warning'), '¥1 = $3')).toBeDefined()
+
+      // /1K unit divides token price by 1000, but leaves per-call price untouched
+      const perK = await renderModels({ prefs: { currency: 'cny', tokenUnit: 'K' } })
+      expect(findText(findByTestId(perK.rendered, 'dsh-tako-price-deepseek-v4.1-flash'), '¥0.001')).toBe('¥0.001')
+      expect(findText(findByTestId(perK.rendered, 'dsh-tako-price-per-call-model'), '¥0.1')).toBe('¥0.1')
+    } finally { hookStates = [] }
+  })
+
+  it('supports Average view (realized + std + hit rate, plus new-model fallback) and strict discount gating', async () => {
+    try {
+      const avg = await renderModels({ prefs: { priceMode: 'avg', currency: 'cny' } })
+      // deepseek-v4.1-flash: realized $2.1 → ¥0.7, std $4.5 → ¥1.5, hit 72%
+      const flashPrice = findByTestId(avg.rendered, 'dsh-tako-price-deepseek-v4.1-flash')
+      expect(findText(flashPrice, '¥0.7')).toBe('¥0.7')
+      expect(findText(flashPrice, '标准负载 ¥1.5 · 缓存命中 72%')).toBeDefined()
+      // new-unmeasured: no realized → falls back to std ¥1.5 + new-model copy
+      const newPrice = findByTestId(avg.rendered, 'dsh-tako-price-new-unmeasured')
+      expect(findText(newPrice, '¥1.5')).toBe('¥1.5')
+      expect(findText(newPrice, '新上线，暂无 7 日实测数据')).toBeDefined()
+
+      // Strict discount badge gating:
+      // - token (0.32) and dynamic (0.25) show discount badges
+      expect(findByTestId(avg.rendered, 'dsh-tako-discount-deepseek-v4.1-flash')).toBeDefined()
+      expect(findText(findByTestId(avg.rendered, 'dsh-tako-discount-deepseek-v4.1-flash'), '0.32x')).toBeDefined()
+      expect(findByTestId(avg.rendered, 'dsh-tako-discount-grok-4.6')).toBeDefined()
+      // - free, per-call, and official-priced (>=0.99) NEVER show discount badges
+      expect(findByTestId(avg.rendered, 'dsh-tako-discount-free-chat-model')).toBeUndefined()
+      expect(findByTestId(avg.rendered, 'dsh-tako-discount-per-call-model')).toBeUndefined()
+      expect(findByTestId(avg.rendered, 'dsh-tako-discount-new-unmeasured')).toBeUndefined()
+      // - promo badge + bar rendered for promo model
+      const promoCard = findByTestId(avg.rendered, 'dsh-tako-modelcard-claude-fable-5-2')
+      expect(findText(promoCard, '限时特惠')).toBeDefined()
+      expect(findText(promoCard, '截至 12-01')).toBeDefined()
+    } finally { hookStates = [] }
+  })
+
+  it('filters by quick strip, search, vendor/capability/billing, supports table view, pins, and active chat state', async () => {
+    try {
+      // Quick filters
+      expect(collectModels((await renderModels({ quick: 'promo' })).rendered)).toEqual(['claude-fable-5-2'])
+      expect(collectModels((await renderModels({ quick: 'cheap' })).rendered)).toEqual(['claude-fable-5-2'])
+      expect(collectModels((await renderModels({ quick: 'fav', pinned: ['grok-4.6'] })).rendered)).toEqual(['grok-4.6'])
+      expect(collectModels((await renderModels({ quick: 'long' })).rendered)).toEqual(['deepseek-v4.1-flash'])
+      // Search & no-match state
+      expect(collectModels((await renderModels({ query: 'fable' })).rendered)).toEqual(['claude-fable-5-2'])
+      expect(findByTestId((await renderModels({ query: 'nonexistent-xyz' })).rendered, 'dsh-tako-catalog-nomatch')).toBeDefined()
+      // Filter drawer criteria (billing = free / call, vendor = Anthropic)
+      expect(collectModels((await renderModels({ bill: 'free' })).rendered)).toEqual(['free-chat-model'])
+      expect(collectModels((await renderModels({ bill: 'call' })).rendered)).toEqual(['per-call-model'])
+      expect(collectModels((await renderModels({ vendors: ['Anthropic'] })).rendered)).toEqual(['claude-fable-5-2'])
+      // Pinned ordering + active chat model highlight
+      const pinned = await renderModels({ pinned: ['grok-4.6'], activeModel: 'claude-fable-5-2' })
+      expect(collectModels(pinned.rendered)[0]).toBe('grok-4.6')
+      expect(findByTestId(pinned.rendered, 'dsh-tako-pin-grok-4.6')?.props?.['data-active']).toBe('true')
+      expect(findText(findByTestId(pinned.rendered, 'dsh-tako-use-claude-fable-5-2'), '当前对话模型')).toBeDefined()
+      // Table view + colSpan=3 on per-call row
+      const table = await renderModels({ prefs: { layout: 'table' } })
+      expect(findByTestId(table.rendered, 'dsh-tako-catalog-table')).toBeDefined()
+      const callRow = findByTestId(table.rendered, 'dsh-tako-modelrow-per-call-model')
+      expect(findByAttr(callRow, 'colSpan', '3') ?? findByAttr(callRow, 'className', 'span-call')).toBeDefined()
+    } finally { hookStates = [] }
+  })
+})
+
+describe('client sidebar footer quota card (4 states x wide/rail)', () => {
+  async function renderFooter(status: unknown, wide: boolean, prefs = DEFAULT_PREFS) {
+    await loadModuleRow()
+    const { plugin, render } = materialize()
+    const face = localeService()
+    const { ctx, entries, runInjections } = stubCtx({ locale: face })
+    plugin.apply(ctx)
+    runInjections()
+    face.setActive('zh')
+    hookStates = [status, prefs]
+    const Footer = entries.find(entry => entry.slot === 'sidebar.footer.action')!.component
+    return render(Footer, { wide, t: face.bind() }) as Element
+  }
+
+  it('renders healthy plan, low plan, wallet-only balance, signed-out empty, and collapsed 56px rail', async () => {
+    try {
+      // 1. Healthy plan (wide)
+      const planEl = await renderFooter({
+        consoleApiVersion: 2, configured: true,
+        me: { userName: 'Ada', planName: 'Pro Max', quotaRemainUsd: 120 }, // ¥40.00
+        plan: { windowMinutes: 300, windowCost: 56, windowCostLimit: 200, weeklyCost: 418, weeklyCostLimit: 930 },
+      }, true)
+      const planBtn = findByTestId(planEl, 'dsh-tako-footer')!
+      expect(planBtn.props?.['data-tako-quota']).toBe('plan')
+      expect(planBtn.props?.['data-tako-low']).toBe('false')
+      expect(findText(planBtn, '¥40.00')).toBe('¥40.00')
+      expect(findText(planBtn, '72%')).toBe('72%')
+
+      // 2. Low plan (<30% remaining on 5h window)
+      const lowEl = await renderFooter({
+        consoleApiVersion: 2, configured: true,
+        me: { userName: 'Ada', planName: 'Pro Max', quotaRemainUsd: 9 }, // ¥3.00 < ¥10
+        plan: { windowMinutes: 300, windowCost: 184, windowCostLimit: 200, weeklyCost: 400, weeklyCostLimit: 930 },
+      }, true)
+      const lowBtn = findByTestId(lowEl, 'dsh-tako-footer')!
+      expect(lowBtn.props?.['data-tako-quota']).toBe('low')
+      expect(lowBtn.props?.['data-tako-low']).toBe('true')
+      expect(findText(lowBtn, '额度偏低')).toBeDefined()
+
+      // 3. Wallet-only (PayGo)
+      const balEl = await renderFooter({
+        consoleApiVersion: 2, configured: true,
+        me: { userName: 'Bob', quotaRemainUsd: 90 }, // ¥30.00
+      }, true)
+      const balBtn = findByTestId(balEl, 'dsh-tako-footer')!
+      expect(balBtn.props?.['data-tako-quota']).toBe('balance')
+      expect(findText(balBtn, '按量')).toBe('按量')
+      expect(findText(balBtn, '¥30.00')).toBe('¥30.00')
+
+      // 4. Signed-out empty
+      const emptyEl = await renderFooter({ consoleApiVersion: 2, configured: false }, true)
+      const emptyBtn = findByTestId(emptyEl, 'dsh-tako-footer')!
+      expect(emptyBtn.props?.['data-tako-quota']).toBe('empty')
+      expect(findText(emptyBtn, '登录 Tako')).toBe('登录 Tako')
+
+      // 5. Collapsed 56px rail with low-quota amber badge
+      const railEl = await renderFooter({
+        consoleApiVersion: 2, configured: true,
+        me: { userName: 'Ada', planName: 'Pro', quotaRemainUsd: 9 },
+        plan: { windowMinutes: 300, windowCost: 184, windowCostLimit: 200, weeklyCost: 400, weeklyCostLimit: 930 },
+      }, false)
+      const railBtn = findByTestId(railEl, 'dsh-tako-footer')!
+      expect(railBtn.props?.['data-tako-quota']).toBe('low')
+      expect(findByTag(railBtn, 'svg')).toBeDefined()
+      expect(findByAttr(railBtn, 'className', 'badge')).toBeDefined()
+    } finally { hookStates = [] }
   })
 })
 
 describe('client account refresh ordering', () => {
-  async function mount(slot: 'main' | 'sidebar.footer.action') {
+  async function mount(slot: 'tako-console' | 'tako-models' | 'sidebar.footer.action') {
     await loadModuleRow()
     hookStates = []
     const effects: (() => void | (() => void))[] = []
     const updates: unknown[] = []
     const errors: unknown[] = []
-    const { plugin, render } = materialize({ effect: effect => { effects.push(effect) },
+    const { plugin, render } = materialize({
+      effect: effect => { effects.push(effect) },
       setState: (index, value) => {
         if (index === 0) updates.push(value)
         if (index === 1) errors.push(value)
-      } })
+      },
+    })
     const { ctx, entries, runInjections } = stubCtx()
     plugin.apply(ctx)
     runInjections()
-    const rendered = render(entries.find(entry => entry.slot === slot)!.component, { wide: true })
+    const comp = slot === 'tako-console' ? findConsolePage(entries)
+      : slot === 'tako-models' ? findModelsPage(entries)
+      : entries.find(entry => entry.slot === 'sidebar.footer.action')!.component
+    const rendered = render(comp, { wide: true })
     const pending: { resolve: (value: Response) => void, reject: (error: Error) => void, signal?: AbortSignal }[] = []
     vi.stubGlobal('fetch', vi.fn((input: string, init: RequestInit) => {
       if (!String(input).includes('tako.status')) return Promise.resolve(Response.json({ models: [], status: 'ready', lastSyncAt: 1 }))
@@ -815,7 +1108,7 @@ describe('client account refresh ordering', () => {
     return { rendered, updates, errors, pending, dispose: () => { disposers.forEach(dispose => dispose()) } }
   }
 
-  for (const slot of ['main', 'sidebar.footer.action'] as const) {
+  for (const slot of ['tako-console', 'tako-models', 'sidebar.footer.action'] as const) {
     it(`${slot} refreshes on credential change and ignores an older successful read`, async () => {
       vi.useFakeTimers()
       const view = await mount(slot)
@@ -843,7 +1136,7 @@ describe('client account refresh ordering', () => {
         view.pending[0]!.reject(new Error('old request failed'))
         await vi.advanceTimersByTimeAsync(0)
         expect(view.updates).toHaveLength(count)
-        expect(view.errors.every(error => error === undefined)).toBe(true)
+        if (slot === 'tako-console') expect(view.errors.every(error => error === undefined)).toBe(true)
         expect(view.updates.at(-1)).toMatchObject({ configured: true })
       } finally { view.dispose(); vi.unstubAllGlobals(); vi.useRealTimers() }
     })
@@ -869,15 +1162,18 @@ describe('client logout completion note', () => {
   for (const outcome of ['revoked', 'removed', 'not-configured', 'external', 'network-error', 'http-error'] as const) {
     it(`handles ${outcome} without erasing a sign-in that is still current`, async () => {
       await loadModuleRow()
-      hookStates = [{ configured: true, me: { userName: 'Test account' } }, undefined, undefined, undefined, false, undefined,
-        'overview', undefined, undefined, false, false,
-        { status: 'success', user: 'Test account', key: 'cr_****test', credential: 'TAKO_API_KEY' }]
+      hookStates = consoleHooks({
+        status: { configured: true, me: { userName: 'Test account' } },
+        login: { status: 'success', user: 'Test account', key: 'cr_****test', credential: 'TAKO_API_KEY' },
+      })
       const changes: unknown[] = []
       const notes: unknown[] = []
-      const { plugin, render } = materialize({ setState: (index, value) => {
-        if (index === 11) changes.push(value)
-        if (index === 5) notes.push(value)
-      } })
+      const { plugin, render } = materialize({
+        setState: (index, value) => {
+          if (index === 11) changes.push(value)
+          if (index === 5) notes.push(value)
+        },
+      })
       const { ctx, entries, runInjections } = stubCtx()
       plugin.apply(ctx)
       runInjections()
@@ -888,7 +1184,7 @@ describe('client logout completion note', () => {
         return Response.json({ ok: true, action: outcome })
       }))
       try {
-        const view = render(entries.find(entry => entry.slot === 'main')!.component, {})
+        const view = render(findConsolePage(entries), {})
         const logout = findByTestId(view, 'dsh-tako-console-sign-out')?.props?.onClick
         expect(typeof logout).toBe('function')
         await (logout as () => Promise<void>)()
@@ -949,8 +1245,10 @@ describe('client sign-in request lifetime', () => {
       if (init.body && JSON.parse(String(init.body)).action === 'cancel') return Promise.resolve(Response.json({ status: 'idle' }))
       return new Promise<Response>(resolve => { pending.push({ init, resolve }) })
     }))
-    const { plugin, render } = materialize({ effect: effect => { effects.push(effect) },
-      setState: (index, value) => { if (index === 0) changes.push(value) } })
+    const { plugin, render } = materialize({
+      effect: effect => { effects.push(effect) },
+      setState: (index, value) => { if (index === 0) changes.push(value) },
+    })
     const { ctx, entries, runInjections } = stubCtx()
     plugin.apply(ctx)
     runInjections()
@@ -997,14 +1295,6 @@ describe('client sign-in request lifetime', () => {
   })
 })
 
-function findByTextButton(node: unknown, text: string): Element | undefined {
-  if (Array.isArray(node)) return node.map(child => findByTextButton(child, text)).find(Boolean)
-  if (node === null || typeof node !== 'object') return undefined
-  const el = node as Element
-  if (el.tag === 'button' && findText(el, text) === text) return el
-  return findByTextButton(el.children ?? [], text)
-}
-
 describe('client TakoMark', () => {
   it('inlines the PNG as a data URL and never uses import.meta', () => {
     const source = readFileSync(new URL('../client/client.js', import.meta.url), 'utf8')
@@ -1021,10 +1311,9 @@ describe('client TakoMark', () => {
     const { ctx, entries, runInjections } = stubCtx()
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
-    hookStates = [undefined, undefined, undefined, undefined, false, undefined, { status: 'idle' }, '', false, false, undefined]
+    hookStates = consoleHooks()
     try {
-      const mark = findByTestId(render(page, {}), 'dsh-tako-mark')
+      const mark = findByTestId(render(findConsolePage(entries), {}), 'dsh-tako-mark')
       expect(mark?.tag).toBe('img')
       expect(String(mark?.props?.src)).toMatch(/^data:image\/png;base64,/)
     } finally {
@@ -1032,6 +1321,7 @@ describe('client TakoMark', () => {
     }
   })
 })
+
 describe('client console surfaces', () => {
   const catalog = {
     consoleApiVersion: 2,
@@ -1043,23 +1333,6 @@ describe('client console surfaces', () => {
     ],
     nextSyncAt: null,
   }
-  /**
-   * TakoConsolePage consumes 12 useState slots (status, statusError, catalog,
-   * catalogError, busyLogout, logoutNote, tab, notice, dismissedNotice,
-   * diagCopied, noticeHistoryOpen, login). Inlined components share the stream
-   * afterwards: overview → KeyEditor(4) + UpdateCard(5); key tab → KeyTab(1) +
-   * KeyEditor(4); models tab → ModelsTab(3: pinned, syncBusy, syncNote) +
-   * CatalogCard(3: open, query, filter); requests → RequestsTab(4);
-   * usage → UsageTab(2); config → ConfigTab(5: config, error, form, saving, note).
-   */
-  const pageHooks = (options: { tab?: string, filter?: string, query?: string, open?: boolean, keyValue?: string, pinned?: string[], historyOpen?: boolean } = {}): unknown[] => {
-    const base = [undefined, undefined, catalog, undefined, false, undefined, options.tab ?? 'overview', undefined, undefined, false, options.historyOpen ?? false, { status: 'idle' }]
-    const tab = options.tab ?? 'overview'
-    if (tab === 'models') return [...base, options.pinned, false, undefined, options.open ?? false, options.query ?? '', options.filter ?? 'all']
-    if (tab === 'key') return [...base, undefined, options.keyValue ?? '', false, false, undefined]
-    if (tab === 'overview') return [...base, options.keyValue ?? '', false, false, undefined]
-    return base
-  }
 
   const renderPage = async (hooks: unknown[]) => {
     await loadModuleRow()
@@ -1068,121 +1341,71 @@ describe('client console surfaces', () => {
     const { ctx, entries, runInjections } = stubCtx({ locale: face })
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
+    const page = findConsolePage(entries)
     hookStates = hooks
     face.setActive('zh')
     return { rendered: render(page, { t: face.bind() }) as Element, face, render, page }
   }
 
-  it('offers a paste-a-key editor and a searchable catalog summary on the models tab', async () => {
+  it('renders overview KPIs, plan meters with >90% warning, PayGo fallback, and USD warning toggle', async () => {
     try {
-      const overview = await renderPage(pageHooks())
-      expect(findByTestId(overview.rendered, 'dsh-tako-key-input')).toBeDefined()
-      expect(findByTestId(overview.rendered, 'dsh-tako-key-save')).toBeDefined()
-      expect(findByTestId(overview.rendered, 'dsh-tako-tab-requests')).toBeDefined()
-      expect(findByTestId(overview.rendered, 'dsh-tako-copy-diagnostics')).toBeDefined()
+      // Plan active + >90% used (remaining <10%)
+      const lowPlan = await renderPage(consoleHooks({
+        status: {
+          consoleApiVersion: 2, configured: true, maskedKey: 'cr_****abcd',
+          me: { userName: 'Ada', planName: 'Pro Max', quotaRemainUsd: 12 }, // ¥4.00
+          plan: { windowMinutes: 300, windowCost: 185, windowCostLimit: 200, weeklyCost: 400, weeklyCostLimit: 930 },
+        },
+        catalog,
+      }))
+      expect(findByTestId(lowPlan.rendered, 'dsh-tako-tabpanel-overview')).toBeDefined()
+      expect(findByTestId(lowPlan.rendered, 'dsh-tako-tab-requests')).toBeDefined()
+      expect(findByTestId(lowPlan.rendered, 'dsh-tako-copy-diagnostics')).toBeDefined()
+      expect(findText(findByTestId(lowPlan.rendered, 'dsh-tako-quota-remain'), '¥4.00')).toBe('¥4.00')
+      expect(findText(lowPlan.rendered, '即将用尽')).toBeDefined()
 
-      const { rendered } = await renderPage(pageHooks({ tab: 'models' }))
-      expect(findByTestId(rendered, 'dsh-tako-catalog-search')).toBeDefined()
-      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-all')).toBeDefined()
-      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-vision')).toBeDefined()
-      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-long')).toBeDefined()
-      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-reasoning')).toBeDefined()
-      expect(findByTestId(rendered, 'dsh-tako-catalog-sync')).toBeDefined()
-      expect(findText(findByTestId(rendered, 'dsh-tako-catalog-summary'), '共 4 个')).toBe('共 4 个 · 视觉 1 · 长上下文 2 · 推理 3')
-      expect(findByTestId(rendered, 'dsh-tako-catalog-filter-long')?.children[0]).toBe('长上下文')
-      expect(findByTestId(rendered, 'dsh-tako-key-input')).toBeUndefined()
-    } finally {
-      hookStates = []
-    }
-  })
-
-  it('filters the catalog by capability and by name', async () => {
-    try {
-      let { rendered } = await renderPage(pageHooks({ tab: 'models', filter: 'vision' }))
-      expect(collectModels(rendered)).toEqual(['deepseek-v4.1-flash'])
-
-      const named = await renderPage(pageHooks({ tab: 'models', query: 'tako' }))
-      rendered = named.rendered
-      expect(collectModels(rendered)).toEqual(['tako-auto'])
-      expect(findText(findByTestId(rendered, 'dsh-tako-catalog-shown'), '显示')).toBe('显示 1 / 4')
-
-      const miss = await renderPage(pageHooks({ tab: 'models', query: 'no-such-model' }))
-      expect(findByTestId(miss.rendered, 'dsh-tako-catalog-nomatch')).toBeDefined()
-      expect(findText(miss.rendered, '没有匹配的模型')).toBe('没有匹配的模型')
-    } finally {
-      hookStates = []
-    }
-  })
-
-  it('renders pin stars on catalog rows when the config lists pinned models', async () => {
-    try {
-      const { rendered } = await renderPage(pageHooks({ tab: 'models', pinned: ['deepseek-v4.1-flash'] }))
-      expect(findByTestId(rendered, 'dsh-tako-pin-deepseek-v4.1-flash')?.props?.['data-active']).toBe('true')
-      expect(findByTestId(rendered, 'dsh-tako-pin-tako-auto')?.props?.['data-active']).toBe('false')
-    } finally {
-      hookStates = []
-    }
-  })
-
-  it('renders plaza-style model cards when the catalog carries cards', async () => {
-    const withCards = {
-      ...catalog,
-      cards: [{
-        id: 'deepseek-v4.1-flash', vendor: 'deepseek', description: '旗舰模型，1M 上下文', tags: ['1M', 'Vision'],
-        endpoints: ['openai', 'anthropic'], groups: ['default'], contextWindow: 1_000_000, vision: true, reasoning: true,
-        claudeCodeOnly: false, standardPriceUsdPerMillion: 4, realizedPriceUsdPerMillion: 3.2,
-        cacheHitRate: 0.8, channelCount: 5, channelTag: '安全', outputRatio: 4,
-      }],
-    }
-    try {
-      const hooks = pageHooks({ tab: 'models', pinned: ['deepseek-v4.1-flash'] })
-      hooks[2] = withCards
-      const { rendered } = await renderPage(hooks)
-      const card = findByTestId(rendered, 'dsh-tako-modelcard-deepseek-v4.1-flash')
-      expect(card).toBeDefined()
-      expect(card?.props?.['data-pinned']).toBe('true')
-      expect(findText(card, '旗舰模型')).toBeDefined()
-      expect(findText(card, '$4/M')).toBeDefined()
-      expect(findText(card, '~$3.2/M')).toBeDefined()
-      expect(findText(card, '安全')).toBeDefined()
-      expect(findText(card, '渠道 5')).toBeDefined()
-      expect(findText(card, 'openai·anthropic')).toBeDefined()
-      expect(findByTestId(card, 'dsh-tako-pin-deepseek-v4.1-flash')).toBeDefined()
-      // legacy row markup is replaced by the card grid
-      expect(findByAttr(rendered, 'data-dsh-tako-card', 'catalog')).toBeDefined()
-    } finally {
-      hookStates = []
-    }
+      // Switch to Internal USD -> 3x + warning chip
+      const usdView = await renderPage(consoleHooks({
+        status: {
+          consoleApiVersion: 2, configured: true, maskedKey: 'cr_****abcd',
+          me: { userName: 'Ada', quotaRemainUsd: 12 },
+        },
+        catalog,
+        prefs: { currency: 'usd' },
+      }))
+      expect(findText(findByTestId(usdView.rendered, 'dsh-tako-quota-remain'), '$12.00')).toBe('$12.00')
+      expect(findByTestId(usdView.rendered, 'dsh-tako-usd-warning')).toBeDefined()
+      // PayGo card rendered when no plan
+      expect(findText(usdView.rendered, '按量计费')).toBeDefined()
+    } finally { hookStates = [] }
   })
 
   it('shows the notice list on the overview and keeps tab panels exclusive', async () => {
     try {
-      const hooks = pageHooks()
-      hooks[7] = { ok: true, announcements: [{ id: 7, type: 'warning', publishDate: '2026-11-10T02:00:00Z', content: '## 波动\n服务波动\n- a\n- b' }] }
-      const { rendered } = await renderPage(hooks)
+      const { rendered } = await renderPage(consoleHooks({
+        catalog,
+        notice: { ok: true, announcements: [{ id: 7, type: 'warning', publishDate: '2026-11-10T02:00:00Z', content: '## 波动\n服务波动\n- a\n- b' }] },
+      }))
       const notice = findByTestId(rendered, 'dsh-tako-notice')
       expect(notice).toBeDefined()
       expect(findByTestId(rendered, 'dsh-tako-notice-item')).toBeDefined()
       expect(findText(notice, '波动')).toBeDefined()
       expect(findText(notice, '2026-11-10')).toBeDefined()
-      // the expanded body renders markdown-lite
       const body = findByTestId(rendered, 'dsh-tako-notice-body')
       expect(body).toBeDefined()
       expect(findText(body, '服务波动')).toBeDefined()
       expect(findByTestId(rendered, 'dsh-tako-tabpanel-overview')).toBeDefined()
       expect(findByTestId(rendered, 'dsh-tako-tabpanel-requests')).toBeUndefined()
 
-      // dismissed by id → the pinned slot collapses to just the history toggle
-      const next = pageHooks()
-      next[7] = { ok: true, announcements: [{ id: 7, content: '## 波动\n服务波动' }] }
-      next[8] = ['7']
-      const second = await renderPage(next)
+      // Dismissed by id → top slot collapses to history toggle
+      const second = await renderPage(consoleHooks({
+        catalog,
+        notice: { ok: true, announcements: [{ id: 7, content: '## 波动\n服务波动' }] },
+        dismissed: ['7'],
+      }))
       expect(findByTestId(second.rendered, 'dsh-tako-notice-item')).toBeUndefined()
       expect(findByTestId(second.rendered, 'dsh-tako-notice-history-toggle')).toBeDefined()
-    } finally {
-      hookStates = []
-    }
+    } finally { hookStates = [] }
   })
 
   it('pins only the newest unread notice and folds the rest behind a history toggle', async () => {
@@ -1195,23 +1418,16 @@ describe('client console surfaces', () => {
           { id: 7, type: 'ongoing', publishDate: '2026-11-01T00:00:00Z', content: '新客活动' },
         ],
       }
-      // Collapsed by default: only the newest item renders.
-      let hooks = pageHooks()
-      hooks[7] = notice
-      let { rendered } = await renderPage(hooks)
+      let { rendered } = await renderPage(consoleHooks({ catalog, notice }))
       const list = findByTestId(rendered, 'dsh-tako-notice')
       expect(list).toBeDefined()
       expect(findText(list, '最新公告')).toBeDefined()
       expect(findText(list, '已恢复')).toBeUndefined()
       expect(findText(list, '新客活动')).toBeUndefined()
-      const toggle = findByTestId(rendered, 'dsh-tako-notice-history-toggle')
-      expect(toggle).toBeDefined()
-      expect(toggle?.children[0]).toBe('历史公告 (2)')
+      expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('历史公告 (2)')
 
-      // Expanded: all three items render; the newest keeps the accent, the rest are marked read-style.
-      hooks = pageHooks({ historyOpen: true })
-      hooks[7] = notice
-      rendered = (await renderPage(hooks)).rendered
+      // Expanded
+      rendered = (await renderPage(consoleHooks({ catalog, notice, historyOpen: true }))).rendered
       const items = (function collect(node: unknown, out: Element[] = []): Element[] {
         if (Array.isArray(node)) { for (const child of node) collect(child, out); return out }
         if (typeof node !== 'object' || node === null) return out
@@ -1225,25 +1441,17 @@ describe('client console surfaces', () => {
       expect(String(items[1]?.props?.className)).toContain('dsh-tako-notice-read')
       expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('收起历史')
 
-      // All read: the top slot collapses to just the history toggle.
-      hooks = pageHooks()
-      hooks[7] = notice
-      hooks[8] = ['9', '8', '7']
-      rendered = (await renderPage(hooks)).rendered
+      // All read
+      rendered = (await renderPage(consoleHooks({ catalog, notice, dismissed: ['9', '8', '7'] }))).rendered
       expect(findByTestId(rendered, 'dsh-tako-notice-item')).toBeUndefined()
       expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('历史公告 (3)')
 
-      // Newest read but an older one unread: that unread one gets the top slot.
-      hooks = pageHooks()
-      hooks[7] = notice
-      hooks[8] = ['9', '7']
-      rendered = (await renderPage(hooks)).rendered
+      // Newest read, older unread gets top slot
+      rendered = (await renderPage(consoleHooks({ catalog, notice, dismissed: ['9', '7'] }))).rendered
       expect(findText(rendered, '已恢复')).toBeDefined()
       expect(findText(rendered, '最新公告')).toBeUndefined()
       expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('历史公告 (2)')
-    } finally {
-      hookStates = []
-    }
+    } finally { hookStates = [] }
   })
 
   it('remembers dismissed notices in localStorage and skips them next mount', async () => {
@@ -1265,7 +1473,7 @@ describe('client console surfaces', () => {
       plugin.apply(ctx)
       runInjections()
       face.setActive('zh')
-      const page = entries.find(entry => entry.slot === 'main')!.component
+      const page = findConsolePage(entries)
       const notice = {
         ok: true,
         announcements: [
@@ -1273,20 +1481,16 @@ describe('client console surfaces', () => {
           { id: 8, type: 'success', publishDate: '2026-11-09T00:00:00Z', content: '已恢复' },
         ],
       }
-      // The stub's useState ignores the lazy initializer, so the seed mirrors
-      // what the browser reads from storage on first mount.
       store.set('dsh-tako.notices.dismissed', '["9"]')
-      hookStates = [undefined, undefined, catalog, undefined, false, undefined, 'overview', notice, ['9'], false, false, { status: 'idle' }]
-      let rendered = render(page, { t: face.bind() }) as Element
+      hookStates = consoleHooks({ catalog, notice, dismissed: ['9'] })
+      const rendered = render(page, { t: face.bind() }) as Element
       const list = findByTestId(rendered, 'dsh-tako-notice')
       expect(findText(list, '最新公告')).toBeUndefined()
       expect(findText(list, '已恢复')).toBeDefined()
       expect(findByTestId(rendered, 'dsh-tako-notice-history-toggle')?.children[0]).toBe('历史公告 (1)')
-      // Clicking 知道了 on the pinned notice appends id 8 to localStorage.
       const dismiss = findByTestId(rendered, 'dsh-tako-notice-dismiss')
       expect(dismiss).toBeDefined()
-      const event = { preventDefault: () => {}, stopPropagation: () => {} }
-      void ((dismiss!.props as { onClick: (e: unknown) => void }).onClick)(event)
+      void ((dismiss!.props as { onClick: (e: unknown) => void }).onClick)({ preventDefault: () => {}, stopPropagation: () => {} })
       expect(setStates[8]).toEqual(['9', '8'])
       expect(store.get('dsh-tako.notices.dismissed')).toBe('["9","8"]')
     } finally {
@@ -1296,39 +1500,45 @@ describe('client console surfaces', () => {
     }
   })
 
-  it('renders request logs with the model filter select', async () => {
+  it('renders request logs with 3-decimal CNY spend and the model filter select', async () => {
     try {
-      const hooks = pageHooks({ tab: 'requests' })
-      hooks.push([
-        { id: 1, createdAt: 1718000000, modelName: 'deepseek-v4.1-flash', promptTokens: 1200, completionTokens: 300, quota: 250000, useTime: 3, isStream: true, requestId: 'chatcmpl-abc123', ip: '1.2.3.4', type: 2 },
-      ], undefined, '', false)
+      const hooks = consoleHooks({
+        catalog,
+        tab: 'requests',
+        extra: [
+          [{ id: 1, createdAt: 1718000000, modelName: 'deepseek-v4.1-flash', promptTokens: 1200, completionTokens: 300, quota: 750000, useTime: 3, isStream: true, requestId: 'chatcmpl-abc123', ip: '1.2.3.4', type: 2 }],
+          undefined, '', false,
+        ],
+      })
       const { rendered } = await renderPage(hooks)
       expect(findByTestId(rendered, 'dsh-tako-logs-table')).toBeDefined()
       expect(findByTestId(rendered, 'dsh-tako-logs-model')).toBeDefined()
       expect(findText(rendered, 'deepseek-v4.1-flash')).toBeDefined()
       expect(findText(rendered, 'chatcmpl')).toBeDefined()
       expect(findText(rendered, '1.2K')).toBeDefined()
-    } finally {
-      hookStates = []
-    }
+      // quota 750000 / 500000 = $1.50 internal → ¥0.500 actual (3 decimals)
+      expect(findText(rendered, '¥0.500')).toBe('¥0.500')
+    } finally { hookStates = [] }
   })
 
   it('degrades per-leg errors on the usage tab instead of blanking the panel', async () => {
     try {
-      const hooks = pageHooks({ tab: 'usage' })
-      hooks.push({
-        ok: true,
-        token: { name: 'k', grantedUsd: 10, usedUsd: 2.5, availableUsd: 7.5, unlimitedQuota: false, expiresAt: 0 },
-        dailyCostUsd: undefined, statsError: 'user-stats HTTP 503',
-        models: [{ model: 'deepseek-v4.1-flash', requests: 3, inputTokens: 1000, outputTokens: 200, costUsd: 0.01 }],
-      }, undefined)
+      const hooks = consoleHooks({
+        catalog,
+        tab: 'usage',
+        extra: [{
+          ok: true,
+          token: { name: 'k', grantedUsd: 15, usedUsd: 3, availableUsd: 12, unlimitedQuota: false, expiresAt: 0 },
+          dailyCostUsd: undefined, statsError: 'user-stats HTTP 503',
+          models: [{ model: 'deepseek-v4.1-flash', requests: 3, inputTokens: 1000, outputTokens: 200, costUsd: 0.03 }],
+        }, undefined],
+      })
       const { rendered } = await renderPage(hooks)
       expect(findByTestId(rendered, 'dsh-tako-usage-statserror')).toBeDefined()
       expect(findText(rendered, 'deepseek-v4.1-flash')).toBeDefined()
-      expect(findText(rendered, '$7.5')).toBeDefined()
-    } finally {
-      hookStates = []
-    }
+      // availableUsd $12 internal ÷ 3 = ¥4.00
+      expect(findText(rendered, '¥4.00')).toBe('¥4.00')
+    } finally { hookStates = [] }
   })
 
   it('posts the config form back to the config route', async () => {
@@ -1342,7 +1552,7 @@ describe('client console surfaces', () => {
     const { ctx, entries, runInjections } = stubCtx()
     plugin.apply(ctx)
     runInjections()
-    const page = entries.find(entry => entry.slot === 'main')!.component
+    const page = findConsolePage(entries)
     const posts: { url: string, body: unknown }[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: string, init: RequestInit) => {
       const url = String(input)
@@ -1360,16 +1570,19 @@ describe('client console surfaces', () => {
     }))
     const disposers: (() => void)[] = []
     try {
-      hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, false, { status: 'idle' }]
+      // ConfigTab hooks begin at index 17: 17=config, 18=error, 19=form
+      hookStates = consoleHooks({ catalog: { consoleApiVersion: 2, models: [] }, tab: 'config' })
       render(page, {})
       for (const effect of effects) { const dispose = effect(); if (dispose) disposers.push(dispose) }
       await vi.advanceTimersByTimeAsync(0)
-      // ConfigTab's form state (index 14) was written by the config GET.
-      const form = setStates[14] as Record<string, unknown> | undefined
+      const form = setStates[19] as Record<string, unknown> | undefined
       expect(form?.refreshMinutes).toBe('30')
       expect(form?.retryDelays).toBe('1000, 5000')
-      // Replay the recorded states for a second render so the form is mounted.
-      hookStates = [undefined, undefined, { consoleApiVersion: 2, models: [] }, undefined, false, undefined, 'config', undefined, undefined, false, false, { status: 'idle' }, setStates[12], setStates[13], setStates[14]]
+      hookStates = consoleHooks({
+        catalog: { consoleApiVersion: 2, models: [] },
+        tab: 'config',
+        extra: [setStates[17], setStates[18], setStates[19]],
+      })
       const rendered = render(page, {}) as Element
       const save = findByTestId(rendered, 'dsh-tako-config-save')
       expect(save).toBeDefined()

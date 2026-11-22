@@ -627,6 +627,62 @@ describe('console route /api/tako.config', () => {
     const { svc } = service({ settings })
     expect(await (await svc.handleConfig(new Request('http://localhost/api/tako.config'))).json()).toEqual({ ok: false, code: 'no-entry' })
   })
+
+  it('persists ui preferences without triggering a catalog resync and validates enum fields', async () => {
+    const { settings, mutate } = fakeSettings()
+    const requestSync = vi.fn()
+    const { svc } = service({ settings, requestSync })
+    const okRes = await svc.handleConfig(post({ set: { ui: { currency: 'usd', priceMode: 'avg', tokenUnit: 'K', layout: 'table', sort: 'disc' } } }))
+    expect(okRes.status).toBe(200)
+    expect(mutate).toHaveBeenCalledWith('tako', [{
+      op: 'set', path: ['ui'], value: { currency: 'usd', priceMode: 'avg', tokenUnit: 'K', layout: 'table', sort: 'disc' },
+    }])
+    expect(requestSync).not.toHaveBeenCalled()
+
+    for (const badUi of [{ currency: 'eur' }, { priceMode: 'raw' }, { tokenUnit: 'B' }, { layout: 'grid' }, { sort: 'random' }, { extra: true }, 'bad']) {
+      const badRes = await svc.handleConfig(post({ set: { ui: badUi } }))
+      expect(badRes.status).toBe(400)
+    }
+  })
+})
+
+describe('console route /api/tako.model', () => {
+  const post = (body: unknown): Request => new Request('http://localhost/api/tako.model', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  it('reads and updates the host default chat model when agentDefaultModel is present', async () => {
+    let current = { provider: 'tako', model: 'deepseek-v4.1-flash' }
+    const hostModel = {
+      currentSelection: vi.fn(() => current),
+      saveSelection: vi.fn(async (next: { provider: string, model: string }) => { current = next }),
+    }
+    const { svc } = service({ resolved: { value: KEY, source: 'file' }, agentDefaultModel: () => hostModel })
+    const getBody = await (await svc.handleModel(new Request('http://localhost/api/tako.model'))).json()
+    expect(getBody).toEqual({ ok: true, supported: true, writable: true, provider: 'tako', model: 'deepseek-v4.1-flash' })
+
+    const postRes = await svc.handleModel(post({ model: 'claude-fable-5-2' }))
+    expect(postRes.status).toBe(200)
+    expect(await postRes.json()).toEqual({ ok: true, provider: 'tako', model: 'claude-fable-5-2' })
+    expect(hostModel.saveSelection).toHaveBeenCalledWith({ provider: 'tako', model: 'claude-fable-5-2' })
+  })
+
+  it('reports unsupported cleanly when host lacks agentDefaultModel and rejects unauthenticated selection', async () => {
+    const { svc: noHost } = service({ resolved: { value: KEY, source: 'file' } })
+    expect(await (await noHost.handleModel(new Request('http://localhost/api/tako.model'))).json()).toEqual({ ok: true, supported: false, writable: false })
+    const res = await noHost.handleModel(post({ model: 'tako-auto' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: false, code: 'unsupported' })
+
+    const hostModel = { currentSelection: vi.fn(() => undefined), saveSelection: vi.fn(async () => {}) }
+    const { svc: unauth } = service({ resolved: undefined, agentDefaultModel: () => hostModel })
+    const unauthRes = await unauth.handleModel(post({ model: 'tako-auto' }))
+    expect(unauthRes.status).toBe(200)
+    expect(await unauthRes.json()).toMatchObject({ ok: false, code: 'not-configured' })
+    expect(hostModel.saveSelection).not.toHaveBeenCalled()
+  })
 })
 
 describe('console route /api/tako.sync', () => {
