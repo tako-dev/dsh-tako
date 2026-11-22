@@ -920,6 +920,9 @@ export function createConsoleService(options: ConsoleServiceOptions): {
     }
     const model = typeof body.model === 'string' ? body.model.trim() : ''
     if (model === '') return json({ ok: false, code: 'bad-request', message: 'model: a non-empty model id' }, 400)
+    if (!options.catalog().models.some(entry => entry.id === model)) {
+      return json({ ok: false, code: 'bad-request', message: `model: ${JSON.stringify(model)} is not in the model catalog` }, 400)
+    }
     if (service === undefined || typeof service.saveSelection !== 'function' || options.settings?.writable === false) {
       return json({ ok: false, code: 'unsupported', message: 'host does not support setting the default chat model directly' })
     }

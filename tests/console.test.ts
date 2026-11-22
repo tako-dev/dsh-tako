@@ -652,6 +652,11 @@ describe('console route /api/tako.model', () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
+  const catalogWith = (...ids: string[]): CatalogState => ({
+    models: ids.map(id => ({ id })),
+    lastSyncAt: 1,
+    nextSyncAt: null,
+  })
 
   it('reads and updates the host default chat model when agentDefaultModel is present', async () => {
     let current = { provider: 'tako', model: 'deepseek-v4.1-flash' }
@@ -659,7 +664,7 @@ describe('console route /api/tako.model', () => {
       currentSelection: vi.fn(() => current),
       saveSelection: vi.fn(async (next: { provider: string, model: string }) => { current = next }),
     }
-    const { svc } = service({ resolved: { value: KEY, source: 'file' }, agentDefaultModel: () => hostModel })
+    const { svc } = service({ resolved: { value: KEY, source: 'file' }, agentDefaultModel: () => hostModel, catalogState: catalogWith('claude-fable-5-2') })
     const getBody = await (await svc.handleModel(new Request('http://localhost/api/tako.model'))).json()
     expect(getBody).toEqual({ ok: true, supported: true, writable: true, provider: 'tako', model: 'deepseek-v4.1-flash' })
 
@@ -669,15 +674,29 @@ describe('console route /api/tako.model', () => {
     expect(hostModel.saveSelection).toHaveBeenCalledWith({ provider: 'tako', model: 'claude-fable-5-2' })
   })
 
+  it('rejects a model outside the synced catalog with 400 and never saves it', async () => {
+    const hostModel = { currentSelection: vi.fn(() => undefined), saveSelection: vi.fn(async () => {}) }
+    const { svc } = service({ resolved: { value: KEY, source: 'file' }, agentDefaultModel: () => hostModel, catalogState: catalogWith('deepseek-v4.1-flash') })
+    const res = await svc.handleModel(post({ model: 'claude-fable-5-2' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ ok: false, code: 'bad-request', message: 'model: "claude-fable-5-2" is not in the model catalog' })
+    expect(hostModel.saveSelection).not.toHaveBeenCalled()
+
+    const empty = await svc.handleModel(post({ model: '  ' }))
+    expect(empty.status).toBe(400)
+    expect(await empty.json()).toEqual({ ok: false, code: 'bad-request', message: 'model: a non-empty model id' })
+    expect(hostModel.saveSelection).not.toHaveBeenCalled()
+  })
+
   it('reports unsupported cleanly when host lacks agentDefaultModel and rejects unauthenticated selection', async () => {
-    const { svc: noHost } = service({ resolved: { value: KEY, source: 'file' } })
+    const { svc: noHost } = service({ resolved: { value: KEY, source: 'file' }, catalogState: catalogWith('tako-auto') })
     expect(await (await noHost.handleModel(new Request('http://localhost/api/tako.model'))).json()).toEqual({ ok: true, supported: false, writable: false })
     const res = await noHost.handleModel(post({ model: 'tako-auto' }))
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ ok: false, code: 'unsupported' })
 
     const hostModel = { currentSelection: vi.fn(() => undefined), saveSelection: vi.fn(async () => {}) }
-    const { svc: unauth } = service({ resolved: undefined, agentDefaultModel: () => hostModel })
+    const { svc: unauth } = service({ resolved: undefined, agentDefaultModel: () => hostModel, catalogState: catalogWith('tako-auto') })
     const unauthRes = await unauth.handleModel(post({ model: 'tako-auto' }))
     expect(unauthRes.status).toBe(200)
     expect(await unauthRes.json()).toMatchObject({ ok: false, code: 'not-configured' })
