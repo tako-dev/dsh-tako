@@ -688,6 +688,26 @@ describe('console route /api/tako.model', () => {
     expect(hostModel.saveSelection).not.toHaveBeenCalled()
   })
 
+  it('fails closed on an empty or not-yet-synced catalog: every model id is rejected with 400 and never saved', async () => {
+    const hostModel = { currentSelection: vi.fn(() => undefined), saveSelection: vi.fn(async () => {}) }
+    for (const catalogState of [emptyCatalogState(), catalogWith()]) {
+      const { svc } = service({ resolved: { value: KEY, source: 'file' }, agentDefaultModel: () => hostModel, catalogState })
+      for (const model of ['claude-fable-5-2', 'tako-auto']) {
+        const res = await svc.handleModel(post({ model }))
+        expect(res.status).toBe(400)
+        expect(await res.json()).toEqual({ ok: false, code: 'bad-request', message: `model: ${JSON.stringify(model)} is not in the model catalog` })
+      }
+    }
+    expect(hostModel.saveSelection).not.toHaveBeenCalled()
+
+    // The catalog gate fires before the host-support gate: even a host that
+    // cannot save selections still gets the 400, never 'unsupported'.
+    const { svc: noHost } = service({ resolved: { value: KEY, source: 'file' }, catalogState: emptyCatalogState() })
+    const res = await noHost.handleModel(post({ model: 'tako-auto' }))
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ ok: false, code: 'bad-request', message: 'model: "tako-auto" is not in the model catalog' })
+  })
+
   it('reports unsupported cleanly when host lacks agentDefaultModel and rejects unauthenticated selection', async () => {
     const { svc: noHost } = service({ resolved: { value: KEY, source: 'file' }, catalogState: catalogWith('tako-auto') })
     expect(await (await noHost.handleModel(new Request('http://localhost/api/tako.model'))).json()).toEqual({ ok: true, supported: false, writable: false })
