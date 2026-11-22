@@ -2,89 +2,188 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>dsh-tako console preview</title>
+<title>dsh-tako plugin preview (Models · Console · Sidebar Footer)</title>
 <style>
-  /* Rough dsw host canvas: dark + light toggles on the preview, not the product. */
+  /* Simulated DSH host shell tokens (matches design-platform.css light & body[data-ds-dark-theme]) */
   :root {
-    --dsw-alias-bg-base: #f7f6f4;
+    --dsw-alias-bg-base: #f6f8fb;
     --dsw-alias-bg-layer-1: #ffffff;
+    --dsw-alias-bg-layer-2: #fafbfd;
+    --dsw-alias-bg-module-platform: #fafbfd;
     --dsw-alias-settings-card-fill: #ffffff;
-    --dsw-alias-settings-card-stroke: rgba(0,0,0,.08);
-    --dsw-alias-border-l1: rgba(0,0,0,.14);
-    --dsw-alias-border-l2: rgba(0,0,0,.07);
-    --dsw-alias-label-primary: #1c1c1e;
-    --dsw-alias-label-secondary: #55524c;
-    --dsw-alias-label-tertiary: #8b8680;
-    --dsw-alias-label-dimmed: #a8a29a;
-    --dsw-alias-interactive-bg-hover: rgba(0,0,0,.05);
-    --dsw-alias-interactive-bg-active: rgba(0,0,0,.08);
-    --dsw-alias-state-error-primary: #c2372b;
-    --dsw-alias-state-success-primary: #2e7d46;
-    --dsw-alias-state-warn-primary: #a86a00;
-    --dsw-alias-button-primary-fill: #1c1c1e;
-    --dsw-alias-button-primary-hover: #000;
-    --dsw-alias-button-primary-foreground: #fff;
-    --dsw-radius-xs: 4px;
-    --dsw-radius-sm: 8px;
-    --dsw-radius-md: 12px;
-    --dsw-radius-lg: 16px;
-    --dsw-radius-xl: 20px;
-    --dsw-radius-panel: 28px;
+    --dsw-alias-settings-card-stroke: #e6eaf0;
+    --dsw-alias-border-l1: #eef1f5;
+    --dsw-alias-border-l2: #e6eaf0;
+    --dsw-alias-label-primary: #0f172a;
+    --dsw-alias-label-secondary: #334155;
+    --dsw-alias-label-tertiary: #64748b;
+    --dsw-alias-label-caption: #94a3b8;
+    --dsw-alias-label-dimmed: #cbd5e1;
+    --dsw-alias-interactive-bg-hover: rgba(15,23,42,.04);
+    --dsw-alias-interactive-bg-active: rgba(15,23,42,.08);
+    --dsw-alias-state-error-primary: #dc2626;
+    --dsw-alias-state-success-primary: #0f9f6e;
+    --dsw-alias-state-warn-primary: #d97706;
+    --dsw-alias-bg-mask-1: rgba(15,23,42,.32);
+    --shell-chrome: #e7ebf2;
+    --shell-side: #f1f3f7;
+    --shell-line: #e2e6ee;
   }
-  html[data-theme="dark"] {
-    --dsw-alias-bg-base: #161514;
-    --dsw-alias-bg-layer-1: #1e1d1b;
-    --dsw-alias-settings-card-fill: #211f1d;
-    --dsw-alias-settings-card-stroke: rgba(255,255,255,.09);
-    --dsw-alias-border-l1: rgba(255,255,255,.16);
-    --dsw-alias-border-l2: rgba(255,255,255,.08);
-    --dsw-alias-label-primary: #f2efeb;
-    --dsw-alias-label-secondary: #c9c4bd;
-    --dsw-alias-label-tertiary: #8f8a83;
-    --dsw-alias-label-dimmed: #6f6a63;
-    --dsw-alias-interactive-bg-hover: rgba(255,255,255,.06);
-    --dsw-alias-interactive-bg-active: rgba(255,255,255,.1);
-    --dsw-alias-state-error-primary: #e06556;
-    --dsw-alias-state-success-primary: #6fbf8a;
-    --dsw-alias-state-warn-primary: #d9a24a;
-    --dsw-alias-button-primary-fill: #f2efeb;
-    --dsw-alias-button-primary-hover: #fff;
-    --dsw-alias-button-primary-foreground: #161514;
+  html[data-theme="dark"], body[data-ds-dark-theme] {
+    --dsw-alias-bg-base: #111419;
+    --dsw-alias-bg-layer-1: #171b22;
+    --dsw-alias-bg-layer-2: #1f242d;
+    --dsw-alias-bg-module-platform: #1f242d;
+    --dsw-alias-settings-card-fill: #171b22;
+    --dsw-alias-settings-card-stroke: #252b36;
+    --dsw-alias-border-l1: #1f242e;
+    --dsw-alias-border-l2: #252b36;
+    --dsw-alias-label-primary: #eef2f7;
+    --dsw-alias-label-secondary: #c2cbd7;
+    --dsw-alias-label-tertiary: #8b96a6;
+    --dsw-alias-label-caption: #657082;
+    --dsw-alias-label-dimmed: #424b59;
+    --dsw-alias-interactive-bg-hover: rgba(255,255,255,.05);
+    --dsw-alias-interactive-bg-active: rgba(255,255,255,.09);
+    --dsw-alias-state-error-primary: #f87171;
+    --dsw-alias-state-success-primary: #34d399;
+    --dsw-alias-state-warn-primary: #fbbf24;
+    --dsw-alias-bg-mask-1: rgba(0,0,0,.55);
+    --shell-chrome: #0a0c10;
+    --shell-side: #151820;
+    --shell-line: #252b36;
   }
-  body {
-    margin: 0;
-    font: 14px/1.6 -apple-system, "SF Pro Text", "Helvetica Neue", "PingFang SC", sans-serif;
-    background: var(--dsw-alias-bg-base);
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
+    background: var(--shell-chrome);
     color: var(--dsw-alias-label-primary);
   }
+  body { display: flex; flex-direction: column; overflow: hidden; }
   #toolbar {
-    position: sticky; top: 0; z-index: 10;
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    padding: 10px 16px; border-bottom: .5px solid var(--dsw-alias-border-l2);
-    background: var(--dsw-alias-bg-base); font-size: 12px;
+    flex: none;
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    padding: 8px 14px;
+    background: var(--dsw-alias-settings-card-fill);
+    border-bottom: 1px solid var(--shell-line);
+    font-size: 12px;
+    z-index: 90;
   }
-  #toolbar button, #toolbar select {
-    font: inherit; padding: 4px 10px; border-radius: 999px;
-    border: .5px solid var(--dsw-alias-border-l1);
+  #toolbar .sep { width: 1px; height: 16px; background: var(--shell-line); margin: 0 4px; }
+  #toolbar button {
+    font: inherit; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--shell-line);
     background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer;
   }
-  #toolbar button[data-active="true"] { border-color: #c45c3e; color: #c45c3e; }
-  #panel { max-width: 780px; margin: 0 auto; padding: 16px 0 64px; }
+  #toolbar button[data-active="true"] {
+    background: #2f7cf6; border-color: #2f7cf6; color: #fff; font-weight: 600;
+  }
+  #stage {
+    flex: 1; min-height: 0; overflow: auto;
+    display: flex; justify-content: center; align-items: flex-start;
+    padding: 14px;
+  }
+  #stage.full { padding: 0; }
+  #window-frame {
+    display: flex; flex-direction: row;
+    width: 1280px; height: 800px;
+    max-width: 100%;
+    background: var(--dsw-alias-bg-base);
+    border: 1px solid var(--shell-line);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 18px 48px -18px rgba(15,23,42,.25);
+  }
+  #stage.full #window-frame {
+    width: 100% !important; height: 100% !important;
+    border-radius: 0; border: 0; box-shadow: none;
+  }
+  #sidebar {
+    flex: none;
+    width: 224px;
+    background: var(--shell-side);
+    border-right: 1px solid var(--shell-line);
+    display: flex; flex-direction: column;
+    padding: 12px 8px;
+    gap: 6px;
+    transition: width .15s;
+  }
+  #sidebar.rail { width: 56px; align-items: center; padding: 12px 6px; }
+  #sidebar .brand {
+    display: flex; align-items: center; gap: 8px; padding: 4px 8px 10px;
+    font-weight: 700; font-size: 14px; color: var(--dsw-alias-label-primary);
+  }
+  #sidebar.rail .brand span { display: none; }
+  #sidebar nav { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+  #sidebar nav button {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    border: 0; background: transparent; color: var(--dsw-alias-label-secondary);
+    padding: 8px 10px; border-radius: 10px; font: inherit; font-size: 13px;
+    cursor: pointer; text-align: left;
+  }
+  #sidebar.rail nav button { justify-content: center; padding: 8px; }
+  #sidebar.rail nav button .nav-label { display: none; }
+  #sidebar nav button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+  #sidebar nav button[data-active="true"] {
+    background: var(--dsw-alias-settings-card-fill);
+    color: var(--dsw-alias-label-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15,23,42,.08);
+  }
+  #sidebar-footer { margin-top: auto; width: 100%; }
+  #main-host { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .matrix-wrap {
+    padding: 20px 24px 40px; overflow-y: auto; flex: 1;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .matrix-grid {
+    display: grid; grid-template-columns: 240px 208px 72px; gap: 18px; align-items: start;
+  }
+  .matrix-col {
+    background: var(--shell-side); border: 1px solid var(--shell-line);
+    border-radius: 14px; padding: 10px 8px;
+  }
+  .matrix-col.w240 { width: 240px; }
+  .matrix-col.w208 { width: 208px; }
+  .matrix-col.w56 { width: 56px; padding: 10px 6px; }
 </style>
 </head>
 <body>
 <div id="toolbar">
-  <strong style="color:#c45c3e">dsh-tako console · preview</strong>
-  <button data-scene="signed-in" data-active="true">已登录</button>
+  <strong style="color:#2f7cf6">dsh-tako preview</strong>
+  <button data-view="tako-models" data-active="true">Tako 模型</button>
+  <button data-view="tako-console">Tako 控制台</button>
+  <button data-view="footer-matrix">侧栏卡 4×3</button>
+  <span class="sep"></span>
+  <button data-scene="signed-in" data-active="true">套餐正常</button>
+  <button data-scene="low-quota">低额度预警</button>
+  <button data-scene="plan-less">仅钱包按量</button>
   <button data-scene="signed-out">未登录</button>
-  <button data-scene="failed">同步失败</button>
-  <button data-scene="plan-less">无套餐</button>
   <button data-scene="update">有新版本</button>
+  <span class="sep"></span>
+  <button data-size="1280x800" data-active="true">1280×800</button>
+  <button data-size="960x700">960×700</button>
+  <button data-size="full">Full</button>
+  <button id="rail-toggle">侧栏折叠</button>
   <span style="flex:1"></span>
-  <button data-lang="zh" data-active="true">中</button><button data-lang="en">EN</button>
-  <button id="theme">dark</button>
+  <button data-lang="zh" data-active="true">中</button>
+  <button data-lang="en">EN</button>
+  <button id="theme-toggle">Dark</button>
 </div>
-<div id="panel"></div>
+<div id="stage">
+  <div id="window-frame">
+    <aside id="sidebar">
+      <div class="brand">
+        <span style="width:22px;height:22px;border-radius:7px;background:#2f7cf6;color:#fff;display:inline-grid;place-items:center;font-size:12px">D</span>
+        <span>DSH Desktop</span>
+      </div>
+      <nav id="sidebar-nav"></nav>
+      <div id="sidebar-footer"></div>
+    </aside>
+    <main id="main-host"></main>
+  </div>
+</div>
 
 <script src="./node_modules_local/react.development.js"></script>
 <script src="./node_modules_local/react-dom.development.js"></script>
@@ -94,156 +193,275 @@ window.__ModuleLoader__ = {
   _modules: [],
   load(m) { this._modules.push(m) },
 }
-
 const React = window.React
 const ReactDOM = window.ReactDOM
+const h = React.createElement
 
-/* ---- fixture data -------------------------------------------------------- */
+/* ---- rich fixture data (CNY actual = internal USD / 3) ------------------- */
+const nowSec = Math.floor(Date.now() / 1000)
+const daySec = 86400
+
+const MODELS_CATALOG = {
+  consoleApiVersion: 2,
+  models: [
+    { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text', 'image'], reasoningEfforts: { off: null, low: 'low', high: 'high', max: 'max' } },
+    { id: 'claude-fable-5-2', contextWindow: 400_000, input: ['text', 'image'], reasoningEfforts: { off: null, low: 'low', high: 'high' } },
+    { id: 'gpt-6-sol', contextWindow: 1_000_000, input: ['text', 'image'], reasoningEfforts: { off: null, low: 'low', medium: 'medium', high: 'high' } },
+    { id: 'kimi-k3-thinking', contextWindow: 262_144, input: ['text', 'image'], reasoningEfforts: { off: null, high: 'high' } },
+    { id: 'grok-4.6', contextWindow: 256_000, input: ['text'], reasoningEfforts: { low: 'low', high: 'high' } },
+    { id: 'gemini-3.5-pro', contextWindow: 1_000_000, input: ['text', 'image'], reasoningEfforts: { off: null, high: 'high' } },
+    { id: 'glm-5.1', contextWindow: 200_000, input: ['text'], reasoningEfforts: { off: null, high: 'high' } },
+    { id: 'deepseek-v4-official', contextWindow: 128_000, input: ['text'], reasoningEfforts: { low: 'low', high: 'high' } },
+    { id: 'tako-free-preview', contextWindow: 128_000, input: ['text'], reasoningEfforts: false },
+    { id: 'tako-search-pro', contextWindow: 128_000, input: ['text'], reasoningEfforts: false },
+    { id: 'qwen-3.5-coder', contextWindow: 256_000, input: ['text'], reasoningEfforts: { low: 'low', high: 'high' } },
+    { id: 'mimo-v2-flash', contextWindow: 128_000, input: ['text'], reasoningEfforts: false },
+  ],
+  cards: [
+    {
+      id: 'deepseek-v4.1-flash', vendor: 'deepseek', vendorName: 'DeepSeek',
+      description: 'DeepSeek 旗舰高速模型，支持 1M 上下文、视觉理解与多档深度推理。',
+      billingType: 'token', capabilities: ['reasoning', 'vision', 'code', 'tools', 'longContext'],
+      endpoints: ['openai', 'anthropic'], groups: ['default'], contextWindow: 1_000_000, vision: true, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 3.976, cachePriceUsdPerMillion: 0.398, outputPriceUsdPerMillion: 15.904,
+      standardPriceUsdPerMillion: 5.96, realizedPriceUsdPerMillion: 2.85, cacheHitRate: 0.74,
+      officialInputPriceUsdPerMillion: 12.26, officialOutputPriceUsdPerMillion: 49.05,
+      officialRatio: 0.32, channelCount: 5, channelTag: '主力通道',
+      channels: [{ name: 'DS-主力', tag: '极速' }, { name: 'DS-备用', tag: '稳态' }],
+    },
+    {
+      id: 'claude-fable-5-2', vendor: 'anthropic', vendorName: 'Anthropic',
+      description: '工程编码与复杂长程 Agent 任务首选，工具调用精准稳定。',
+      billingType: 'token', capabilities: ['reasoning', 'vision', 'code', 'tools'],
+      endpoints: ['anthropic', 'openai'], groups: ['default'], contextWindow: 400_000, vision: true, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 10.8, cachePriceUsdPerMillion: 1.08, outputPriceUsdPerMillion: 54.0,
+      standardPriceUsdPerMillion: 16.5, realizedPriceUsdPerMillion: 9.6, cacheHitRate: 0.68,
+      officialInputPriceUsdPerMillion: 65.7, officialOutputPriceUsdPerMillion: 328.5,
+      officialRatio: 0.16, channelCount: 4, channelTag: '极速编码',
+      promo: { label: '限时 1.6 折', endsAt: '11-30', originalInputPriceUsdPerMillion: 18.0 },
+    },
+    {
+      id: 'gpt-6-sol', vendor: 'openai', vendorName: 'OpenAI',
+      description: '全能旗舰推理模型，兼顾长上下文分析、多模态理解与高并发低延迟。',
+      billingType: 'token', capabilities: ['reasoning', 'vision', 'code', 'tools', 'longContext'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 1_000_000, vision: true, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 3.0, cachePriceUsdPerMillion: 0.3, outputPriceUsdPerMillion: 18.0,
+      standardPriceUsdPerMillion: 5.4, realizedPriceUsdPerMillion: 2.7, cacheHitRate: 0.62,
+      officialInputPriceUsdPerMillion: 60.0, officialOutputPriceUsdPerMillion: 360.0,
+      officialRatio: 0.05, channelCount: 6, channelTag: '高并发',
+    },
+    {
+      id: 'kimi-k3-thinking', vendor: 'moonshot', vendorName: 'Moonshot',
+      description: '深度思考与中文长文档分析模型，支持多图视觉输入。',
+      billingType: 'token', capabilities: ['reasoning', 'vision', 'tools'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 262_144, vision: true, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 4.5, cachePriceUsdPerMillion: 0.9, outputPriceUsdPerMillion: 18.0,
+      standardPriceUsdPerMillion: 6.3, realizedPriceUsdPerMillion: 4.2, cacheHitRate: 0.58,
+      officialRatio: 0.45, channelCount: 3, channelTag: 'K3-专线',
+    },
+    {
+      id: 'grok-4.6', vendor: 'xai', vendorName: 'xAI',
+      description: '按上下文长度分档动态计费，长程逻辑推理表现出色。',
+      billingType: 'dynamic', capabilities: ['reasoning', 'code'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 256_000, vision: false, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 6.0, cachePriceUsdPerMillion: 1.2, outputPriceUsdPerMillion: 24.0,
+      standardPriceUsdPerMillion: 8.7, realizedPriceUsdPerMillion: 6.3, cacheHitRate: 0.44,
+      officialRatio: 0.22, channelCount: 2, channelTag: '动态阶梯',
+    },
+    {
+      id: 'gemini-3.5-pro', vendor: 'google', vendorName: 'Google',
+      description: '1M 原生超长上下文多模态模型，适合整仓代码与长文档研读。',
+      billingType: 'token', capabilities: ['reasoning', 'vision', 'code', 'longContext'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 1_000_000, vision: true, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 5.4, cachePriceUsdPerMillion: 0.54, outputPriceUsdPerMillion: 21.6,
+      standardPriceUsdPerMillion: 7.8, officialRatio: 0.19, channelCount: 3, channelTag: '1M-稳定',
+    },
+    {
+      id: 'glm-5.1', vendor: 'zhipu', vendorName: '智谱',
+      description: '轻量高性价比中文推理与代码助手。',
+      billingType: 'token', capabilities: ['reasoning', 'code', 'tools'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 200_000, vision: false, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 1.5, cachePriceUsdPerMillion: 0.3, outputPriceUsdPerMillion: 6.0,
+      standardPriceUsdPerMillion: 2.1, realizedPriceUsdPerMillion: 1.35, cacheHitRate: 0.52,
+      officialRatio: 0.38, channelCount: 2,
+    },
+    {
+      id: 'deepseek-v4-official', vendor: 'deepseek', vendorName: 'DeepSeek',
+      description: '官方直连原价渠道，无折扣徽章门控验证用例。',
+      billingType: 'token', capabilities: ['reasoning', 'code'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 128_000, vision: false, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 12.26, cachePriceUsdPerMillion: 1.23, outputPriceUsdPerMillion: 49.05,
+      standardPriceUsdPerMillion: 18.0, channelCount: 1, channelTag: '官方原价',
+    },
+    {
+      id: 'tako-free-preview', vendor: 'tako', vendorName: 'Tako',
+      description: '社区免费体验对话模型，不扣钱包也不消耗套餐额度。',
+      billingType: 'free', capabilities: ['code'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 128_000, vision: false, reasoning: false, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 0, cachePriceUsdPerMillion: 0, outputPriceUsdPerMillion: 0,
+      channelCount: 1, channelTag: '公益免费',
+    },
+    {
+      id: 'tako-search-pro', vendor: 'tako', vendorName: 'Tako',
+      description: '联网搜索增强对话，按请求次数固定计费，不受上下文长度影响。',
+      billingType: 'call', capabilities: ['tools'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 128_000, vision: false, reasoning: false, claudeCodeOnly: false,
+      callPriceUsd: 0.15, channelCount: 2, channelTag: '按次固定',
+    },
+    {
+      id: 'qwen-3.5-coder', vendor: 'alibaba', vendorName: 'Alibaba',
+      description: '专精全栈编程与重构的开源代码旗舰模型。',
+      billingType: 'token', capabilities: ['reasoning', 'code', 'tools'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 256_000, vision: false, reasoning: true, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 1.2, cachePriceUsdPerMillion: 0.12, outputPriceUsdPerMillion: 4.8,
+      standardPriceUsdPerMillion: 1.8, realizedPriceUsdPerMillion: 0.99, cacheHitRate: 0.78,
+      officialRatio: 0.28, channelCount: 2,
+    },
+    {
+      id: 'mimo-v2-flash', vendor: 'xiaomi', vendorName: 'Xiaomi',
+      description: '极速轻量化日常问答与摘要模型，低成本高频调用。',
+      billingType: 'token', capabilities: ['tools'],
+      endpoints: ['openai'], groups: ['default'], contextWindow: 128_000, vision: false, reasoning: false, claudeCodeOnly: false,
+      inputPriceUsdPerMillion: 0.6, cachePriceUsdPerMillion: 0.06, outputPriceUsdPerMillion: 1.8,
+      standardPriceUsdPerMillion: 0.84, realizedPriceUsdPerMillion: 0.48, cacheHitRate: 0.66,
+      officialRatio: 0.15, channelCount: 1,
+    },
+  ],
+  lastSyncAt: Date.now() - 12 * 60_000,
+  nextSyncAt: Date.now() + 18 * 60_000,
+  refreshIntervalMs: 1_800_000,
+  status: 'ready',
+}
+
+const SAMPLE_LOGS = [
+  { id: 110, createdAt: nowSec - 120, modelName: 'deepseek-v4.1-flash', promptTokens: 4820, completionTokens: 1120, quota: 12500, useTime: 2, isStream: true, requestId: 'chatcmpl-9f2c1', type: 2 },
+  { id: 109, createdAt: nowSec - 900, modelName: 'claude-fable-5-2', promptTokens: 14200, completionTokens: 3200, quota: 68000, useTime: 8, isStream: true, requestId: 'chatcmpl-9f2b8', type: 2 },
+  { id: 108, createdAt: nowSec - 3200, modelName: 'gpt-6-sol', promptTokens: 6100, completionTokens: 980, quota: 24000, useTime: 3, isStream: true, requestId: 'chatcmpl-9f29e', type: 2 },
+  { id: 107, createdAt: nowSec - daySec, modelName: 'claude-fable-5-2', promptTokens: 19000, completionTokens: 4100, quota: 118000, useTime: 11, isStream: true, requestId: 'chatcmpl-9f1a0', type: 2 },
+  { id: 106, createdAt: nowSec - daySec * 2, modelName: 'deepseek-v4.1-flash', promptTokens: 28000, completionTokens: 5600, quota: 84000, useTime: 5, isStream: true, requestId: 'chatcmpl-9f112', type: 2 },
+  { id: 105, createdAt: nowSec - daySec * 3, modelName: 'kimi-k3-thinking', promptTokens: 12000, completionTokens: 2900, quota: 96000, useTime: 9, isStream: true, requestId: 'chatcmpl-9f0c4', type: 2 },
+  { id: 104, createdAt: nowSec - daySec * 4, modelName: 'grok-4.6', promptTokens: 8200, completionTokens: 1900, quota: 52000, useTime: 4, isStream: true, requestId: 'chatcmpl-9f051', type: 2 },
+  { id: 103, createdAt: nowSec - daySec * 5, modelName: 'deepseek-v4.1-flash', promptTokens: 32000, completionTokens: 7800, quota: 145000, useTime: 6, isStream: true, requestId: 'chatcmpl-9e9b0', type: 2 },
+  { id: 102, createdAt: nowSec - daySec * 6, modelName: 'gpt-6-sol', promptTokens: 9400, completionTokens: 1500, quota: 42000, useTime: 3, isStream: true, requestId: 'chatcmpl-9e81f', type: 5 },
+]
+
+const SAMPLE_USAGE = {
+  ok: true,
+  token: { name: 'dsh-tako@macbook', grantedUsd: 300, usedUsd: 78.6, availableUsd: 221.4, unlimitedQuota: false, modelLimits: {}, modelLimitsEnabled: false, expiresAt: 0 },
+  dailyCostUsd: 16.41,
+  models: [
+    { model: 'claude-fable-5-2', requests: 34, inputTokens: 480_000, outputTokens: 112_000, costUsd: 7.44 },
+    { model: 'deepseek-v4.1-flash', requests: 86, inputTokens: 1_240_000, outputTokens: 296_000, costUsd: 4.56 },
+    { model: 'gpt-6-sol', requests: 21, inputTokens: 310_000, outputTokens: 64_000, costUsd: 2.31 },
+    { model: 'kimi-k3-thinking', requests: 12, inputTokens: 140_000, outputTokens: 32_000, costUsd: 1.26 },
+    { model: 'grok-4.6', requests: 9, inputTokens: 88_000, outputTokens: 18_000, costUsd: 0.54 },
+    { model: 'glm-5.1', requests: 15, inputTokens: 120_000, outputTokens: 28_000, costUsd: 0.30 },
+  ],
+}
+
+const SAMPLE_NOTICE = {
+  ok: true,
+  announcements: [
+    { id: 11, type: 'warning', publishDate: '2026-11-21T02:00:00Z', content: '## claude-fable-5-2 限时 1.6 折开放\n已接入新高速渠道，支持 400K 上下文与工具调用。\n- 活动截至 11-30\n- 建议在 `Tako 模型` 一键设为对话模型' },
+    { id: 10, type: 'success', publishDate: '2026-11-18T09:30:00Z', content: '**DeepSeek V4.1 Flash** 已升级 1M 上下文与缓存读优惠，[模型广场](https://tako.shiroha.tech/pricing) 可查明细价。' },
+    { id: 9, type: 'ongoing', publishDate: '2026-11-12T00:00:00Z', content: '所有订阅套餐新增 5 小时窗口与周窗口独立额度展示。' },
+  ],
+}
+
 const FIXTURES = {
   'signed-in': {
     status: {
-      consoleApiVersion: 2,
-      configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
+      consoleApiVersion: 2, configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
       maskedKey: 'cr_****K4Z8', credential: 'TAKO_API_KEY',
-      me: { userName: 'shiroha', planName: 'Pro', quotaRemain: 6_250_000, quotaRemainUsd: 12.5, quotaUsed: 2_100_000, quotaUsedUsd: 4.2 },
-      plan: { windowMinutes: 300, windowCost: 38.4, windowCostLimit: 200, dailyCost: 41.2, dailyCostLimit: 300, weeklyCost: 121.6, weeklyCostLimit: 930 },
+      me: { userName: 'shiroha', planName: 'Pro Max', quotaRemain: 63_900_000, quotaRemainUsd: 127.8, quotaUsed: 18_000_000, quotaUsedUsd: 36.0 },
+      plan: { windowMinutes: 300, windowCost: 56, windowCostLimit: 200, weeklyCost: 418, weeklyCostLimit: 930, windowResetAt: '2h 14m 后重置', weeklyResetAt: '周日 00:00 重置' },
     },
-    catalog: {
-      consoleApiVersion: 2,
-      models: [
-        { id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'], reasoningEfforts: { off:'off', low:'low', high:'high' } },
-        { id: 'deepseek-v4-pro', contextWindow: 1_050_000, input: ['text'], reasoningEfforts: { off:'off', low:'low', high:'high' } },
-        { id: 'tako-auto', contextWindow: 272_000, input: ['text'], reasoningEfforts: false },
-        { id: 'kimi-k3-thinking', contextWindow: 262_144, input: ['text','image'], reasoningEfforts: { off:'off', low:'low', high:'high' } },
-        { id: 'gpt-5.4-turbo', contextWindow: 1_000_000, input: ['text','image'], reasoningEfforts: { off:'off', low:'low', medium:'medium', high:'high' } },
-        { id: 'claude-sonnet-5-5', contextWindow: 400_000, input: ['text','image'], reasoningEfforts: false },
-        { id: 'glm-5.1', contextWindow: 200_000, input: ['text'], reasoningEfforts: { off:'off', low:'low', high:'high' } },
-        { id: 'gemma-4-31b-it', contextWindow: 128_000, input: ['text'], reasoningEfforts: { off:'off' } },
-      ],
-      cards: [
-        { id: 'deepseek-v4.1-flash', vendor: 'deepseek', description: 'DeepSeek 旗舰，1M 上下文', tags: ['1M','Vision'], endpoints: ['openai','anthropic'], groups: ['default'], contextWindow: 1_000_000, vision: true, reasoning: true, claudeCodeOnly: false, standardPriceUsdPerMillion: 4, realizedPriceUsdPerMillion: 3.2, cacheHitRate: 0.8, channelCount: 5, channelTag: '安全', outputRatio: 4 },
-        { id: 'deepseek-v4-pro', vendor: 'deepseek', description: '稳态推理', tags: ['1.05M'], endpoints: ['openai'], groups: ['default'], contextWindow: 1_050_000, vision: false, reasoning: true, claudeCodeOnly: false, standardPriceUsdPerMillion: 12, channelCount: 2 },
-        { id: 'tako-auto', vendor: 'tako', description: '自动路由', tags: ['272K'], endpoints: ['openai'], groups: ['default'], contextWindow: 272_000, vision: false, reasoning: false, claudeCodeOnly: false, standardPriceUsdPerMillion: 0.5, realizedPriceUsdPerMillion: 0.35, channelCount: 1 },
-        { id: 'kimi-k3-thinking', vendor: 'moonshot', description: 'K3 深度思考', tags: ['262K','Vision'], endpoints: ['openai'], groups: ['default'], contextWindow: 262_144, vision: true, reasoning: true, claudeCodeOnly: false, standardPriceUsdPerMillion: 6, realizedPriceUsdPerMillion: 4.1, channelCount: 3 },
-        { id: 'gpt-5.4-turbo', vendor: 'openai', description: 'OpenAI 全能', tags: ['1M','Vision'], endpoints: ['openai'], groups: ['default'], contextWindow: 1_000_000, vision: true, reasoning: true, claudeCodeOnly: false, standardPriceUsdPerMillion: 15, realizedPriceUsdPerMillion: 12.6, channelCount: 4, outputRatio: 4 },
-        { id: 'claude-sonnet-5-5', vendor: 'anthropic', description: '编码首选', tags: ['400K','Vision'], endpoints: ['anthropic'], groups: ['default'], contextWindow: 400_000, vision: true, reasoning: false, claudeCodeOnly: false, standardPriceUsdPerMillion: 18, channelCount: 6 },
-        { id: 'glm-5.1', vendor: 'zhipu', description: '轻量推理', tags: ['200K'], endpoints: ['openai'], groups: ['default'], contextWindow: 200_000, vision: false, reasoning: true, claudeCodeOnly: false, standardPriceUsdPerMillion: 2, realizedPriceUsdPerMillion: 1.4, channelCount: 2 },
-        { id: 'gemma-4-31b-it', vendor: 'google', description: '开源指令调优', tags: ['128K'], endpoints: ['openai'], groups: ['default'], contextWindow: 128_000, vision: false, reasoning: true, claudeCodeOnly: false, standardPriceUsdPerMillion: 0.4, channelCount: 1 },
-      ],
-      lastSyncAt: Date.now() - 12*60_000, nextSyncAt: Date.now() + 18*60_000,
-      refreshIntervalMs: 1800_000, status: 'ready',
-    },
-    notice: { ok: true, announcements: [
-      { id: 11, type: 'warning', publishDate: '2026-11-10T02:00:00Z', content: '## CC-DeepSeek-0.1x 渠道暂时下线\n量化版本质量不稳定，正在换满血渠道。\n- 恢复时间另行通知\n- 期间建议切 `deepseek-v4.1-flash`' },
-      { id: 10, type: 'success', publishDate: '2026-11-08T09:30:00Z', content: '**K3 thinking** 已上架\n- 视觉 + 推理全开\n- [定价页](https://tako.shiroha.tech/pricing)' },
-      { id: 9, type: 'error', publishDate: '2026-11-05T15:00:00Z', content: '11 月 5 日部分请求 503，已在 15:40 修复。' },
-      { id: 8, type: 'ongoing', publishDate: '2026-11-01T00:00:00Z', content: '新客 8 折活动进行中。' },
-      { id: 7, type: 'warning', publishDate: '2026-10-28T18:00:00Z', content: '10 月 28 日晚高峰提款延迟，21:05 已全部补发。' },
-      { id: 6, type: 'success', publishDate: '2026-10-21T10:00:00Z', content: '**GPT-5.4-turbo** 上线 1M 上下文，首周 85 折。' },
-      { id: 5, type: 'error', publishDate: '2026-10-14T22:15:00Z', content: '10 月 14 日支付网关故障 22:40 恢复，受影响订单已自动重试。' },
-      { id: 4, type: 'ongoing', publishDate: '2026-10-07T00:00:00Z', content: '每周三 04:00–04:30 例行维护，期间请求可能短暂失败。' },
-      { id: 3, type: 'success', publishDate: '2026-09-30T12:00:00Z', content: 'Claude Sonnet 5.5 400K 上下文全量开放。' },
-      { id: 2, type: 'warning', publishDate: '2026-09-22T06:00:00Z', content: '旧版 `dsh-tako` <0.6 客户端将于 10 月底停止支持，请升级。' },
-      { id: 1, type: 'ongoing', publishDate: '2026-09-15T00:00:00Z', content: '推荐好友充值，双方各得 $5 钱包余额。' },
-    ] },
-    logs: { ok: true, logs: [
-      { id: 101, createdAt: Math.floor(Date.now()/1000)-42, modelName: 'deepseek-v4.1-flash', promptTokens: 1280, completionTokens: 420, quota: 310, useTime: 2, isStream: true, requestId: 'chatcmpl-9f2c1', channelName: 'DS-官方', ip: '1.2.3.4', tokenName: 'dsh-tako@macbook', type: 2, group: 'default' },
-      { id: 100, createdAt: Math.floor(Date.now()/1000)-130, modelName: 'kimi-k3-thinking', promptTokens: 8400, completionTokens: 2150, quota: 2200, useTime: 9, isStream: true, requestId: 'chatcmpl-9f2b8', channelName: 'K3-官方', ip: '1.2.3.4', tokenName: 'dsh-tako@macbook', type: 2, group: 'default' },
-      { id: 99, createdAt: Math.floor(Date.now()/1000)-300, modelName: 'deepseek-v4-pro', promptTokens: 510, completionTokens: 96, quota: 140, useTime: 1, isStream: false, requestId: 'chatcmpl-9f29e', channelName: 'DS-官方', ip: '1.2.3.4', tokenName: 'dsh-tako@macbook', type: 2, group: 'default' },
-      { id: 98, createdAt: Math.floor(Date.now()/1000)-720, modelName: 'deepseek-v4.1-flash', promptTokens: 2200, completionTokens: 870, quota: 560, useTime: 3, isStream: true, requestId: 'chatcmpl-9f271', channelName: 'DS-官方', ip: '1.2.3.4', tokenName: 'dsh-tako@macbook', type: 2, group: 'default' },
-      { id: 97, createdAt: Math.floor(Date.now()/1000)-1900, modelName: 'claude-sonnet-5-5', promptTokens: 12000, completionTokens: 3400, quota: 8800, useTime: 14, isStream: true, requestId: 'chatcmpl-9f1ff', channelName: 'Claude-中转', ip: '1.2.3.4', tokenName: 'dsh-tako@macbook', type: 2, group: 'default' },
-    ] },
-    usage: { ok: true,
-      token: { name: 'dsh-tako@macbook', granted: 50_000_000, used: 8_400_000, available: 41_600_000, unlimitedQuota: false, modelLimits: {}, modelLimitsEnabled: false, expiresAt: 0 },
-      dailyCostUsd: 4.61,
-      models: [
-        { model: 'deepseek-v4.1-flash', requests: 34, inputTokens: 410_000, outputTokens: 96_000, costUsd: 1.82 },
-        { model: 'kimi-k3-thinking', requests: 8, inputTokens: 88_000, outputTokens: 21_000, costUsd: 1.55 },
-        { model: 'claude-sonnet-5-5', requests: 3, inputTokens: 36_000, outputTokens: 9_800, costUsd: 0.97 },
-        { model: 'deepseek-v4-pro', requests: 5, inputTokens: 12_000, outputTokens: 4_100, costUsd: 0.27 },
-      ],
-    },
-    config: { ok: true, writable: true,
-      config: { baseURL: 'https://tako.shiroha.tech', refreshIntervalMs: 1_800_000, defaultContextWindow: 128_000,
-        pinned: ['deepseek-v4.1-flash','deepseek-v4-pro','tako-auto'], include: [], exclude: [], includeClaudeCodeOnly: false, overrides: {} },
-      webSearchProvider: 'tako',
-    },
-    update: { current: '0.5.22', latest: '0.5.22', upToDate: true },
+    catalog: MODELS_CATALOG, notice: SAMPLE_NOTICE, logs: { ok: true, logs: SAMPLE_LOGS }, usage: SAMPLE_USAGE,
+    update: { current: '0.6.4', latest: '0.6.4', upToDate: true },
   },
-  'signed-out': {
-    status: { consoleApiVersion: 2, configured: false },
-    catalog: { consoleApiVersion: 2, models: [], lastSyncAt: null, nextSyncAt: null, status: 'syncing' },
-    notice: { ok: false },
-    logs: { ok: false, code: 'not-configured' },
-    usage: { ok: false, code: 'not-configured' },
-    config: { ok: true, writable: true, config: { baseURL: 'https://tako.shiroha.tech', refreshIntervalMs: 1800_000, defaultContextWindow: 128_000, pinned: [], include: [], exclude: [], includeClaudeCodeOnly: false, overrides: {} }, webSearchProvider: 'deepseek-official' },
-    update: { current: '0.5.22', latest: '0.5.22', upToDate: true },
-  },
-  'failed': {
+  'low-quota': {
     status: {
-      consoleApiVersion: 2,
-      configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
+      consoleApiVersion: 2, configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
       maskedKey: 'cr_****K4Z8', credential: 'TAKO_API_KEY',
-      me: { userName: 'shiroha', planName: 'Pro', quotaRemainUsd: 12.5 }, plan: null,
+      me: { userName: 'shiroha', planName: 'Pro Max', quotaRemain: 9_600_000, quotaRemainUsd: 19.2, quotaUsed: 75_000_000, quotaUsedUsd: 150 },
+      plan: { windowMinutes: 300, windowCost: 188, windowCostLimit: 200, weeklyCost: 790, weeklyCostLimit: 930, windowResetAt: '1h 08m 后重置', weeklyResetAt: '周日 00:00 重置' },
     },
-    catalog: { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }],
-      lastSyncAt: Date.now() - 3600_000, nextSyncAt: Date.now() + 24_000,
-      refreshIntervalMs: 1800_000, status: 'retrying', attempts: 4,
-      lastError: { code: 'write-failed', message: 'transaction conflict', at: Date.now() - 60_000 } },
-    notice: { ok: true, announcements: [{ id: 20, type: 'error', publishDate: '2026-11-11T00:30:00Z', content: '## 服务波动\n部分渠道延迟升高，正在处理。' }] },
-    logs: { ok: false, code: 'upstream', message: 'HTTP 503' },
-    usage: { ok: true, token: { name: 'dsh-tako@macbook', granted: 50_000_000, used: 8_400_000, available: 41_600_000, unlimitedQuota: false, modelLimits: {}, modelLimitsEnabled: false, expiresAt: 0 }, dailyCostUsd: 4.61, models: [] },
-    config: { ok: true, writable: true, config: { baseURL: 'https://tako.shiroha.tech', refreshIntervalMs: 1800_000, defaultContextWindow: 128_000, pinned: [], include: [], exclude: [], includeClaudeCodeOnly: false, overrides: {} }, webSearchProvider: 'tako' },
-    update: { current: '0.5.22', latest: '0.5.22', upToDate: true },
+    catalog: MODELS_CATALOG, notice: SAMPLE_NOTICE, logs: { ok: true, logs: SAMPLE_LOGS }, usage: SAMPLE_USAGE,
+    update: { current: '0.6.4', latest: '0.6.4', upToDate: true },
   },
   'plan-less': {
     status: {
-      consoleApiVersion: 2,
-      configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
-      maskedKey: 'cr_****K4Z8', credential: 'TAKO_API_KEY',
-      me: { userName: 'shiroha', planName: 'PayGo', quotaRemainUsd: 12.5, quotaUsedUsd: 4.2 }, plan: {},
+      consoleApiVersion: 2, configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
+      maskedKey: 'cr_****W9Q2', credential: 'TAKO_API_KEY',
+      me: { userName: 'shiroha', quotaRemain: 42_000_000, quotaRemainUsd: 84.0, quotaUsed: 6_000_000, quotaUsedUsd: 12.0 },
+      plan: {},
     },
-    catalog: { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }], lastSyncAt: Date.now()-600_000, nextSyncAt: Date.now()+1200_000, refreshIntervalMs: 1800_000, status: 'ready' },
-    notice: { ok: true, announcements: [] },
-    logs: { ok: true, logs: [] },
-    usage: { ok: true, token: { name: 'dsh-tako@macbook', granted: 0, used: 0, available: 0, unlimitedQuota: true, modelLimits: {}, modelLimitsEnabled: false, expiresAt: 0 }, dailyCostUsd: 0, models: [] },
-    config: { ok: true, writable: true, config: { baseURL: 'https://tako.shiroha.tech', refreshIntervalMs: 1800_000, defaultContextWindow: 128_000, pinned: [], include: [], exclude: [], includeClaudeCodeOnly: false, overrides: {} }, webSearchProvider: 'tako' },
-    update: { current: '0.5.22', latest: '0.5.22', upToDate: true },
+    catalog: MODELS_CATALOG, notice: SAMPLE_NOTICE, logs: { ok: true, logs: SAMPLE_LOGS.slice(0, 4) }, usage: SAMPLE_USAGE,
+    update: { current: '0.6.4', latest: '0.6.4', upToDate: true },
+  },
+  'signed-out': {
+    status: { consoleApiVersion: 2, configured: false },
+    catalog: MODELS_CATALOG, notice: { ok: false }, logs: { ok: false, code: 'not-configured' }, usage: { ok: false, code: 'not-configured' },
+    update: { current: '0.6.4', latest: '0.6.4', upToDate: true },
   },
   'update': {
-    status: { consoleApiVersion: 2, configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
+    status: {
+      consoleApiVersion: 2, configured: true, origin: 'https://tako.shiroha.tech', baseURL: 'https://tako.shiroha.tech',
       maskedKey: 'cr_****K4Z8', credential: 'TAKO_API_KEY',
-      me: { userName: 'shiroha', planName: 'Pro', quotaRemainUsd: 12.5 }, plan: { windowMinutes: 300, windowCost: 38.4, windowCostLimit: 200, weeklyCost: 121.6, weeklyCostLimit: 930 } },
-    catalog: { consoleApiVersion: 2, models: [{ id: 'deepseek-v4.1-flash', contextWindow: 1_000_000, input: ['text','image'] }], lastSyncAt: Date.now()-600_000, nextSyncAt: Date.now()+1200_000, refreshIntervalMs: 1800_000, status: 'ready' },
-    notice: { ok: true, announcements: [] },
-    logs: { ok: true, logs: [] },
-    usage: { ok: true, token: { name: 'dsh-tako@macbook', granted: 50_000_000, used: 8_400_000, available: 41_600_000, unlimitedQuota: false, modelLimits: {}, modelLimitsEnabled: false, expiresAt: 0 }, dailyCostUsd: 4.61, models: [] },
-    config: { ok: true, writable: true, config: { baseURL: 'https://tako.shiroha.tech', refreshIntervalMs: 1800_000, defaultContextWindow: 128_000, pinned: [], include: [], exclude: [], includeClaudeCodeOnly: false, overrides: {} }, webSearchProvider: 'tako' },
-    update: { current: '0.5.22', latest: '0.6.0', upToDate: false },
+      me: { userName: 'shiroha', planName: 'Pro', quotaRemain: 30_000_000, quotaRemainUsd: 60.0 },
+      plan: { windowMinutes: 300, windowCost: 44, windowCostLimit: 200, weeklyCost: 220, weeklyCostLimit: 930 },
+    },
+    catalog: MODELS_CATALOG, notice: SAMPLE_NOTICE, logs: { ok: true, logs: SAMPLE_LOGS }, usage: SAMPLE_USAGE,
+    update: { current: '0.6.4', latest: '0.7.0', upToDate: false },
   },
 }
 
-let scene = new URLSearchParams(location.search).get('scene') || 'signed-in'
-let lang = new URLSearchParams(location.search).get('lang') || 'zh'
-const noticesParam = new URLSearchParams(location.search).get('notices')
-if (noticesParam !== null) {
-  const keep = Number(noticesParam)
-  FIXTURES['signed-in'].notice = { ok: true, announcements: FIXTURES['signed-in'].notice.announcements.slice(0, keep) }
+const params = new URLSearchParams(location.search)
+let activeView = params.get('view') || 'tako-models'
+let scene = params.get('scene') || 'signed-in'
+let lang = params.get('lang') || 'zh'
+let rail = false
+let configState = {
+  baseURL: 'https://tako.shiroha.tech', refreshIntervalMs: 1_800_000, syncRetryDelaysMs: [1000, 5000],
+  defaultContextWindow: 128_000, pinned: ['deepseek-v4.1-flash', 'claude-fable-5-2'],
+  include: [], exclude: [], includeClaudeCodeOnly: false, overrides: {},
+  ui: { priceMode: 'detail', currency: 'cny', tokenUnit: 'M', layout: 'card', sort: 'rec' },
 }
+let activeModel = 'deepseek-v4.1-flash'
 
-/* Route the plugin's relative fetch calls to fixtures. */
+/* Mock fetch routing with stateful config & active model */
 const realFetch = window.fetch
 window.fetch = async (input, init) => {
   const url = String(typeof input === 'string' ? input : input && input.url)
-  const data = FIXTURES[scene]
+  const method = (init && init.method) || 'GET'
+  const data = FIXTURES[scene] || FIXTURES['signed-in']
   const reply = body => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }))
   if (url.includes('tako.status')) return reply(data.status)
   if (url.includes('tako.catalog')) return reply(data.catalog)
   if (url.includes('tako.notice')) return reply(data.notice)
   if (url.includes('tako.logs')) return reply(data.logs)
   if (url.includes('tako.usage')) return reply(data.usage)
-  if (url.includes('tako.config')) return reply(data.config)
   if (url.includes('tako.update')) return reply(data.update)
+  if (url.includes('tako.config')) {
+    if (method === 'POST' && init && init.body) {
+      const body = JSON.parse(init.body)
+      if (body && body.set) {
+        if (Array.isArray(body.set.pinned)) configState.pinned = body.set.pinned
+        if (body.set.ui) configState.ui = { ...configState.ui, ...body.set.ui }
+      }
+      return reply({ ok: true })
+    }
+    return reply({ ok: true, writable: true, config: configState, webSearchProvider: 'tako' })
+  }
+  if (url.includes('tako.model')) {
+    if (method === 'POST' && init && init.body) {
+      if (!data.status.configured) return reply({ ok: false, code: 'not-configured' })
+      const body = JSON.parse(init.body)
+      activeModel = body.model
+      return reply({ ok: true, provider: 'tako', model: activeModel })
+    }
+    return reply({ ok: true, supported: true, writable: true, provider: 'tako', model: activeModel })
+  }
   if (url.includes('tako.key')) return reply({ ok: true, maskedKey: 'cr_****K4Z8', me: data.status.me })
   if (url.includes('tako.logout')) return reply({ ok: true, action: 'removed' })
   if (url.includes('tako.sync')) return reply({ ok: true })
@@ -251,62 +469,177 @@ window.fetch = async (input, init) => {
   return realFetch(input, init)
 }
 
-/* No-op locale service: plugin falls back to inline DICTS via <html lang>. */
+/* Locale service double */
+let registeredDicts = null
+const localeFace = {
+  register(ns, dicts) { registeredDicts = dicts; return () => {} },
+  bind() {
+    return (key, p) => {
+      const tpl = registeredDicts && registeredDicts[lang] && registeredDicts[lang][key]
+      if (tpl === undefined) return key
+      return p ? tpl.replace(/\{(\w+)\}/g, (m, k) => k in p ? String(p[k]) : m) : tpl
+    }
+  },
+}
+
+const slotEntries = []
 const ctx = {
   slots: {
-    _entries: [],
-    inject(name, register) { this._entries.push({ name, register }) },
-    register(descriptor, component) {
-      const entry = { ...descriptor, component }
-      this._entries.push({ slot: descriptor.name, entry })
-      return () => {}
-    },
+    inject(name, fn) { fn() },
+    register(descriptor, component) { slotEntries.push({ ...descriptor, component }); return () => {} },
   },
-  get(name) { return undefined },
+  get(name) { return name === 'locale' ? localeFace : undefined },
   on() {}, effect(fn) { return fn },
 }
 
-window.__preview = { scene, lang }
+let navRoot, footerRoot, mainRoot
+let renderKey = 0
 
-/* ---- render -------------------------------------------------------------- */
-function mount() {
+function renderMatrix(FooterComp, t) {
+  const states = [
+    ['正常套餐 (plan)', FIXTURES['signed-in'].status],
+    ['低额度预警 (low)', FIXTURES['low-quota'].status],
+    ['仅钱包按量 (balance)', FIXTURES['plan-less'].status],
+    ['未登录 (empty)', FIXTURES['signed-out'].status],
+  ]
+  const origFetch = window.fetch
+  // Build lightweight wrapper rendering FooterComp with overridden status via props-less isolated fetch isn't possible concurrently;
+  // instead mount 4 scenes sequentially or wrap with status override in preview.
+  // Even better: intercept fetch by query tag? FooterComp fetches /api/tako.status, so we render a sequential showcase using a small helper!
+  function MatrixRow({ title, statusObj }) {
+    const [ready, setReady] = React.useState(false)
+    React.useEffect(() => { setReady(true) }, [])
+    // Temporarily render each card using a per-row status override via React key?
+    // Since FooterComp fetches `/api/tako.status`, we queue a short status override per mount.
+    return h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } },
+      h('div', { style: { fontWeight: 600, fontSize: '13px', color: 'var(--dsw-alias-label-secondary)' } }, title),
+      h('div', { className: 'matrix-grid' },
+        h('div', { className: 'matrix-col w240' }, h(ScopedFooter, { FooterComp, statusObj, wide: true, t })),
+        h('div', { className: 'matrix-col w208' }, h(ScopedFooter, { FooterComp, statusObj, wide: true, t })),
+        h('div', { className: 'matrix-col w56' }, h(ScopedFooter, { FooterComp, statusObj, wide: false, t }))))
+  }
+  const queue = []
+  let busy = false
+  function runNext() {
+    if (busy || queue.length === 0) return
+    busy = true
+    const task = queue.shift()
+    task(() => { busy = false; runNext() })
+  }
+  function ScopedFooter({ FooterComp, statusObj, wide, t }) {
+    const [armed, setArmed] = React.useState(false)
+    React.useEffect(() => {
+      let alive = true
+      queue.push(done => {
+        if (!alive) { done(); return }
+        const prev = window.fetch
+        window.fetch = async (input, init) => {
+          if (String(input).includes('tako.status')) {
+            return new Response(JSON.stringify(statusObj), { status: 200, headers: { 'content-type': 'application/json' } })
+          }
+          return prev(input, init)
+        }
+        setArmed(true)
+        setTimeout(() => { window.fetch = prev; done() }, 10)
+      })
+      runNext()
+      return () => { alive = false }
+    }, [statusObj, wide, lang])
+    return armed ? h(FooterComp, { wide, t }) : h('div', { style: { fontSize: '11px', opacity: .5 } }, '…')
+  }
+  return h('div', { className: 'matrix-wrap', 'data-testid': 'footer-matrix' },
+    h('h2', { style: { margin: 0, fontSize: '18px' } }, '侧栏底部额度卡 4 状态 × 3 宽度（240px / 208px / 56px 折叠环）'),
+    states.map(([title, statusObj]) => h(MatrixRow, { key: title + lang, title, statusObj })))
+}
+
+function renderAll() {
+  renderKey++
+  const t = localeFace.bind()
+  const navItems = slotEntries.filter(e => e.name === 'sidebar.panellist').sort((a, b) => (a.order || 0) - (b.order || 0))
+  const Footer = slotEntries.find(e => e.name === 'sidebar.footer.action')
+  const MainEntry = slotEntries.find(e => e.name === 'main' && e.key === activeView)
+
+  navRoot.render(navItems.map(item => {
+    const label = typeof item.label === 'function' ? item.label() : item.label
+    return h('button', {
+      key: item.id,
+      type: 'button',
+      'aria-label': label,
+      'data-active': String(activeView === item.id),
+      onClick: () => setView(item.id),
+    }, h(item.component, { size: 18 }), h('span', { className: 'nav-label' }, label))
+  }))
+
+  footerRoot.render(Footer ? h(Footer.component, { key: `${scene}-${lang}-${rail}`, wide: !rail, t }) : null)
+
+  if (activeView === 'footer-matrix' && Footer) {
+    mainRoot.render(renderMatrix(Footer.component, t))
+  } else if (MainEntry) {
+    mainRoot.render(h(MainEntry.component, { key: `${activeView}-${scene}-${lang}`, t }))
+  }
+}
+
+function setView(v) {
+  activeView = v
+  document.querySelectorAll('[data-view]').forEach(b => b.dataset.active = String(b.dataset.view === v))
+  renderAll()
+}
+function setScene(s) {
+  scene = s
+  document.querySelectorAll('[data-scene]').forEach(b => b.dataset.active = String(b.dataset.scene === s))
+  renderAll()
+}
+function setSize(sz) {
+  const stage = document.getElementById('stage')
+  const frame = document.getElementById('window-frame')
+  document.querySelectorAll('[data-size]').forEach(b => b.dataset.active = String(b.dataset.size === sz))
+  if (sz === 'full') { stage.classList.add('full'); return }
+  stage.classList.remove('full')
+  const [w, hh] = sz.split('x').map(Number)
+  frame.style.width = `${w}px`
+  frame.style.height = `${hh}px`
+}
+function setLang(l) {
+  lang = l
+  document.documentElement.lang = l === 'zh' ? 'zh-CN' : 'en'
+  document.querySelectorAll('[data-lang]').forEach(b => b.dataset.active = String(b.dataset.lang === l))
+  renderAll()
+}
+function setTheme(dark) {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+  if (dark) document.body.setAttribute('data-ds-dark-theme', 'true')
+  else document.body.removeAttribute('data-ds-dark-theme')
+  document.getElementById('theme-toggle').textContent = dark ? 'Light' : 'Dark'
+}
+
+document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)))
+document.querySelectorAll('[data-scene]').forEach(b => b.addEventListener('click', () => setScene(b.dataset.scene)))
+document.querySelectorAll('[data-size]').forEach(b => b.addEventListener('click', () => setSize(b.dataset.size)))
+document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)))
+document.getElementById('theme-toggle').addEventListener('click', () => setTheme(document.documentElement.dataset.theme !== 'dark'))
+document.getElementById('rail-toggle').addEventListener('click', () => {
+  rail = !rail
+  document.getElementById('sidebar').classList.toggle('rail', rail)
+  document.getElementById('rail-toggle').dataset.active = String(rail)
+  renderAll()
+})
+
+if (params.get('theme') === 'dark') setTheme(true)
+if (params.get('size')) setSize(params.get('size'))
+
+const script = document.createElement('script')
+script.src = '../client/client.js'
+script.onload = () => {
   const loader = window.__ModuleLoader__._modules.find(m => m.id === 'dsh-tako')
-  if (!loader) { document.getElementById('panel').textContent = 'plugin module not loaded'; return }
-  ctx.slots._entries.length = 0
   const plugin = loader.factory(name => name === 'react' ? React : undefined)
   plugin.apply(ctx)
-  for (const e of ctx.slots._entries.slice()) if (typeof e.register === 'function') e.register()
-  const main = ctx.slots._entries.find(e => e.slot === 'main')
-  const el = document.getElementById('panel')
-  window.__root = window.__root || ReactDOM.createRoot(el)
-  window.__root.render(React.createElement(main.entry.component, {}))
+  navRoot = ReactDOM.createRoot(document.getElementById('sidebar-nav'))
+  footerRoot = ReactDOM.createRoot(document.getElementById('sidebar-footer'))
+  mainRoot = ReactDOM.createRoot(document.getElementById('main-host'))
+  setLang(lang)
+  setView(activeView)
 }
-
-function setScene(next) {
-  scene = next
-  document.querySelectorAll('[data-scene]').forEach(b => b.dataset.active = String(b.dataset.scene === next))
-  mount()
-}
-function setLang(next) {
-  lang = next
-  document.documentElement.lang = next === 'zh' ? 'zh-CN' : 'en'
-  document.querySelectorAll('[data-lang]').forEach(b => b.dataset.active = String(b.dataset.lang === next))
-  mount()
-}
-document.querySelectorAll('[data-scene]').forEach(b => b.addEventListener('click', () => setScene(b.dataset.scene)))
-document.querySelectorAll('[data-lang]').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)))
-document.getElementById('theme').addEventListener('click', e => {
-  const html = document.documentElement
-  const dark = html.dataset.theme === 'dark'
-  html.dataset.theme = dark ? '' : 'dark'
-  e.target.textContent = dark ? 'dark' : 'light'
-})
-</script>
-<script src="../client/client.js"></script>
-<script>
-document.querySelectorAll('[data-scene]').forEach(b => b.dataset.active = String(b.dataset.scene === scene))
-document.querySelectorAll('[data-lang]').forEach(b => b.dataset.active = String(b.dataset.lang === lang))
-mount()
+document.body.appendChild(script)
 </script>
 </body>
 </html>

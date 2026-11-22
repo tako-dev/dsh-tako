@@ -272,4 +272,98 @@ describe('buildCards', () => {
     expect(cards[0]!.channelCount).toBe(0)
     expect(cards[0]!.tags).toEqual([])
   })
+
+  it('computes per-leg prices, tiered_expr, vendorName, capabilities, and strict discount gating', () => {
+    const data: TakoPricingModel[] = [
+      {
+        model_name: 'deepseek-v4.1-flash',
+        vendor_id: 1,
+        quota_type: 0,
+        model_ratio: 0.28,
+        completion_ratio: 4,
+        cache_ratio: 0.1,
+        context_length: 1_000_000,
+        tags: '推理,编码,Vision',
+        channels: [{ channel_name: '主力通道', channel_ratio: 7.1, channel_tag: '极速', realized_price_per_million: 1.9, cache_hit_rate: 0.72 }],
+        supported_endpoint_types: ['openai', 'anthropic'],
+      },
+      {
+        model_name: 'deepseek-v4-official',
+        vendor_id: 1,
+        quota_type: 0,
+        model_ratio: 0.28,
+        completion_ratio: 4,
+        supported_endpoint_types: ['openai'],
+        channels: [{ channel_name: '官方', channel_ratio: 22 }],
+      },
+      {
+        model_name: 'grok-4.6',
+        vendor_id: 2,
+        quota_type: 0,
+        billing_mode: 'tiered_expr',
+        model_ratio: 1,
+        completion_ratio: 3,
+        billing_expr: 'p * 0.5 + c * 1.5 + cr * 0.1',
+        supported_endpoint_types: ['openai'],
+        channels: [{ channel_name: '动态路由', channel_ratio: 1, billing_mode: 'tiered_expr', billing_expr: 'p * 0.5 + c * 1.5 + cr * 0.1' }],
+      },
+      {
+        model_name: 'free-chat-model',
+        vendor_id: 1,
+        quota_type: 0,
+        model_ratio: 0,
+        tags: '免费',
+        supported_endpoint_types: ['openai'],
+        channels: [{ channel_name: '免费', channel_ratio: 1 }],
+      },
+      {
+        model_name: 'per-call-chat',
+        vendor_id: 2,
+        quota_type: 1,
+        model_price: 0.06,
+        model_ratio: 1,
+        supported_endpoint_types: ['openai'],
+        channels: [{ channel_name: '按次', channel_ratio: 1 }],
+      },
+    ]
+    const models = buildCatalog(data)
+    const cards = buildCards(data, models, {
+      vendors: [{ id: 1, name: 'DeepSeek' }, { id: 2, name: 'xAI' }],
+      groupRatio: { default: 1 },
+    })
+    const byId = new Map(cards.map(c => [c.id, c]))
+
+    const flash = byId.get('deepseek-v4.1-flash')!
+    expect(flash.vendorName).toBe('DeepSeek')
+    expect(flash.billingType).toBe('token')
+    expect(flash.capabilities).toEqual(expect.arrayContaining(['reasoning', 'code', 'vision', 'longContext']))
+    expect(flash.inputPriceUsdPerMillion).toBeCloseTo(0.28 * 2 * 7.1, 4)
+    expect(flash.cachePriceUsdPerMillion).toBeCloseTo(0.28 * 2 * 7.1 * 0.1, 4)
+    expect(flash.outputPriceUsdPerMillion).toBeCloseTo(0.28 * 2 * 7.1 * 4, 4)
+    expect(flash.officialRatio).toBeCloseTo(7.1 / 21.9, 2)
+    expect(flash.channels).toEqual([{ name: '主力通道', tag: '极速', ratio: 7.1 }])
+
+    // Official-priced (ratio >= 21.9 → officialRatio >= 0.99) gets no discount badge
+    const official = byId.get('deepseek-v4-official')!
+    expect(official.billingType).toBe('token')
+    expect(official.officialRatio).toBeUndefined()
+
+    // Dynamic billing_expr parses input/output/cache legs
+    const grok = byId.get('grok-4.6')!
+    expect(grok.billingType).toBe('dynamic')
+    expect(grok.inputPriceUsdPerMillion).toBeCloseTo(0.5, 4)
+    expect(grok.outputPriceUsdPerMillion).toBeCloseTo(1.5, 4)
+    expect(grok.cachePriceUsdPerMillion).toBeCloseTo(0.1, 4)
+
+    // Strict gate: free and per-call models NEVER receive officialRatio
+    const free = byId.get('free-chat-model')!
+    expect(free.billingType).toBe('free')
+    expect(free.inputPriceUsdPerMillion).toBe(0)
+    expect(free.officialRatio).toBeUndefined()
+
+    const perCall = byId.get('per-call-chat')!
+    expect(perCall.billingType).toBe('call')
+    expect(perCall.callPriceUsd).toBeCloseTo(0.06, 4)
+    expect(perCall.officialRatio).toBeUndefined()
+  })
 })

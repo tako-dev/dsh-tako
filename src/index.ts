@@ -48,8 +48,8 @@ export {
   TAKO_SPEECH_TTS_TOOL,
   TAKO_TOOL_NAMES,
 } from './tako-tools.ts'
-export { LOGIN_ROUTE, UPDATE_ROUTE } from './web.ts'
-export type { CatalogState } from './web.ts'
+export { ACTIVE_MODEL_ROUTE, LOGIN_ROUTE, UPDATE_ROUTE } from './web.ts'
+export type { AgentDefaultModelLike, CatalogState, TakoUiPreferences } from './web.ts'
 
 /** Cordis plugin name. */
 export const name = 'dsh-tako'
@@ -90,7 +90,23 @@ export interface Config {
   includeClaudeCodeOnly: boolean
   /** Per-model capacity or modality fixes. */
   overrides: Record<string, TakoModelOverride>
+  /** Shared UI display preferences across model directory, console, and sidebar footer. */
+  ui?: {
+    priceMode?: 'detail' | 'avg'
+    currency?: 'cny' | 'usd'
+    tokenUnit?: 'M' | 'K'
+    layout?: 'card' | 'table'
+    sort?: 'rec' | 'price' | 'disc' | 'name'
+  }
 }
+
+const UiPreferences = z.object({
+  priceMode: z.union(['detail', 'avg']).default('detail'),
+  currency: z.union(['cny', 'usd']).default('cny'),
+  tokenUnit: z.union(['M', 'K']).default('M'),
+  layout: z.union(['card', 'table']).default('card'),
+  sort: z.union(['rec', 'price', 'disc', 'name']).default('rec'),
+})
 
 const ReasoningEfforts: z<TakoReasoningEfforts> = z.dict(
   z.union([z.string(), z.const(null)]), z.string().pattern(/^(off|minimal|low|medium|high|xhigh|max)$/),
@@ -119,6 +135,7 @@ export const Config: z<Config> = z.object({
   exclude: z.array(z.string()).default([]).description('排除匹配的模型，支持 * 通配'),
   includeClaudeCodeOnly: z.boolean().default(false).description('保留仅限 Claude Code 客户端的模型（DSH 中调用会被拒绝）'),
   overrides: z.dict(ModelOverride).default({}).description('按模型 id 修正上下文、输出上限或输入模态'),
+  ui: UiPreferences.default({ priceMode: 'detail', currency: 'cny', tokenUnit: 'M', layout: 'card', sort: 'rec' }).description('模型目录、控制台与侧栏共用的展示偏好'),
 })
 
 /** The `providers.tako` value written into the pi-ai settings section. */
@@ -324,7 +341,10 @@ export function start(ctx: Context, config: Config, deps: SyncDeps = {}): () => 
     try {
       const directory = await fetchDirectory(config.baseURL, signal, fetchImpl)
       models = buildCatalog(directory.data ?? [], catalogOptions)
-      cards = buildCards(directory.data ?? [], models)
+      cards = buildCards(directory.data ?? [], models, {
+        ...directory.vendors === undefined ? {} : { vendors: directory.vendors },
+        ...directory.group_ratio === undefined ? {} : { groupRatio: directory.group_ratio },
+      })
     } catch (error: unknown) {
       fetchError = error
     }

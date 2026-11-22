@@ -268,8 +268,10 @@ export interface TakoPlanQuota {
   windowMinutes?: number
   windowCost?: number
   windowCostLimit?: number
+  windowResetAt?: number | string
   weeklyCost?: number
   weeklyCostLimit?: number
+  weeklyResetAt?: number | string
   dailyCost?: number
   dailyCostLimit?: number
 }
@@ -283,6 +285,16 @@ function pickNum(record: Record<string, unknown> | undefined, ...keys: string[])
   for (const key of keys) {
     const value = finite(record[key])
     if (value !== undefined) return value
+  }
+  return undefined
+}
+
+function pickReset(record: Record<string, unknown> | undefined, ...keys: string[]): number | string | undefined {
+  if (record === undefined) return undefined
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value
+    if (typeof value === 'string' && value.trim() !== '') return value.trim()
   }
   return undefined
 }
@@ -310,8 +322,8 @@ export async function fetchUserQuota(origin: string, key: string, fetchImpl: typ
   }
   const quotaResponse = await fetchImpl(`${origin}/apiStats/api/user-quota`, {
     method: 'POST',
-    headers: { accept: 'application/json', 'content-type': 'application/json' },
-    body: JSON.stringify({ apiId: String(id) }),
+    headers: { accept: 'application/json', 'content-type': 'application/json', authorization: `Bearer ${key}` },
+    body: JSON.stringify({ apiId: String(id), apiKey: key }),
     signal: AbortSignal.timeout(20_000),
   })
   let raw: Record<string, unknown>
@@ -321,14 +333,20 @@ export async function fetchUserQuota(origin: string, key: string, fetchImpl: typ
   const plan = isRecord(raw.plan) ? raw.plan : undefined
   const usage = isRecord(raw.usage) ? raw.usage : undefined
   const out: TakoPlanQuota = {}
-  const set = (field: keyof TakoPlanQuota, value: number | undefined): void => { if (value !== undefined) out[field] = value }
-  set('windowMinutes', pickNum(plan, 'window_minutes', 'windowMinutes'))
-  set('windowCostLimit', pickNum(plan, 'window_cost_limit', 'windowCostLimit'))
-  set('weeklyCostLimit', pickNum(plan, 'weekly_cost_limit', 'weeklyCostLimit'))
-  set('dailyCostLimit', pickNum(plan, 'daily_cost_limit', 'dailyCostLimit'))
-  set('windowCost', pickNum(usage, 'windowCost', 'window_cost'))
-  set('weeklyCost', pickNum(usage, 'weeklyCost', 'weekly_cost'))
-  set('dailyCost', pickNum(usage, 'dailyCost', 'daily_cost'))
+  const setNum = (field: 'windowMinutes' | 'windowCost' | 'windowCostLimit' | 'weeklyCost' | 'weeklyCostLimit' | 'dailyCost' | 'dailyCostLimit', value: number | undefined): void => {
+    if (value !== undefined) out[field] = value
+  }
+  setNum('windowMinutes', pickNum(plan, 'window_minutes', 'windowMinutes'))
+  setNum('windowCostLimit', pickNum(plan, 'window_cost_limit', 'windowCostLimit'))
+  setNum('weeklyCostLimit', pickNum(plan, 'weekly_cost_limit', 'weeklyCostLimit'))
+  setNum('dailyCostLimit', pickNum(plan, 'daily_cost_limit', 'dailyCostLimit'))
+  setNum('windowCost', pickNum(usage, 'windowCost', 'window_cost'))
+  setNum('weeklyCost', pickNum(usage, 'weeklyCost', 'weekly_cost'))
+  setNum('dailyCost', pickNum(usage, 'dailyCost', 'daily_cost'))
+  const windowReset = pickReset(usage, 'windowResetAt', 'window_reset_at') ?? pickReset(plan, 'window_reset_at', 'windowResetAt')
+  if (windowReset !== undefined) out.windowResetAt = windowReset
+  const weeklyReset = pickReset(usage, 'weeklyResetAt', 'weekly_reset_at') ?? pickReset(plan, 'weekly_reset_at', 'weeklyResetAt')
+  if (weeklyReset !== undefined) out.weeklyResetAt = weeklyReset
   return Object.keys(out).length === 0 ? null : out
 }
 
